@@ -2,6 +2,29 @@
 
 use Illuminate\Support\Str;
 
+$sessionDomain = env('SESSION_DOMAIN');
+
+if (is_string($sessionDomain)) {
+    $normalizedSessionDomain = strtolower(trim($sessionDomain));
+
+    if ($normalizedSessionDomain === '' || $normalizedSessionDomain === 'null' || $normalizedSessionDomain === 'false') {
+        $sessionDomain = null;
+    }
+}
+
+$sessionSecureCookie = env('SESSION_SECURE_COOKIE');
+
+if ($sessionSecureCookie === null) {
+    $sessionSecureCookie = parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_SCHEME) === 'https';
+}
+
+$sameSite = env('SESSION_SAME_SITE', 'lax');
+
+if (is_string($sameSite)) {
+    $normalizedSameSite = strtolower(trim($sameSite));
+    $sameSite = in_array($normalizedSameSite, ['lax', 'strict', 'none'], true) ? $normalizedSameSite : 'lax';
+}
+
 return [
 
     /*
@@ -156,7 +179,7 @@ return [
     |
     */
 
-    'domain' => env('SESSION_DOMAIN'),
+    'domain' => $sessionDomain,
 
     /*
     |--------------------------------------------------------------------------
@@ -169,7 +192,7 @@ return [
     |
     */
 
-    'secure' => env('SESSION_SECURE_COOKIE'),
+    'secure' => $sessionSecureCookie,
 
     /*
     |--------------------------------------------------------------------------
@@ -199,7 +222,7 @@ return [
     |
     */
 
-    'same_site' => env('SESSION_SAME_SITE', 'lax'),
+    'same_site' => $sameSite,
 
     /*
     |--------------------------------------------------------------------------

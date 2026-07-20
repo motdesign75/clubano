@@ -1,26 +1,69 @@
+# .gitignore für Clubano (angepasst)
+
+# Log-Dateien
 *.log
-.DS_Store
+*.bak
+*.sqlite
+
+# Umgebungskonfig
 .env
+.env.*
 .env.backup
 .env.production
-.phpactor.json
-.phpunit.result.cache
-/.fleet
+
+# IDE & System-Dateien
+.DS_Store
 /.idea
-/.nova
-/.phpunit.cache
 /.vscode
+/.phpunit.cache
+/.fleet
 /.zed
-/auth.json
+/.nova
+auth.json
+
+# Composer & Node Modules
+/vendor
 /node_modules
-/public/build
-/public/hot
-/public/storage
+
+# Laravel: temporäre Verzeichnisse
 /storage/*.key
 /storage/pail
-/vendor
-Homestead.json
-Homestead.yaml
+
+# 🚫 Storage-Ordner ignorieren, außer public
+/storage/*
+!/storage/app
+!/storage/app/public
+
+# Verlinkter Storage-Ordner im öffentlichen Verzeichnis (Symlink)
+/public/storage
+
+# Build-Dateien von Vite
+/public/hot
+/public/build
+
+# Cache-Dateien
+.phpunit.result.cache
 npm-debug.log
-Thumbs.db
 yarn-error.log
+Thumbs.db
+
+# Homestead
+Homestead.yaml
+Homestead.json
+
+# 💡 Explizit einbeziehen (Whitelist)
+
+# Auth-Controller für Breeze
+!app/Http/Controllers/Auth/
+!app/Http/Controllers/Auth/**
+
+# Auth-Routen
+!routes/auth.php
+
+# Breeze Views (optional, falls sie fehlen)
+!resources/views/auth/
+!resources/views/auth/**
+
+# E-Mail-Verifizierungsansichten (optional)
+!resources/views/emails/
+!resources/views/emails/**

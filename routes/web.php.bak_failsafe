@@ -1,0 +1,173 @@
+<?php
+
+
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\{
+    ProfileController,
+    MemberController,
+    TenantController,
+    EventController,
+    ImportController,
+    MembershipController,
+    RoleController,
+    AccountController,
+    TransactionController,
+    CustomMemberFieldController,
+    ReceiptController,
+    ProtocolController,
+    InvoiceNumberRangeController,
+    InvoiceController,
+    PdfTestController,
+    TagController,
+    FeedbackController,
+    EmailSettingsController,
+    UserController,
+    ProjectIndexController,
+    ProjectController,
+    ProjectShowController,
+    ProjectGanttController,
+    ProjectDocumentController,
+    TaskController,
+    ContactController
+};
+
+// Startseite → Weiterleitung zum Dashboard
+Route::get('/', fn () => redirect()->route('dashboard'));
+
+// Dashboard
+Route::get('/dashboard', [EventController::class, 'dashboardEvents'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
+
+// Öffentlich sichtbare Seiten
+Route::view('/impressum', 'impressum')->name('impressum');
+
+// Authentifizierte Bereiche
+Route::middleware('auth')->group(function () {
+
+    // Projekte – Übersicht, Anlegen, Anzeigen, Bearbeiten, Löschen
+    Route::get('/projects', ProjectIndexController::class)->name('projects.index');
+    Route::get('/projects/create', [ProjectController::class, 'create'])->name('projects.create');
+    Route::post('/projects', [ProjectController::class, 'store'])->name('projects.store');
+    Route::get('/projects/{project}', ProjectShowController::class)->name('projects.show');
+    Route::get('/projects/{project}/edit', [ProjectController::class, 'edit'])->name('projects.edit');
+    Route::put('/projects/{project}', [ProjectController::class, 'update'])->name('projects.update');
+    Route::delete('/projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy');
+
+    // Projekt-Aufgaben (Tasks)
+    Route::get('/projects/{project}/tasks/create', [TaskController::class, 'create'])->name('projects.tasks.create');
+    Route::post('/projects/{project}/tasks', [TaskController::class, 'store'])->name('projects.tasks.store');
+    Route::get('/projects/{project}/tasks/{task}/edit', [TaskController::class, 'edit'])->name('projects.tasks.edit');
+    Route::put('/projects/{project}/tasks/{task}', [TaskController::class, 'update'])->name('projects.tasks.update');
+
+    // Projekt-Dokumente
+    Route::get('/projects/{project}/documents/create', [ProjectDocumentController::class, 'create'])->name('projects.documents.create');
+    Route::post('/projects/{project}/documents', [ProjectDocumentController::class, 'store'])->name('projects.documents.store');
+    Route::get('/projects/{project}/documents/{document}/download', [ProjectDocumentController::class, 'download'])->name('projects.documents.download');
+    Route::delete('/projects/{project}/documents/{document}', [ProjectDocumentController::class, 'destroy'])->name('projects.documents.destroy');
+
+    // Gantt
+    Route::get('/projects/{project}/gantt.json', [ProjectGanttController::class, 'json'])->name('projects.gantt.json');
+    Route::get('/projects/{project}/gantt', function (\Illuminate\Http\Request $request, \App\Models\Project $project) {
+        if (!$request->user() || (string)$request->user()->tenant_id !== (string)$project->tenant_id) abort(404);
+        return view('projects.gantt', ['project' => $project]);
+    })->name('projects.gantt');
+
+    // Feedback
+    Route::post('/feedback', [FeedbackController::class, 'store'])->name('feedback.store');
+
+    // Profil
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // Benutzerverwaltung
+    Route::get('/users', [UserController::class, 'index'])->name('users.index');
+    Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
+    Route::post('/users', [UserController::class, 'store'])->name('users.store');
+    Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+
+    // Mitglieder
+    Route::resource('members', MemberController::class);
+    Route::post('/members/bulk-action', [MemberController::class, 'bulkAction'])->name('members.bulk-action');
+    Route::get('/members/{member}/datenauskunft', [MemberController::class, 'exportDatenauskunft'])->name('members.datenauskunft');
+    Route::get('/members/{member}/pdf', [MemberController::class, 'exportDatenauskunft'])->name('members.pdf');
+
+    // Mitgliedschaften
+    Route::resource('memberships', MembershipController::class)->except(['show']);
+
+    // Tags
+    Route::resource('tags', TagController::class)->except(['show']);
+
+    // CSV-Import
+    Route::get('/import/mitglieder', [ImportController::class, 'showUploadForm'])->name('import.mitglieder');
+    Route::post('/import/mitglieder/preview', [ImportController::class, 'preview'])->name('import.mitglieder.preview');
+    Route::post('/import/mitglieder/confirm', [ImportController::class, 'confirm'])->name('import.mitglieder.confirm');
+
+    // Vereinsprofil
+    Route::get('/verein', [TenantController::class, 'show'])->name('tenant.show');
+    Route::get('/verein/bearbeiten', [TenantController::class, 'edit'])->name('tenant.edit');
+    Route::patch('/verein/bearbeiten', [TenantController::class, 'update'])->name('tenant.update');
+
+    // Veranstaltungen
+    Route::resource('events', EventController::class)->except(['show']);
+    Route::get('/events/{event}', [EventController::class, 'show'])->name('events.show');
+
+    // Eigene Mitgliederfelder
+    Route::prefix('einstellungen/mitgliederfelder')->name('custom-fields.')->group(function () {
+        Route::get('/', [CustomMemberFieldController::class, 'index'])->name('index');
+        Route::get('/create', [CustomMemberFieldController::class, 'create'])->name('create');
+        Route::post('/', [CustomMemberFieldController::class, 'store'])->name('store');
+        Route::get('/{customMemberField}/edit', [CustomMemberFieldController::class, 'edit'])->name('edit');
+        Route::put('/{customMemberField}', [CustomMemberFieldController::class, 'update'])->name('update');
+        Route::delete('/{customMemberField}', [CustomMemberFieldController::class, 'destroy'])->name('destroy');
+    });
+
+    // Rollen
+    Route::get('/einstellungen/rollen', [RoleController::class, 'edit'])->name('roles.edit');
+    Route::post('/einstellungen/rollen', [RoleController::class, 'update'])->name('roles.update');
+
+    // Finanzen – Konten und Buchungen
+    Route::resource('accounts', AccountController::class)->except(['show']);
+    Route::resource('transactions', TransactionController::class)->except(['show', 'edit', 'update']);
+    Route::get('/transactions/summary', [TransactionController::class, 'summary'])->name('transactions.summary');
+    Route::get('/transactions/{transaction}/cancel', [TransactionController::class, 'cancel'])->name('transactions.cancel');
+    Route::post('/transactions/{transaction}/cancel', [TransactionController::class, 'cancelStore'])->name('transactions.cancel.store');
+
+    // Belege
+    Route::get('/beleg/{filename}', [ReceiptController::class, 'show'])->name('receipts.show');
+
+    // Beitragsrechnungen
+    Route::resource('invoices', InvoiceController::class)->only(['index', 'create', 'store', 'show']);
+    Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+
+    // Nummernkreise
+    Route::resource('number-ranges', InvoiceNumberRangeController::class)->names('number_ranges');
+
+    // Protokolle
+    Route::get('/protokolle', [ProtocolController::class, 'index'])->name('protocols.index');
+    Route::get('/protokolle/neu', [ProtocolController::class, 'create'])->name('protocols.create');
+    Route::post('/protokolle', [ProtocolController::class, 'store'])->name('protocols.store');
+    Route::get('/protokolle/{protocol}', [ProtocolController::class, 'show'])->name('protocols.show');
+    Route::get('/protokolle/{protocol}/bearbeiten', [ProtocolController::class, 'edit'])->name('protocols.edit');
+    Route::put('/protokolle/{protocol}', [ProtocolController::class, 'update'])->name('protocols.update');
+    Route::get('/protokolle/{protocol}/mail', [ProtocolController::class, 'mailForm'])->name('protocols.mail.form');
+    Route::post('/protokolle/{protocol}/mail', [ProtocolController::class, 'sendMail'])->name('protocols.mail.send');
+
+    // SMTP-Einstellungen
+    Route::get('/settings/email', [EmailSettingsController::class, 'edit'])->name('settings.email.edit');
+    Route::put('/settings/email', [EmailSettingsController::class, 'update'])->name('settings.email.update');
+
+    // PDF-Test
+    Route::get('/pdf-test', [PdfTestController::class, 'test'])->name('pdf.test');
+
+    // Debug
+    Route::get('/envcheck', fn () => dd(config('app.env'), config('app.debug')));
+
+    // --- NEU: Kontakte (eigenes Modul, getrennt von Mitgliedern) ---
+    Route::resource('contacts', ContactController::class);
+});
+
+// Authentifizierung
+require __DIR__.'/auth.php';

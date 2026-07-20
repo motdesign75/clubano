@@ -1,0 +1,62 @@
+# .gitignore für Clubano (angepasst)
+
+# Log-Dateien
+*.log
+*.bak
+*.sqlite
+
+# Umgebungskonfig
+.env
+.env.*
+.env.backup
+.env.production
+
+# IDE & System-Dateien
+.DS_Store
+/.idea
+/.vscode
+/.phpunit.cache
+/.fleet
+/.zed
+/.nova
+auth.json
+
+# Composer & Node Modules
+/vendor
+/node_modules
+
+# Laravel: temporäre Verzeichnisse
+/storage/*.key
+/storage/pail
+/storage/app/public
+/public/storage
+/public/hot
+/public/build
+
+# Cache-Dateien
+.phpunit.result.cache
+npm-debug.log
+yarn-error.log
+Thumbs.db
+
+# Homestead
+Homestead.yaml
+Homestead.json
+
+# 💡 Explizit einbeziehen (Whitelist)
+
+# Auth-Controller für Breeze
+!app/Http/Controllers/Auth/
+!app/Http/Controllers/Auth/**
+
+# Auth-Routen
+!routes/auth.php
+
+# Breeze Views (optional, falls sie fehlen)
+!resources/views/auth/
+!resources/views/auth/**
+
+# E-Mail-Verifizierungsansichten (optional)
+!resources/views/emails/
+!resources/views/emails/**
+

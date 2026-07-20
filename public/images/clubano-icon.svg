@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Clubano Icon</title>
+  <desc id="desc">Quadratisches Clubano-Signet mit Dach, drei Personen und gemeinsamer Basis.</desc>
+  <rect x="32" y="32" width="448" height="448" rx="112" fill="#F8FAFC"/>
+  <rect x="32" y="32" width="448" height="448" rx="112" fill="none" stroke="#0B3F8C" stroke-width="20"/>
+
+  <path
+    d="M132 198L256 124L380 198"
+    fill="none"
+    stroke="#0B3F8C"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="26"
+  />
+
+  <circle cx="172" cy="234" r="28" fill="#1E78D7"/>
+  <path
+    d="M128 346C128 300 151 278 172 278C193 278 216 300 216 346V376H128V346Z"
+    fill="#1E78D7"
+  />
+
+  <circle cx="256" cy="214" r="28" fill="#F39A14"/>
+  <path
+    d="M198 344C198 286 235 254 256 254C277 254 314 286 314 344V376H198V344Z"
+    fill="#F39A14"
+  />
+
+  <circle cx="340" cy="234" r="28" fill="#95C93D"/>
+  <path
+    d="M296 346C296 300 319 278 340 278C361 278 384 300 384 346V376H296V346Z"
+    fill="#95C93D"
+  />
+
+  <path
+    d="M120 372C164 342 208 328 256 328C304 328 348 342 392 372"
+    fill="#5AA84E"
+    stroke="#5AA84E"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="16"
+  />
+</svg>
