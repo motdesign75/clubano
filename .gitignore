@@ -67,3 +67,6 @@ Homestead.json
 # E-Mail-Verifizierungsansichten (optional)
 !resources/views/emails/
 !resources/views/emails/**
+
+/output
+/tmp
