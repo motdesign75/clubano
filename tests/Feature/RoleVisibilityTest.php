@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
+use App\Models\Document;
+use App\Models\Event;
 use App\Models\Member;
 use App\Models\Protocol;
 use App\Models\PublicForm;
@@ -9,6 +11,8 @@ use App\Models\Template;
 use App\Models\Tenant;
 use App\Models\Task;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 function createTenantWithUser(string $role, string $suffix): array
 {
@@ -438,6 +442,131 @@ test('tasks index shows the calmer guided task overview', function () {
     $response->assertSee('Belege prüfen');
     $response->assertSee('Aufmerksamkeit');
     $response->assertSee('Archivierter Blick');
+});
+
+test('dashboard shows a calm guided cockpit', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'dashboard-cockpit');
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Mira',
+        'last_name' => 'Muster',
+        'email' => 'mira-dashboard@example.test',
+        'entry_date' => now()->startOfMonth()->toDateString(),
+    ]);
+
+    Event::create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $staff->id,
+        'title' => 'Vorstandsrunde',
+        'start' => now()->addDays(2),
+        'end' => now()->addDays(2)->addHour(),
+        'location' => 'Vereinsheim',
+        'is_public' => false,
+    ]);
+
+    PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Kontaktformular',
+        'slug' => 'dashboard-kontaktformular',
+        'form_type' => 'general',
+        'success_message' => 'ok',
+        'is_active' => true,
+    ]);
+
+    $response = $this->actingAs($staff)->get(route('dashboard'));
+
+    $response->assertOk();
+    $response->assertSee('Heute zuerst');
+    $response->assertSee('Nächster Schritt');
+    $response->assertSee('Hinweise');
+    $response->assertSee('Nächste Termine');
+    $response->assertSee('Vorstandsrunde');
+    $response->assertSee('Entwicklung im Verein');
+});
+
+test('documents area stores searchable linked documents', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake('local');
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'documents-store');
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Dora',
+        'last_name' => 'Dokument',
+        'email' => 'dora@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $storeResponse = $this->actingAs($staff)->post(route('documents.store'), [
+        'title' => 'Versicherungspolice 2026',
+        'category' => Document::CATEGORY_CONTRACTS,
+        'status' => Document::STATUS_REVIEW,
+        'description' => 'Muss vor Ablauf geprüft werden.',
+        'tags' => 'Versicherung, Vertrag',
+        'expires_at' => now()->addDays(14)->toDateString(),
+        'member_id' => $member->id,
+        'file' => UploadedFile::fake()->create('police.pdf', 120, 'application/pdf'),
+    ]);
+
+    $storeResponse->assertRedirect(route('documents.index'));
+
+    $document = Document::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+
+    Storage::disk('local')->assertExists($document->path);
+    expect($document->title)->toBe('Versicherungspolice 2026');
+    expect($document->member_id)->toBe($member->id);
+    expect($document->tags)->toBe(['Versicherung', 'Vertrag']);
+
+    $indexResponse = $this->actingAs($staff)->get(route('documents.index', ['search' => 'Versicherungspolice']));
+
+    $indexResponse->assertOk();
+    $indexResponse->assertSee('Dokumentenzentrale');
+    $indexResponse->assertSee('Versicherungspolice 2026');
+    $indexResponse->assertSee('Dora Dokument');
+
+    $dueResponse = $this->actingAs($staff)->get(route('documents.index', ['due' => 'soon']));
+
+    $dueResponse->assertOk();
+    $dueResponse->assertSee('Versicherungspolice 2026');
+
+    $downloadResponse = $this->actingAs($staff)->get(route('documents.download', $document));
+
+    $downloadResponse->assertOk();
+});
+
+test('documents management actions are hidden from viewers', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $viewer] = createTenantWithUser(User::ROLE_VIEWER, 'documents-viewer');
+
+    $document = Document::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'uploaded_by' => $viewer->id,
+        'title' => 'Satzung',
+        'category' => Document::CATEGORY_CLUB,
+        'status' => Document::STATUS_ACTIVE,
+        'disk' => 'local',
+        'path' => 'documents/test/satzung.pdf',
+        'original_name' => 'satzung.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 1000,
+    ]);
+
+    $indexResponse = $this->actingAs($viewer)->get(route('documents.index'));
+
+    $indexResponse->assertOk();
+    $indexResponse->assertSee('Satzung');
+    $indexResponse->assertDontSee('Dokument ablegen');
+
+    $showResponse = $this->actingAs($viewer)->get(route('documents.show', $document));
+
+    $showResponse->assertOk();
+    $showResponse->assertDontSee('Bearbeiten');
+    $showResponse->assertDontSee('Archivieren');
 });
 
 test('task quick action starts the next task', function () {

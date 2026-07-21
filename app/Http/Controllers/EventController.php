@@ -11,6 +11,7 @@ use App\Models\EventChangeLog;
 use App\Models\EventCategory;
 use App\Models\EventShift;
 use App\Models\EventShiftAssignment;
+use App\Models\Document;
 use App\Models\Member;
 use App\Models\PublicForm;
 use App\Models\Tenant;
@@ -80,6 +81,14 @@ class EventController extends Controller
 
         $formsCount = PublicForm::where('tenant_id', $tenantId)->count();
 
+        $documentsCount = Document::where('tenant_id', $tenantId)
+            ->whereNull('archived_at')
+            ->count();
+
+        $documentAttentionCount = Document::where('tenant_id', $tenantId)
+            ->needsAttention()
+            ->count();
+
         // Austritte im aktuellen Monat
         $exits = (clone $membersBaseQuery)
             ->whereNotNull('exit_date')
@@ -116,7 +125,9 @@ class EventController extends Controller
             'onboarding',
             'upcomingEventsCount',
             'publicEventsCount',
-            'formsCount'
+            'formsCount',
+            'documentsCount',
+            'documentAttentionCount'
         ));
     }
 

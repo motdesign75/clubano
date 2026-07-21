@@ -16,7 +16,7 @@ class ProjectDocumentController extends Controller
             abort(404);
         }
 
-        return view('documents.create', [
+        return view('documents.project-create', [
             'title'   => 'Dokument hochladen',
             'project' => $project,
         ]);

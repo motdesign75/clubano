@@ -136,6 +136,19 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::delete('/projects/{project}/documents/{document}', [$cls, 'destroy'])->name('projects.documents.destroy');
     });
 
+    // Dokumentenzentrale
+    $when($C.'DocumentController', function($cls){
+        Route::get('/dokumente', [$cls, 'index'])->middleware('tenant.role:Lesen')->name('documents.index');
+        Route::get('/dokumente/neu', [$cls, 'create'])->middleware('tenant.role:Mitarbeiter')->name('documents.create');
+        Route::post('/dokumente', [$cls, 'store'])->middleware('tenant.role:Mitarbeiter')->name('documents.store');
+        Route::get('/dokumente/{document}', [$cls, 'show'])->middleware('tenant.role:Lesen')->name('documents.show');
+        Route::get('/dokumente/{document}/download', [$cls, 'download'])->middleware('tenant.role:Lesen')->name('documents.download');
+        Route::get('/dokumente/{document}/bearbeiten', [$cls, 'edit'])->middleware('tenant.role:Mitarbeiter')->name('documents.edit');
+        Route::put('/dokumente/{document}', [$cls, 'update'])->middleware('tenant.role:Mitarbeiter')->name('documents.update');
+        Route::patch('/dokumente/{document}/archivieren', [$cls, 'archive'])->middleware('tenant.role:Mitarbeiter')->name('documents.archive');
+        Route::delete('/dokumente/{document}', [$cls, 'destroy'])->middleware('tenant.role:Admin')->name('documents.destroy');
+    });
+
     // Gantt
     $when($C.'ProjectGanttController', function($cls){
         Route::get('/projects/{project}/gantt.json', [$cls, 'json'])->name('projects.gantt.json');
@@ -323,8 +336,9 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     // Belege
     $when($C.'ReceiptController', function($cls){
         Route::get('/beleg/{path}', [$cls, 'show'])
-    ->where('path', '.*')
-    ->name('receipts.show');
+            ->middleware('tenant.role:Admin')
+            ->where('path', '.*')
+            ->name('receipts.show');
 		 });
 
     // Beitragsrechnungen

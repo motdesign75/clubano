@@ -66,6 +66,13 @@
             'minRole' => 'Lesen',
         ],
         [
+            'label' => 'Dokumente',
+            'route' => route('documents.index'),
+            'active' => request()->routeIs('documents.*'),
+            'icon' => 'archive-box',
+            'minRole' => 'Lesen',
+        ],
+        [
             'label' => 'Protokolle',
             'route' => route('protocols.index'),
             'active' => request()->routeIs('protocols.*'),
@@ -320,6 +327,9 @@
                                         @break
                                     @case('check-circle')
                                         <x-heroicon-o-check-circle class="h-5 w-5 {{ $iconColor }}" />
+                                        @break
+                                    @case('archive-box')
+                                        <x-heroicon-o-archive-box class="h-5 w-5 {{ $iconColor }}" />
                                         @break
                                     @case('document-duplicate')
                                         <x-heroicon-o-document-duplicate class="h-5 w-5 {{ $iconColor }}" />

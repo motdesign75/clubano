@@ -21,331 +21,384 @@
 
     $timelineCount = $timeline->count();
     $primaryNextStep = $onboarding['nextStep'] ?? null;
+    $documentsCount = $documentsCount ?? 0;
+    $documentAttentionCount = $documentAttentionCount ?? 0;
+    $canManageWork = auth()->user()?->isStaff() ?? false;
 
-    $quickActions = [
-        ['label' => 'Mitglied anlegen', 'route' => route('members.create')],
-        ['label' => 'Termin planen', 'route' => route('events.create')],
-        ['label' => 'Formular bauen', 'route' => route('forms.create')],
-    ];
+    $licenseLabel = match (true) {
+        $hasComplimentaryAccess => $tenant->license_mode_label,
+        $onTrial && $trialEndsAt => 'Testphase bis ' . $trialEndsAt->format('d.m.Y'),
+        $isSubscribed => 'Lizenz aktiv',
+        default => 'Lizenz prüfen',
+    };
 
-    $focusCards = [
+    $quickActions = $canManageWork
+        ? [
+            ['label' => 'Mitglied anlegen', 'route' => route('members.create'), 'icon' => 'user-plus'],
+            ['label' => 'Termin planen', 'route' => route('events.create'), 'icon' => 'calendar'],
+            ['label' => 'Formular erstellen', 'route' => route('forms.create'), 'icon' => 'document-plus'],
+            ['label' => 'Dokument ablegen', 'route' => route('documents.create'), 'icon' => 'archive-box'],
+        ]
+        : [
+            ['label' => 'Mitglieder ansehen', 'route' => route('members.index'), 'icon' => 'users'],
+            ['label' => 'Termine ansehen', 'route' => route('events.index'), 'icon' => 'calendar'],
+            ['label' => 'Dokumente ansehen', 'route' => route('documents.index'), 'icon' => 'archive-box'],
+        ];
+
+    $metrics = [
         [
-            'title' => 'Mitglieder',
+            'label' => 'Mitglieder',
             'value' => $membersCount,
-            'meta' => $entriesThisYearCount . ' neu in diesem Jahr',
+            'hint' => $entriesThisYearCount . ' neue Eintritte ' . now()->year,
             'route' => route('members.index'),
+            'icon' => 'users',
         ],
         [
-            'title' => 'Termine',
+            'label' => 'Termine',
             'value' => $upcomingEventsCount,
-            'meta' => $timelineCount . ' in den nächsten 7 Tagen',
+            'hint' => $timelineCount . ' in den nächsten 7 Tagen',
             'route' => route('events.index'),
+            'icon' => 'calendar-days',
         ],
         [
-            'title' => 'Formulare',
+            'label' => 'Formulare',
             'value' => $formsCount,
-            'meta' => $publicEventsCount . ' öffentliche Termine',
+            'hint' => $publicEventsCount . ' öffentliche Termine',
             'route' => route('forms.index'),
+            'icon' => 'clipboard-document-list',
+        ],
+        [
+            'label' => 'Dokumente',
+            'value' => $documentsCount,
+            'hint' => $documentAttentionCount . ' brauchen Aufmerksamkeit',
+            'route' => route('documents.index'),
+            'icon' => 'archive-box',
         ],
     ];
 
-    $attentionItems = [];
+    $signals = [];
 
     if ($timelineCount > 0) {
-        $attentionItems[] = [
-            'title' => $timelineCount . ' Termine in den nächsten 7 Tagen',
-            'meta' => 'Die nächsten Veranstaltungen solltest du heute im Blick haben.',
+        $signals[] = [
+            'label' => 'Termine prüfen',
+            'text' => $timelineCount . ' Termine in den nächsten 7 Tagen',
             'route' => route('events.index'),
-            'action' => 'Termine öffnen',
-            'tone' => 'slate',
         ];
     }
 
     if ($entries->count() > 0) {
-        $attentionItems[] = [
-            'title' => $entries->count() . ' neue Eintritte in diesem Monat',
-            'meta' => 'Prüfe kurz, ob alle neuen Mitglieder vollständig angelegt sind.',
+        $signals[] = [
+            'label' => 'Mitglieder prüfen',
+            'text' => $entries->count() . ' neue Eintritte in diesem Monat',
             'route' => route('members.index'),
-            'action' => 'Mitglieder öffnen',
-            'tone' => 'emerald',
         ];
     }
 
     if ($formsCount > 0) {
-        $attentionItems[] = [
-            'title' => 'Formulare laufen bereits',
-            'meta' => 'Schau nach, ob Antworten oder Anmeldungen auf dich warten.',
+        $signals[] = [
+            'label' => 'Formulare prüfen',
+            'text' => 'Antworten und Anmeldungen im Blick behalten',
             'route' => route('forms.index'),
-            'action' => 'Formulare öffnen',
-            'tone' => 'indigo',
         ];
     }
 
-    if (empty($attentionItems)) {
-        $attentionItems[] = [
-            'title' => 'Heute ist alles ruhig',
-            'meta' => 'Ein guter Moment, um den Verein in Ruhe zu ordnen oder etwas Neues anzulegen.',
-            'route' => route('dashboard'),
-            'action' => 'Übersicht behalten',
-            'tone' => 'slate',
+    if ($documentAttentionCount > 0) {
+        $signals[] = [
+            'label' => 'Dokumente prüfen',
+            'text' => $documentAttentionCount . ' Dokumente haben Fristen oder Prüfbedarf',
+            'route' => route('documents.index', ['due' => 'soon']),
         ];
     }
+
+    if (empty($signals)) {
+        $signals[] = [
+            'label' => 'Alles ruhig',
+            'text' => 'Heute gibt es keinen dringenden Hinweis.',
+            'route' => route('dashboard'),
+        ];
+    }
+
+    $heroEvent = $timeline->first();
+    $heroTitle = $primaryNextStep['title'] ?? ($heroEvent?->title ?? 'Alles bereit');
+    $heroMeta = $primaryNextStep['meta'] ?? ($heroEvent
+        ? 'Als Nächstes steht ' . $heroEvent->title . ' an.'
+        : 'Kein Engpass sichtbar. Du kannst bewusst und ruhig weiterarbeiten.');
+    $heroRoute = $primaryNextStep['route'] ?? ($heroEvent ? route('events.show', $heroEvent) : route('dashboard'));
+    $heroAction = $primaryNextStep ? 'Jetzt machen' : ($heroEvent ? 'Termin öffnen' : 'Übersicht behalten');
 @endphp
 
-<div class="mx-auto max-w-7xl space-y-8 px-4 sm:px-6 lg:px-8">
-    <section class="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-8">
-        <div class="grid gap-8 lg:grid-cols-[1.2fr,0.8fr] lg:items-start">
-            <div class="space-y-5">
-                <div class="flex flex-wrap items-center gap-3 text-sm">
-                    <span class="rounded-full bg-slate-950 px-3 py-1 font-semibold text-white">
-                        {{ $greeting }}, {{ Auth::user()->name }}
-                    </span>
-                    <span class="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">
-                        {{ $tenant->name }}
-                    </span>
+<div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
+    <section class="overflow-hidden rounded-2xl bg-slate-950 text-white shadow-sm">
+        <div class="grid min-h-[360px] gap-8 bg-[linear-gradient(135deg,#020617_0%,#0f3a3a_52%,#1f2937_100%)] p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr),420px] lg:p-10">
+            <div class="flex min-w-0 flex-col justify-between gap-8">
+                <div>
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-white/70">
+                        <span class="font-semibold text-white">{{ $greeting }}, {{ Auth::user()->name }}</span>
+                        <span aria-hidden="true" class="hidden text-white/30 sm:inline">/</span>
+                        <span>{{ $tenant->name }}</span>
+                        <span aria-hidden="true" class="hidden text-white/30 sm:inline">/</span>
+                        <a href="{{ route('subscription.index') }}" class="font-medium text-white/85 hover:text-white">
+                            {{ $licenseLabel }}
+                        </a>
+                    </div>
 
-                    @if($hasComplimentaryAccess)
-                        <span class="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                            {{ $tenant->license_mode_label }}
-                        </span>
-                    @elseif($onTrial)
-                        <span class="rounded-full bg-amber-50 px-3 py-1 font-semibold text-amber-700 ring-1 ring-amber-200">
-                            Testphase bis {{ $trialEndsAt?->format('d.m.Y') }}
-                        </span>
-                    @elseif($isSubscribed)
-                        <span class="rounded-full bg-emerald-50 px-3 py-1 font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                            Lizenz aktiv
-                        </span>
-                    @endif
-                </div>
-
-                <div class="max-w-3xl">
-                    <h1 class="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                        Was braucht heute deine Aufmerksamkeit?
+                    <h1 class="mt-7 max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-white sm:text-5xl">
+                        Heute zuerst.
                     </h1>
-                    <p class="mt-3 max-w-xl text-base leading-7 text-slate-600">
-                        Der nächste sinnvolle Schritt, die wichtigsten Signale und sonst nichts, was dich aufhält.
+                    <p class="mt-4 max-w-2xl text-base leading-7 text-white/72 sm:text-lg">
+                        Clubano zeigt dir den nächsten sinnvollen Schritt, bevor du suchen musst.
                     </p>
                 </div>
 
-                <div class="flex flex-wrap gap-2.5">
-                    @foreach($quickActions as $action)
-                        <a href="{{ $action['route'] }}"
-                           class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:border-slate-300 hover:bg-white">
-                            <span>{{ $action['label'] }}</span>
-                            <span aria-hidden="true">→</span>
-                        </a>
-                    @endforeach
-                </div>
-
-                @if($onTrial && $trialEndsAt)
-                    <div class="rounded-3xl border border-amber-200 bg-amber-50/80 px-5 py-4 text-sm text-amber-900">
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Testphase aktiv</div>
-                                <div class="mt-1 text-base font-semibold text-amber-950">
-                                    Ihr könnt Clubano kostenlos bis zum {{ $trialEndsAt->format('d.m.Y') }} nutzen.
-                                </div>
-                                <p class="mt-1 text-sm leading-6 text-amber-800">
-                                    Erst ausprobieren, dann später in Ruhe entscheiden, ob ihr ein Abo aktivieren möchtet.
-                                </p>
-                            </div>
-
-                            <a href="{{ route('subscription.index') }}"
-                               class="inline-flex items-center justify-center rounded-full border border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-900 transition hover:bg-amber-100">
-                                Lizenz ansehen
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <a href="{{ $heroRoute }}"
+                       class="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-white px-5 text-sm font-semibold text-slate-950 transition hover:bg-slate-100">
+                        <x-heroicon-o-sparkles class="h-5 w-5" />
+                        {{ $heroAction }}
+                    </a>
+                    <div class="flex flex-wrap gap-2">
+                        @foreach($quickActions as $action)
+                            <a href="{{ $action['route'] }}"
+                               class="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/8 px-4 text-sm font-semibold text-white transition hover:bg-white/14">
+                                @if($action['icon'] === 'user-plus')
+                                    <x-heroicon-o-user-plus class="h-5 w-5" />
+                                @elseif($action['icon'] === 'users')
+                                    <x-heroicon-o-users class="h-5 w-5" />
+                                @elseif($action['icon'] === 'calendar')
+                                    <x-heroicon-o-calendar class="h-5 w-5" />
+                                @elseif($action['icon'] === 'archive-box')
+                                    <x-heroicon-o-archive-box class="h-5 w-5" />
+                                @else
+                                    <x-heroicon-o-document-plus class="h-5 w-5" />
+                                @endif
+                                <span>{{ $action['label'] }}</span>
                             </a>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+
+            <aside class="self-stretch rounded-xl border border-white/15 bg-white/10 p-5 backdrop-blur">
+                <div class="flex h-full flex-col">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-white/55">Heute im Verein</div>
+                            <h2 class="mt-3 text-2xl font-semibold tracking-tight text-white">{{ $heroTitle }}</h2>
+                        </div>
+                        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-slate-950">
+                            <x-heroicon-o-bolt class="h-6 w-6" />
                         </div>
                     </div>
-                @endif
-            </div>
 
-            <div class="rounded-3xl bg-slate-950 p-6 text-white shadow-sm">
-                <div class="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">Heute zuerst</div>
+                    <p class="mt-4 text-sm leading-6 text-white/72">{{ $heroMeta }}</p>
 
-                @if($primaryNextStep)
-                    <h2 class="mt-4 text-2xl font-semibold">{{ $primaryNextStep['title'] }}</h2>
-                    <p class="mt-3 text-sm leading-6 text-white/75">{{ $primaryNextStep['meta'] }}</p>
+                    <div class="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                        @foreach($metrics as $metric)
+                            <a href="{{ $metric['route'] }}" class="grid grid-cols-[42px,minmax(0,1fr),auto] items-center gap-3 rounded-lg border border-white/12 px-3 py-3 transition hover:bg-white/8">
+                                <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-white/12 text-white">
+                                    @if($metric['icon'] === 'users')
+                                        <x-heroicon-o-users class="h-5 w-5" />
+                                    @elseif($metric['icon'] === 'calendar-days')
+                                        <x-heroicon-o-calendar-days class="h-5 w-5" />
+                                    @elseif($metric['icon'] === 'clipboard-document-list')
+                                        <x-heroicon-o-clipboard-document-list class="h-5 w-5" />
+                                    @else
+                                        <x-heroicon-o-archive-box class="h-5 w-5" />
+                                    @endif
+                                </span>
+                                <span class="min-w-0">
+                                    <span class="block text-sm font-semibold text-white">{{ $metric['label'] }}</span>
+                                    <span class="block truncate text-xs text-white/58">{{ $metric['hint'] }}</span>
+                                </span>
+                                <span class="text-2xl font-semibold tracking-tight text-white">{{ $metric['value'] }}</span>
+                            </a>
+                        @endforeach
+                    </div>
 
-                    @if($primaryNextStep['route'])
-                        <a href="{{ $primaryNextStep['route'] }}"
-                           class="mt-5 inline-flex rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-slate-100">
-                            Jetzt machen
-                        </a>
-                    @endif
-                @else
-                    <h2 class="mt-4 text-2xl font-semibold">Alles bereit</h2>
-                    <p class="mt-3 text-sm leading-6 text-white/75">
-                        Heute gibt es keinen offensichtlichen Engpass. Du kannst ruhig arbeiten und bewusst vorgehen.
-                    </p>
-                @endif
-            </div>
+                    <div class="mt-auto pt-6">
+                        <div class="h-px bg-white/12"></div>
+                        <div class="mt-4 flex items-center justify-between gap-3 text-sm text-white/65">
+                            <span>{{ now()->translatedFormat('l, d. F Y') }}</span>
+                            <span>{{ count($signals) }} Hinweise</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
         </div>
     </section>
 
-    <section class="grid gap-4 lg:grid-cols-3">
-        @foreach($focusCards as $card)
-            <a href="{{ $card['route'] }}"
-               class="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:shadow-md">
-                <div class="text-sm font-medium text-slate-500">{{ $card['title'] }}</div>
-                <div class="mt-3 text-4xl font-semibold tracking-tight text-slate-950">{{ $card['value'] }}</div>
-                <div class="mt-2 text-sm text-slate-500">{{ $card['meta'] }}</div>
-            </a>
-        @endforeach
-    </section>
-
-    <section class="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
-        <div class="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+    @if($onTrial && $trialEndsAt)
+        <section class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex sm:items-center sm:justify-between sm:gap-4">
             <div>
-                <h2 class="text-2xl font-semibold tracking-tight text-slate-900">Jetzt wichtig</h2>
-                <p class="mt-1 text-sm text-slate-500">Nur die Themen, die im Alltag gerade wirklich Aufmerksamkeit brauchen.</p>
+                <span class="font-semibold">Testphase aktiv:</span>
+                Clubano kann bis zum {{ $trialEndsAt->format('d.m.Y') }} kostenlos genutzt werden.
+            </div>
+            <a href="{{ route('subscription.index') }}" class="mt-2 inline-flex font-semibold text-amber-950 hover:text-amber-800 sm:mt-0">
+                Lizenz ansehen
+            </a>
+        </section>
+    @endif
+
+    <section class="grid gap-4 lg:grid-cols-[minmax(0,1fr),360px]">
+        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div class="min-w-0">
+                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Nächster Schritt</div>
+                    @if($primaryNextStep)
+                        <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{{ $primaryNextStep['title'] }}</h2>
+                        <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{{ $primaryNextStep['meta'] }}</p>
+                    @else
+                        <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Alles bereit</h2>
+                        <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                            Kein Engpass sichtbar. Du kannst direkt mit Mitgliederpflege, Terminen oder Kommunikation weitermachen.
+                        </p>
+                    @endif
+                </div>
+
+                @if($primaryNextStep && $primaryNextStep['route'])
+                    <a href="{{ $primaryNextStep['route'] }}"
+                       class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800">
+                        Jetzt machen
+                    </a>
+                @endif
             </div>
 
-            <div class="mt-6 space-y-3">
-                @foreach($attentionItems as $item)
-                    <a href="{{ $item['route'] }}"
-                       class="flex items-start justify-between gap-4 rounded-2xl border px-4 py-4 transition hover:bg-slate-50
-                            {{ $item['tone'] === 'emerald' ? 'border-emerald-200 bg-emerald-50/40' : '' }}
-                            {{ $item['tone'] === 'indigo' ? 'border-indigo-200 bg-indigo-50/40' : '' }}
-                            {{ $item['tone'] === 'slate' ? 'border-slate-200' : '' }}">
-                        <div>
-                            <div class="text-base font-semibold text-slate-900">{{ $item['title'] }}</div>
-                            <div class="mt-1 text-sm leading-6 text-slate-600">{{ $item['meta'] }}</div>
-                        </div>
-                        <span class="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{{ $item['action'] }}</span>
+            <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                @foreach($metrics as $metric)
+                    <a href="{{ $metric['route'] }}" class="rounded-lg border border-slate-200 px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50">
+                        <div class="text-sm font-medium text-slate-500">{{ $metric['label'] }}</div>
+                        <div class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{{ $metric['value'] }}</div>
+                        <div class="mt-1 text-sm leading-5 text-slate-500">{{ $metric['hint'] }}</div>
                     </a>
                 @endforeach
             </div>
         </div>
 
-        <div class="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-            <div class="flex items-end justify-between gap-4">
+        <aside class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-center justify-between gap-3">
+                <h2 class="text-base font-semibold text-slate-950">Hinweise</h2>
+                <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{{ count($signals) }}</span>
+            </div>
+
+            <div class="mt-4 divide-y divide-slate-100">
+                @foreach($signals as $signal)
+                    <a href="{{ $signal['route'] }}" class="block py-3 first:pt-0 last:pb-0">
+                        <div class="text-sm font-semibold text-slate-900">{{ $signal['label'] }}</div>
+                        <div class="mt-1 text-sm leading-5 text-slate-500">{{ $signal['text'] }}</div>
+                    </a>
+                @endforeach
+            </div>
+        </aside>
+    </section>
+
+    <section class="grid gap-4 xl:grid-cols-[minmax(0,1fr),420px]">
+        <div class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h2 class="text-2xl font-semibold tracking-tight text-slate-900">Nächste Termine</h2>
-                    <p class="mt-1 text-sm text-slate-500">Schnell scanbar, damit du direkt weißt, was ansteht.</p>
+                    <h2 class="text-lg font-semibold text-slate-950">Nächste Termine</h2>
+                    <p class="mt-1 text-sm text-slate-500">Die kommenden sieben Tage in Reihenfolge.</p>
                 </div>
                 <a href="{{ route('events.index') }}" class="text-sm font-semibold text-indigo-700 hover:text-indigo-800">
                     Alle Termine
                 </a>
             </div>
 
-            <div class="mt-6 space-y-2.5">
+            <div class="mt-5 divide-y divide-slate-100">
                 @forelse($timeline as $event)
-                    <a href="{{ route('events.show', $event) }}"
-                       class="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 px-4 py-3.5 transition hover:bg-slate-50">
-                        <div class="min-w-0">
-                            <div class="text-sm font-medium text-slate-500">
-                                {{ \Carbon\Carbon::parse($event->start)->translatedFormat('D, d.m.Y · H:i') }} Uhr
-                            </div>
-                            <div class="mt-1 text-base font-semibold text-slate-900">{{ $event->title }}</div>
-                            <div class="mt-1 truncate text-sm text-slate-600">
-                                {{ $event->location ?: 'Ort folgt' }}
-                            </div>
+                    <a href="{{ route('events.show', $event) }}" class="grid gap-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[150px,minmax(0,1fr),96px] sm:items-center">
+                        <div class="text-sm font-semibold text-slate-900">
+                            {{ \Carbon\Carbon::parse($event->start)->translatedFormat('D, d.m.') }}
+                            <span class="block font-normal text-slate-500">{{ \Carbon\Carbon::parse($event->start)->format('H:i') }} Uhr</span>
                         </div>
-                        <span class="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                        <div class="min-w-0">
+                            <div class="truncate text-base font-semibold text-slate-950">{{ $event->title }}</div>
+                            <div class="mt-1 truncate text-sm text-slate-500">{{ $event->location ?: 'Ort folgt' }}</div>
+                        </div>
+                        <div class="text-left text-xs font-semibold text-slate-500 sm:text-right">
                             {{ $event->is_public ? 'Öffentlich' : 'Intern' }}
-                        </span>
+                        </div>
                     </a>
                 @empty
-                    <div class="rounded-2xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
-                        Keine Termine in den nächsten sieben Tagen. Gute Gelegenheit, etwas Neues zu planen.
+                    <div class="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">
+                        Keine Termine in den nächsten sieben Tagen.
                     </div>
                 @endforelse
             </div>
         </div>
+
+        @if(isset($onboarding) && !$onboarding['isComplete'])
+            <aside class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Startcenter</div>
+                        <h2 class="mt-2 text-lg font-semibold text-slate-950">
+                            {{ $onboarding['completedCount'] }}/{{ $onboarding['totalCount'] }} erledigt
+                        </h2>
+                    </div>
+                    <div class="text-2xl font-semibold text-slate-950">{{ $onboarding['progressPercent'] }}%</div>
+                </div>
+
+                <div class="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div class="h-full rounded-full bg-slate-950" style="width: {{ $onboarding['progressPercent'] }}%"></div>
+                </div>
+
+                <div class="mt-5 divide-y divide-slate-100">
+                    @foreach($onboarding['steps'] as $step)
+                        <div class="py-3 first:pt-0 last:pb-0">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-sm font-semibold text-slate-900">{{ $step['title'] }}</div>
+                                    <p class="mt-1 text-sm leading-5 text-slate-500">{{ $step['description'] }}</p>
+                                </div>
+                                <span class="shrink-0 rounded-md px-2 py-1 text-xs font-semibold {{ $step['completed'] ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700' }}">
+                                    {{ $step['completed'] ? 'Fertig' : 'Offen' }}
+                                </span>
+                            </div>
+
+                            @if(!$step['completed'] && $step['route'])
+                                <a href="{{ $step['route'] }}" class="mt-3 inline-flex text-sm font-semibold text-indigo-700 hover:text-indigo-800">
+                                    Öffnen
+                                </a>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </aside>
+        @else
+            <aside class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 class="text-lg font-semibold text-slate-950">Verein im Blick</h2>
+                <p class="mt-2 text-sm leading-6 text-slate-500">
+                    Der Grundaufbau ist erledigt. Nutze die Schnellaktionen oben für die tägliche Arbeit.
+                </p>
+            </aside>
+        @endif
     </section>
 
-    @if(isset($onboarding) && !$onboarding['isComplete'])
-        <section class="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-            <div class="grid gap-6 lg:grid-cols-[1.2fr,0.8fr] lg:items-start">
-                <div>
-                    <div class="text-sm font-semibold uppercase tracking-[0.2em] text-indigo-600">Startcenter</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                        Noch {{ $onboarding['totalCount'] - $onboarding['completedCount'] }} Schritte bis zum Start
-                    </h2>
-                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Für neue Vereine lohnt sich hier noch ein kurzer sauberer Aufbau. Danach wird Clubano im Alltag deutlich ruhiger.
-                    </p>
-
-                    <div class="mt-5 grid gap-3">
-                        @foreach($onboarding['steps'] as $step)
-                            <div class="rounded-2xl border px-4 py-4 {{ $step['completed'] ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-slate-50' }}">
-                                <div class="flex items-start justify-between gap-4">
-                                    <div>
-                                        <div class="text-base font-semibold text-slate-900">{{ $step['title'] }}</div>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">{{ $step['description'] }}</p>
-                                    </div>
-                                    <span class="shrink-0 rounded-full px-3 py-1 text-xs font-semibold {{ $step['completed'] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800' }}">
-                                        {{ $step['completed'] ? 'Erledigt' : 'Offen' }}
-                                    </span>
-                                </div>
-
-                                @if(!$step['completed'] && $step['route'])
-                                    <a href="{{ $step['route'] }}"
-                                       class="mt-4 inline-flex rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-900 ring-1 ring-slate-200 hover:bg-slate-100">
-                                        Jetzt machen
-                                    </a>
-                                @endif
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-
-                <div class="rounded-3xl bg-slate-50 p-6 ring-1 ring-slate-200">
-                    <div class="flex items-center justify-between text-sm font-medium text-slate-600">
-                        <span>Fortschritt</span>
-                        <span>{{ $onboarding['completedCount'] }}/{{ $onboarding['totalCount'] }}</span>
-                    </div>
-                    <div class="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
-                        <div class="h-full rounded-full bg-slate-950" style="width: {{ $onboarding['progressPercent'] }}%"></div>
-                    </div>
-                    <div class="mt-3 text-3xl font-semibold text-slate-950">{{ $onboarding['progressPercent'] }}%</div>
-                </div>
-            </div>
-        </section>
-    @endif
-
-    <details class="group rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-        <summary class="flex cursor-pointer list-none items-start justify-between gap-4">
+    <details class="group rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <summary class="flex cursor-pointer list-none flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-                <h2 class="text-2xl font-semibold tracking-tight text-slate-900">Entwicklung im Verein</h2>
+                <h2 class="text-lg font-semibold text-slate-950">Entwicklung im Verein</h2>
                 <p class="mt-1 text-sm text-slate-500">Mitgliederbewegung, Geburtstage, Jubiläen und längerfristige Entwicklung.</p>
             </div>
-            <div class="flex flex-wrap items-center justify-end gap-2">
-                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {{ $membersCount }} Mitglieder
-                </span>
-                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                    {{ $entriesThisYearCount }} neu
-                </span>
-                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 group-open:bg-slate-950 group-open:text-white">
-                    Aufklappen
-                </span>
-            </div>
+            <span class="inline-flex w-fit rounded-md bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700 group-open:bg-slate-950 group-open:text-white">
+                Details anzeigen
+            </span>
         </summary>
 
-        <div class="mt-6 grid gap-6 xl:grid-cols-[1.4fr,0.9fr]">
-            <div class="rounded-3xl bg-white p-6 ring-1 ring-slate-200">
-                <div>
-                    <h3 class="text-2xl font-semibold tracking-tight text-slate-900">Mitglieder wachsen oder gehen</h3>
-                    <p class="mt-1 text-sm text-slate-500">Hier siehst du, wie sich der Verein entwickelt.</p>
-                </div>
-
-                <div class="mt-6">
+        <div class="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.3fr),minmax(320px,0.7fr)]">
+            <section class="rounded-lg border border-slate-200 p-4">
+                <h3 class="text-base font-semibold text-slate-950">Mitgliederentwicklung</h3>
+                <div class="mt-4">
                     @livewire('dashboard-member-chart')
                 </div>
-            </div>
+            </section>
 
-            <div class="rounded-3xl bg-white p-6 ring-1 ring-slate-200">
-                <div>
-                    <h3 class="text-2xl font-semibold tracking-tight text-slate-900">Was im Verein passiert</h3>
-                    <p class="mt-1 text-sm text-slate-500">Eintritte, Austritte, Geburtstage und Jubiläen auf einen Blick.</p>
-                </div>
-
-                <div class="mt-6">
+            <section class="rounded-lg border border-slate-200 p-4">
+                <h3 class="text-base font-semibold text-slate-950">Bewegungen</h3>
+                <div class="mt-4">
                     @livewire('dashboard-member-stats')
                 </div>
-            </div>
+            </section>
         </div>
     </details>
 </div>
