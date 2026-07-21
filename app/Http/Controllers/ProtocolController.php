@@ -44,12 +44,62 @@ class ProtocolController extends Controller
 
     public function index()
     {
-        $protocols = Protocol::where('tenant_id', auth()->user()->tenant_id)
-            ->whereNull('archived_at')
+        $tenantId = auth()->user()->tenant_id;
+        $search = trim((string) request('search', ''));
+        $type = trim((string) request('type', ''));
+        $status = trim((string) request('status', ''));
+
+        $baseQuery = Protocol::where('tenant_id', $tenantId)
+            ->whereNull('archived_at');
+
+        $typeOptions = (clone $baseQuery)
+            ->whereNotNull('type')
+            ->orderBy('type')
+            ->pluck('type')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $sentProtocolIds = TemplateDispatchLog::query()
+            ->where('tenant_id', $tenantId)
+            ->where('action', 'protocol_sent')
+            ->whereIn('channel', ['mail'])
+            ->get()
+            ->map(fn (TemplateDispatchLog $log) => (int) data_get($log->meta, 'protocol_id'))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $protocolTotalCount = (clone $baseQuery)->count();
+        $sentProtocolsCount = $sentProtocolIds->count();
+
+        $protocols = (clone $baseQuery)
             ->with('user')
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('title', 'like', '%' . $search . '%')
+                        ->orWhere('type', 'like', '%' . $search . '%')
+                        ->orWhere('location', 'like', '%' . $search . '%')
+                        ->orWhere('content', 'like', '%' . $search . '%')
+                        ->orWhere('resolutions', 'like', '%' . $search . '%')
+                        ->orWhere('next_meeting', 'like', '%' . $search . '%');
+                });
+            })
+            ->when($type !== '', fn ($query) => $query->where('type', $type))
+            ->when($status === 'sent', function ($query) use ($sentProtocolIds) {
+                $sentProtocolIds->isEmpty()
+                    ? $query->whereRaw('1 = 0')
+                    : $query->whereIn('id', $sentProtocolIds->all());
+            })
+            ->when($status === 'open', function ($query) use ($sentProtocolIds) {
+                if ($sentProtocolIds->isNotEmpty()) {
+                    $query->whereNotIn('id', $sentProtocolIds->all());
+                }
+            })
             ->orderByDesc('updated_at')
             ->orderByDesc('created_at')
-            ->get();
+            ->paginate(15)
+            ->withQueryString();
 
         $dispatchLogs = TemplateDispatchLog::query()
             ->where('tenant_id', auth()->user()->tenant_id)
@@ -59,7 +109,7 @@ class ProtocolController extends Controller
             ->filter(fn (TemplateDispatchLog $log) => filled(data_get($log->meta, 'protocol_id')))
             ->groupBy(fn (TemplateDispatchLog $log) => (int) data_get($log->meta, 'protocol_id'));
 
-        $protocols->transform(function (Protocol $protocol) use ($dispatchLogs) {
+        $protocols->getCollection()->transform(function (Protocol $protocol) use ($dispatchLogs) {
             $logs = $dispatchLogs->get($protocol->id, collect())->sortByDesc('dispatched_at')->values();
 
             $protocol->dispatch_count = $logs->count();
@@ -70,12 +120,21 @@ class ProtocolController extends Controller
             return $protocol;
         });
 
-        return view('protocols.index', compact('protocols'));
+        return view('protocols.index', compact(
+            'protocols',
+            'protocolTotalCount',
+            'sentProtocolsCount',
+            'typeOptions',
+            'search',
+            'type',
+            'status',
+        ));
     }
 
     public function create()
     {
         $members = Member::forCurrentTenant()
+            ->whereNull('archived_at')
             ->orderBy('last_name')
             ->get();
 
@@ -152,6 +211,7 @@ class ProtocolController extends Controller
             ->all();
 
         $allowedParticipantIds = Member::forCurrentTenant()
+            ->whereNull('archived_at')
             ->whereIn('id', $participantIds)
             ->pluck('id')
             ->all();
@@ -189,6 +249,7 @@ class ProtocolController extends Controller
         }
 
         $members = Member::forCurrentTenant()
+            ->whereNull('archived_at')
             ->orderBy('last_name')
             ->get();
 
@@ -273,6 +334,7 @@ class ProtocolController extends Controller
             ->all();
 
         $allowedParticipantIds = Member::forCurrentTenant()
+            ->whereNull('archived_at')
             ->whereIn('id', $participantIds)
             ->pluck('id')
             ->all();
@@ -327,7 +389,7 @@ class ProtocolController extends Controller
 
         return redirect()
             ->route('protocols.index')
-            ->with('success', 'Protokoll wurde geloescht.');
+            ->with('success', 'Protokoll wurde gelöscht.');
     }
 
     public function sendEmail(Protocol $protocol)
@@ -347,6 +409,7 @@ class ProtocolController extends Controller
 
         $members = Member::where('tenant_id', $protocol->tenant_id)
             ->whereNotNull('email')
+            ->whereNull('archived_at')
             ->orderBy('last_name')
             ->get();
 
@@ -403,6 +466,7 @@ class ProtocolController extends Controller
         $members = Member::where('tenant_id', $protocol->tenant_id)
             ->whereIn('id', $validated['members'] ?? [])
             ->whereNotNull('email')
+            ->whereNull('archived_at')
             ->orderBy('last_name')
             ->get();
 
@@ -415,7 +479,7 @@ class ProtocolController extends Controller
         if ($members->isEmpty() && $contacts->isEmpty() && $directEmails->isEmpty()) {
             return back()
                 ->withErrors([
-                    'members' => 'Bitte waehle mindestens ein Mitglied, einen Kontakt oder eine freie E-Mail-Adresse aus.',
+                    'members' => 'Bitte wähle mindestens ein Mitglied, einen Kontakt oder eine freie E-Mail-Adresse aus.',
                 ])
                 ->withInput();
         }
@@ -513,7 +577,7 @@ class ProtocolController extends Controller
 
         return redirect()
             ->route('protocols.show', $protocol)
-            ->with('success', $sentCount . ' Empfaenger haben das Protokoll per Mail erhalten.');
+            ->with('success', $sentCount . ' Empfänger haben das Protokoll per Mail erhalten.');
     }
 
     public function attachment(Protocol $protocol, int $index): StreamedResponse

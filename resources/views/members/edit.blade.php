@@ -13,7 +13,7 @@
     };
 @endphp
 
-<div class="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
+<div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
     <section class="rounded-[2rem] bg-slate-950 px-6 py-6 text-white shadow-sm sm:px-8 sm:py-8">
         <div class="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div class="flex flex-col gap-5 sm:flex-row sm:items-center">
@@ -69,7 +69,7 @@
     </section>
 
     @if ($errors->any())
-        <section class="rounded-3xl border border-rose-200 bg-rose-50 px-5 py-4 shadow-sm">
+        <section class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4">
             <div class="font-semibold text-rose-950">Bitte kurz prüfen.</div>
             <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-rose-900">
                 @foreach ($errors->all() as $error)
@@ -92,16 +92,26 @@
         @csrf
         @method('PATCH')
 
-        <section class="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
-            <div class="space-y-6">
-                <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Person</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Wer dieses Mitglied ist</h2>
-                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Name, Anrede, Geburtstag und das Bild. Alles, was diese Person sofort erkennbar macht.
-                    </p>
+        <nav class="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+            <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Bearbeiten</div>
+            <div class="mt-3 flex flex-wrap gap-2">
+                <a href="#edit-person" class="rounded-full bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white">Person</a>
+                <a href="#edit-membership" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Mitgliedschaft</a>
+                <a href="#edit-contact" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Kontakt</a>
+                <a href="#edit-payment" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Zahlung</a>
+                <a href="#edit-privacy" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Datenschutz</a>
+            </div>
+        </nav>
 
-                    <div class="mt-6 grid gap-6 md:grid-cols-2">
+        <section id="edit-person" class="rounded-2xl border border-slate-200 bg-white p-6 scroll-mt-6">
+            <div class="grid gap-6 xl:grid-cols-4">
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Person</div>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Identität</h2>
+                    <p class="mt-2 text-sm leading-6 text-slate-500">Name, Anrede und Profilfoto.</p>
+                </div>
+
+                <div class="grid gap-6 md:grid-cols-2 xl:col-span-3">
                         <x-ui.select name="gender" label="Geschlecht" :options="['weiblich'=>'weiblich','männlich'=>'männlich','divers'=>'divers']" :selected="old('gender', $member->gender)" />
                         <x-ui.select name="salutation" label="Anrede" :options="['Frau'=>'Frau','Herr'=>'Herr','Liebe'=>'Liebe','Lieber'=>'Lieber','Hallo'=>'Hallo']" :selected="old('salutation', $member->salutation)" />
                         <x-ui.input name="title" label="Titel" :value="old('title', $member->title)" />
@@ -118,26 +128,28 @@
                                    accept="image/*"
                                    class="w-full rounded-2xl border border-slate-300 bg-white file:mr-4 file:rounded-xl file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200">
                             @if ($member->photo)
-                                <div class="mt-4 flex items-center gap-4 rounded-2xl bg-slate-50 px-4 py-3">
-                                    <img src="{{ route('members.photo', $member) }}" alt="Aktuelles Foto" class="h-16 w-16 rounded-full object-cover shadow-sm">
+                                <div class="mt-4 flex items-center gap-4 border-t border-slate-100 pt-4">
+                                    <img src="{{ route('members.photo', $member) }}" alt="Aktuelles Foto" class="h-16 w-16 rounded-full object-cover">
                                     <div class="text-sm text-slate-600">Aktuelles Foto</div>
                                 </div>
                             @endif
                         </div>
-                    </div>
-                </section>
+                </div>
+            </div>
+        </section>
 
-                <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section id="edit-membership" class="rounded-2xl border border-slate-200 bg-white p-6 scroll-mt-6">
+            <div class="grid gap-6 xl:grid-cols-4">
+                <div>
                     <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Mitgliedschaft</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Wie die Mitgliedschaft laeuft</h2>
-                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Hier wird klar, seit wann die Person dabei ist, welche Mitgliedschaft gilt und ob bereits ein Austritt geplant ist.
-                    </p>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Status und Laufzeit</h2>
+                    <p class="mt-2 text-sm leading-6 text-slate-500">Beitragsmodell, Nummer und relevante Termine.</p>
+                </div>
 
-                    <div class="mt-6 grid gap-6 md:grid-cols-2">
+                <div class="grid gap-6 md:grid-cols-2 xl:col-span-3">
                         <div class="md:col-span-2">
                             <x-ui.label for="membership_id">Mitgliedschaft</x-ui.label>
-                            <select name="membership_id" id="membership_id" class="w-full rounded-2xl border-gray-300 shadow-sm">
+                            <select name="membership_id" id="membership_id" class="w-full rounded-2xl border-gray-300">
                                 <option value="">– bitte wählen –</option>
                                 @foreach($memberships as $membership)
                                     <option value="{{ $membership->id }}" @selected((string) old('membership_id', $member->membership_id) === (string) $membership->id)>
@@ -151,14 +163,20 @@
                         <x-ui.input type="date" name="entry_date" label="Eintritt" :value="old('entry_date', optional($member->entry_date)->format('Y-m-d'))" />
                         <x-ui.input type="date" name="termination_date" label="Kündigungsdatum" :value="old('termination_date', optional($member->termination_date)->format('Y-m-d'))" />
                         <x-ui.input type="date" name="exit_date" label="Austritt" :value="old('exit_date', optional($member->exit_date)->format('Y-m-d'))" />
-                    </div>
-                </section>
+                </div>
+            </div>
+        </section>
 
-                <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section id="edit-contact" class="rounded-2xl border border-slate-200 bg-white p-6 scroll-mt-6">
+            <div class="grid gap-6 xl:grid-cols-4">
+                <div>
                     <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Kontakt</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Wie ihr euch erreicht</h2>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Erreichbarkeit</h2>
+                    <p class="mt-2 text-sm leading-6 text-slate-500">Kontaktdaten, bevorzugter Kanal und Einwilligungen.</p>
+                </div>
 
-                    <div class="mt-6 grid gap-6 md:grid-cols-2">
+                <div class="space-y-6 xl:col-span-3">
+                    <div class="grid gap-6 md:grid-cols-2">
                         <x-ui.input type="email" name="email" label="E-Mail" :value="old('email', $member->email)" />
                         <x-ui.input name="mobile" label="Mobilfunknummer" :value="old('mobile', $member->mobile)" />
                         <x-ui.input name="whatsapp_phone" label="WhatsApp-Nummer" :value="old('whatsapp_phone', $member->whatsapp_phone)" />
@@ -166,7 +184,7 @@
 
                         <div>
                             <x-ui.label for="preferred_contact_channel">Bevorzugter Kanal</x-ui.label>
-                            <select name="preferred_contact_channel" id="preferred_contact_channel" class="w-full rounded-2xl border-gray-300 shadow-sm">
+                            <select name="preferred_contact_channel" id="preferred_contact_channel" class="w-full rounded-2xl border-gray-300">
                                 <option value="">Bitte wählen</option>
                                 <option value="email" @selected(old('preferred_contact_channel', $member->preferred_contact_channel) === 'email')>E-Mail</option>
                                 <option value="phone" @selected(old('preferred_contact_channel', $member->preferred_contact_channel) === 'phone')>Telefon</option>
@@ -177,35 +195,40 @@
 
                         <div>
                             <x-ui.label for="consent_given_at">Einwilligung erteilt am</x-ui.label>
-                            <input type="date" name="consent_given_at" id="consent_given_at" value="{{ old('consent_given_at', optional($member->consent_given_at)->format('Y-m-d')) }}" class="w-full rounded-2xl border-gray-300 shadow-sm">
+                            <input type="date" name="consent_given_at" id="consent_given_at" value="{{ old('consent_given_at', optional($member->consent_given_at)->format('Y-m-d')) }}" class="w-full rounded-2xl border-gray-300">
                         </div>
                     </div>
 
-                    <div class="mt-6 grid gap-3 md:grid-cols-2">
-                        <label class="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
+                    <div class="grid gap-3 md:grid-cols-2">
+                        <label class="inline-flex items-center gap-2 border-t border-slate-100 py-3">
                             <input type="checkbox" name="consent_email" value="1" class="rounded border-gray-300" @checked(old('consent_email', $member->consent_email))>
                             <span>E-Mail erlaubt</span>
                         </label>
-                        <label class="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
+                        <label class="inline-flex items-center gap-2 border-t border-slate-100 py-3">
                             <input type="checkbox" name="consent_phone" value="1" class="rounded border-gray-300" @checked(old('consent_phone', $member->consent_phone))>
                             <span>Telefon erlaubt</span>
                         </label>
-                        <label class="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
+                        <label class="inline-flex items-center gap-2 border-t border-slate-100 py-3">
                             <input type="checkbox" name="consent_whatsapp" value="1" class="rounded border-gray-300" @checked(old('consent_whatsapp', $member->consent_whatsapp))>
                             <span>WhatsApp erlaubt</span>
                         </label>
-                        <label class="inline-flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3">
+                        <label class="inline-flex items-center gap-2 border-t border-slate-100 py-3">
                             <input type="checkbox" name="consent_post" value="1" class="rounded border-gray-300" @checked(old('consent_post', $member->consent_post))>
                             <span>Post erlaubt</span>
                         </label>
                     </div>
-                </section>
+                </div>
+            </div>
+        </section>
 
-                <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section class="rounded-2xl border border-slate-200 bg-white p-6">
+            <div class="grid gap-6 xl:grid-cols-4">
+                <div>
                     <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Adresse</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Wo diese Person zuhause ist</h2>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Anschrift</h2>
+                </div>
 
-                    <div class="mt-6 grid gap-6 md:grid-cols-2">
+                <div class="grid gap-6 md:grid-cols-2 xl:col-span-3">
                         <x-ui.input name="street" label="Straße + Nr." :value="old('street', $member->street)" />
                         <x-ui.input name="address_addition" label="Adresszusatz" :value="old('address_addition', $member->address_addition)" />
                         <x-ui.input name="zip" label="PLZ" :value="old('zip', $member->zip)" />
@@ -213,7 +236,7 @@
 
                         <div>
                             <x-ui.label for="country">Land</x-ui.label>
-                            <select name="country" id="country" class="w-full rounded-2xl border-gray-300 shadow-sm">
+                            <select name="country" id="country" class="w-full rounded-2xl border-gray-300">
                                 @foreach (config('countries.list') as $code => $name)
                                     <option value="{{ $code }}" @selected(old('country', $member->country ?: 'DE') === $code)>{{ $name }}</option>
                                 @endforeach
@@ -221,53 +244,58 @@
                         </div>
 
                         <x-ui.input name="care_of" label="C/O" :value="old('care_of', $member->care_of)" />
-                    </div>
-                </section>
-
-                @if (isset($customFields) && count($customFields))
-                    <section class="rounded-3xl border border-pink-200 bg-white p-6 shadow-sm">
-                        <div class="text-xs font-semibold uppercase tracking-[0.22em] text-pink-600">Mehr</div>
-                        <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Weitere Angaben</h2>
-
-                        <div class="mt-6 grid gap-6 md:grid-cols-2">
-                            @foreach ($customFields as $field)
-                                @php
-                                    $name = 'custom_fields[' . $field->id . ']';
-                                    $label = $field->label;
-                                    $value = old("custom_fields.{$field->id}", optional($member->customValues->firstWhere('custom_member_field_id', $field->id))->value);
-                                @endphp
-
-                                @if ($field->type === 'text')
-                                    <x-ui.input :name="$name" :label="$label" :value="$value" />
-                                @elseif ($field->type === 'email')
-                                    <x-ui.input type="email" :name="$name" :label="$label" :value="$value" />
-                                @elseif ($field->type === 'date')
-                                    <x-ui.input type="date" :name="$name" :label="$label" :value="$value" />
-                                @elseif ($field->type === 'number')
-                                    <x-ui.input type="number" :name="$name" :label="$label" :value="$value" />
-                                @elseif ($field->type === 'select')
-                                    @php
-                                        $options = collect(explode(',', $field->options))->mapWithKeys(fn($v) => [trim($v) => trim($v)]);
-                                    @endphp
-                                    <x-ui.select :name="$name" :label="$label" :options="$options" :selected="$value" />
-                                @endif
-                            @endforeach
-                        </div>
-                    </section>
-                @endif
+                </div>
             </div>
+        </section>
 
-            <div class="space-y-6">
-                <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        @if (isset($customFields) && count($customFields))
+            <section class="rounded-2xl border border-slate-200 bg-white p-6">
+                <div class="grid gap-6 xl:grid-cols-4">
+                    <div>
+                        <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Weitere Angaben</div>
+                        <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Vereinsinterne Felder</h2>
+                    </div>
+
+                    <div class="grid gap-6 md:grid-cols-2 xl:col-span-3">
+                        @foreach ($customFields as $field)
+                            @php
+                                $name = 'custom_fields[' . $field->id . ']';
+                                $label = $field->label;
+                                $value = old("custom_fields.{$field->id}", optional($member->customValues->firstWhere('custom_member_field_id', $field->id))->value);
+                            @endphp
+
+                            @if ($field->type === 'text')
+                                <x-ui.input :name="$name" :label="$label" :value="$value" />
+                            @elseif ($field->type === 'email')
+                                <x-ui.input type="email" :name="$name" :label="$label" :value="$value" />
+                            @elseif ($field->type === 'date')
+                                <x-ui.input type="date" :name="$name" :label="$label" :value="$value" />
+                            @elseif ($field->type === 'number')
+                                <x-ui.input type="number" :name="$name" :label="$label" :value="$value" />
+                            @elseif ($field->type === 'select')
+                                @php
+                                    $options = collect(explode(',', $field->options))->mapWithKeys(fn($v) => [trim($v) => trim($v)]);
+                                @endphp
+                                <x-ui.select :name="$name" :label="$label" :options="$options" :selected="$value" />
+                            @endif
+                        @endforeach
+                    </div>
+                </div>
+            </section>
+        @endif
+
+        <section id="edit-payment" class="rounded-2xl border border-slate-200 bg-white p-6 scroll-mt-6">
+            <div class="grid gap-6 xl:grid-cols-4">
+                <div>
                     <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Zahlung</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Wie Beiträge reinkommen</h2>
-                    <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Hier legst du fest, ob per Überweisung, bar oder per SEPA-Lastschrift gezahlt wird.
-                    </p>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Beitragszahlung</h2>
+                    <p class="mt-2 text-sm leading-6 text-slate-500">Zahlungsart und SEPA-Daten.</p>
+                </div>
 
-                    <div class="mt-6">
+                <div class="space-y-6 xl:col-span-3">
+                    <div>
                         <x-ui.label for="payment_method">Zahlungsart</x-ui.label>
-                        <select name="payment_method" id="payment_method" x-model="paymentMethod" class="w-full rounded-2xl border-gray-300 shadow-sm">
+                        <select name="payment_method" id="payment_method" x-model="paymentMethod" class="w-full rounded-2xl border-gray-300">
                             <option value="">Bitte wählen</option>
                             <option value="ueberweisung" @selected(old('payment_method', $member->payment_method) === 'ueberweisung')>Überweisung</option>
                             <option value="bar" @selected(old('payment_method', $member->payment_method) === 'bar')>Bar</option>
@@ -275,7 +303,7 @@
                         </select>
                     </div>
 
-                    <div x-show="paymentMethod === 'sepa_lastschrift'" x-cloak class="mt-6 space-y-6">
+                    <div x-show="paymentMethod === 'sepa_lastschrift'" x-cloak class="space-y-6 border-t border-slate-100 pt-6">
                         <div class="grid gap-6 md:grid-cols-2">
                             <div>
                                 <x-ui.input name="iban" label="IBAN" :value="old('iban', $member->iban)" x-model="iban" @blur="lookupBic()" @change="lookupBic()" />
@@ -290,7 +318,7 @@
                             <x-ui.input name="sepa_account_holder" label="Abweichender Kontoinhaber" :value="old('sepa_account_holder', $member->sepa_account_holder)" />
                         </div>
 
-                        <div class="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                        <div class="border-t border-slate-100 pt-6">
                             <div class="text-sm font-semibold text-slate-900">Abweichende Kontoinhaberadresse</div>
                             <div class="mt-4 grid gap-6 md:grid-cols-2">
                                 <x-ui.input name="sepa_account_holder_street" label="Straße + Nr." :value="old('sepa_account_holder_street', $member->sepa_account_holder_street)" />
@@ -298,7 +326,7 @@
                                 <x-ui.input name="sepa_account_holder_city" label="Ort" :value="old('sepa_account_holder_city', $member->sepa_account_holder_city)" />
                                 <div>
                                     <x-ui.label for="sepa_account_holder_country">Land</x-ui.label>
-                                    <select name="sepa_account_holder_country" id="sepa_account_holder_country" class="w-full rounded-2xl border-gray-300 shadow-sm">
+                                    <select name="sepa_account_holder_country" id="sepa_account_holder_country" class="w-full rounded-2xl border-gray-300">
                                         @foreach (config('countries.list') as $code => $name)
                                             <option value="{{ $code }}" @selected(old('sepa_account_holder_country', $member->sepa_account_holder_country ?: 'DE') === $code)>{{ $name }}</option>
                                         @endforeach
@@ -307,44 +335,54 @@
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
+            </div>
+        </section>
 
-                @if($allTags->isNotEmpty())
-                    <section class="rounded-3xl border border-amber-200 bg-white p-6 shadow-sm">
-                        <div class="text-xs font-semibold uppercase tracking-[0.22em] text-amber-700">Ordnung</div>
+        @if($allTags->isNotEmpty())
+            <section class="rounded-2xl border border-slate-200 bg-white p-6">
+                <div class="grid gap-6 xl:grid-cols-4">
+                    <div>
+                        <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Ordnung</div>
                         <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Tags</h2>
+                    </div>
 
-                        <div class="mt-6 grid gap-3 sm:grid-cols-2">
-                            @foreach($allTags as $tag)
-                                <label class="inline-flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
-                                    <input type="checkbox"
-                                           name="tags[]"
-                                           value="{{ $tag->id }}"
-                                           @checked(in_array($tag->id, old('tags', $member->tags->pluck('id')->toArray())))
-                                           class="rounded border-gray-300 text-indigo-600 shadow-sm">
-                                    <span class="rounded-full px-2.5 py-1 text-sm font-medium text-slate-900" style="background-color: {{ $tag->color ?? '#F3F4F6' }}">
-                                        {{ $tag->name }}
-                                    </span>
-                                </label>
-                            @endforeach
-                        </div>
-                    </section>
-                @endif
+                    <div class="grid gap-3 sm:grid-cols-2 xl:col-span-3">
+                        @foreach($allTags as $tag)
+                            <label class="inline-flex items-center gap-3 border-t border-slate-100 py-3">
+                                <input type="checkbox"
+                                       name="tags[]"
+                                       value="{{ $tag->id }}"
+                                       @checked(in_array($tag->id, old('tags', $member->tags->pluck('id')->toArray())))
+                                       class="rounded border-gray-300 text-indigo-600">
+                                <span class="rounded-full px-2.5 py-1 text-sm font-medium text-slate-900" style="background-color: {{ $tag->color ?? '#F3F4F6' }}">
+                                    {{ $tag->name }}
+                                </span>
+                            </label>
+                        @endforeach
+                    </div>
+                </div>
+            </section>
+        @endif
 
-                <section class="rounded-3xl border border-emerald-200 bg-white p-6 shadow-sm">
-                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Datenschutz</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Was freigegeben ist</h2>
+        <section id="edit-privacy" class="rounded-2xl border border-slate-200 bg-white p-6 scroll-mt-6">
+            <div class="grid gap-6 xl:grid-cols-4">
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Datenschutz</div>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Freigaben und Löschung</h2>
+                </div>
 
-                    <div class="mt-6 grid gap-3">
-                        <label class="inline-flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                <div class="space-y-6 xl:col-span-3">
+                    <div class="grid gap-3">
+                        <label class="inline-flex items-center gap-3 border-t border-slate-100 py-3">
                             <input type="checkbox" name="consent_data_processing" value="1" class="rounded border-gray-300" @checked(old('consent_data_processing', $member->consent_data_processing))>
                             <span>Datenschutz-/Datenverarbeitungsfreigabe liegt vor</span>
                         </label>
-                        <label class="inline-flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                        <label class="inline-flex items-center gap-3 border-t border-slate-100 py-3">
                             <input type="checkbox" name="consent_photo_internal" value="1" class="rounded border-gray-300" @checked(old('consent_photo_internal', $member->consent_photo_internal))>
                             <span>Foto intern im Verein verwendbar</span>
                         </label>
-                        <label class="inline-flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+                        <label class="inline-flex items-center gap-3 border-t border-slate-100 py-3">
                             <input type="checkbox" name="consent_photo_public" value="1" class="rounded border-gray-300" @checked(old('consent_photo_public', $member->consent_photo_public))>
                             <span>Foto öffentlich verwendbar</span>
                         </label>
@@ -353,14 +391,14 @@
                     <div class="mt-6 grid gap-6">
                         <div>
                             <x-ui.label for="deletion_requested_at">Löschvormerkung ab</x-ui.label>
-                            <input type="date" name="deletion_requested_at" id="deletion_requested_at" value="{{ old('deletion_requested_at', optional($member->deletion_requested_at)->format('Y-m-d')) }}" class="w-full rounded-2xl border-gray-300 shadow-sm">
+                            <input type="date" name="deletion_requested_at" id="deletion_requested_at" value="{{ old('deletion_requested_at', optional($member->deletion_requested_at)->format('Y-m-d')) }}" class="w-full rounded-2xl border-gray-300">
                         </div>
                         <div>
                             <x-ui.label for="deletion_note">Löschhinweis / Datenschutznotiz</x-ui.label>
-                            <textarea name="deletion_note" id="deletion_note" rows="4" class="w-full rounded-2xl border-gray-300 shadow-sm">{{ old('deletion_note', $member->deletion_note) }}</textarea>
+                            <textarea name="deletion_note" id="deletion_note" rows="4" class="w-full rounded-2xl border-gray-300">{{ old('deletion_note', $member->deletion_note) }}</textarea>
                         </div>
                     </div>
-                </section>
+                </div>
             </div>
         </section>
 

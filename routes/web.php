@@ -120,6 +120,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::post('/aufgaben', [$cls, 'store'])->name('tasks.store');
         Route::get('/aufgaben/{task}/bearbeiten', [$cls, 'edit'])->name('tasks.edit');
         Route::put('/aufgaben/{task}', [$cls, 'update'])->name('tasks.update');
+        Route::patch('/aufgaben/{task}/aktion', [$cls, 'quickAction'])->name('tasks.quick-action');
 
         Route::get('/projects/{project}/tasks/create', [$cls, 'createFromProject'])->name('projects.tasks.create');
         Route::post('/projects/{project}/tasks', [$cls, 'storeFromProject'])->name('projects.tasks.store');

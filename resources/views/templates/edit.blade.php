@@ -1,22 +1,16 @@
 @extends('layouts.app')
 
 @section('content')
-
-<div class="p-6">
-
-    <h1 class="text-xl font-semibold mb-4">
-        Vorlage bearbeiten
-    </h1>
-
-    @if ($errors->any())
-        <div class="mb-4 bg-red-100 text-red-800 p-3 rounded">
-            <ul>
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
+<div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <section class="rounded-3xl bg-slate-950 px-6 py-6 text-white sm:px-8">
+        <div class="max-w-3xl">
+            <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Vorlageneditor</div>
+            <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Vorlage bearbeiten</h1>
+            <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
+                Schärfe Inhalt, Platzhalter und Betreff, damit die Vorlage im Versand zuverlässig wirkt.
+            </p>
         </div>
-    @endif
+    </section>
 
     <form id="templateForm"
           method="POST"
@@ -26,49 +20,6 @@
         @method('PUT')
 
         @include('templates.form')
-
     </form>
-
 </div>
-
 @endsection
-
-
-
-@push('scripts')
-
-<script src="/tinymce/tinymce.min.js"></script>
-
-<script>
-
-document.addEventListener("DOMContentLoaded", function () {
-
-    tinymce.init({
-
-        selector: '#body',
-
-        license_key: 'gpl',
-
-        height: 400,
-
-        plugins: 'lists link image table code fullscreen',
-
-        toolbar:
-        'undo redo | bold italic | alignleft aligncenter alignright | bullist numlist | link image | code',
-
-    });
-
-
-    const form = document.getElementById("templateForm");
-
-    form.addEventListener("submit", function () {
-
-        tinymce.triggerSave();
-
-    });
-
-});
-
-</script>
-
-@endpush

@@ -17,12 +17,16 @@
     ];
 @endphp
 
-<div class="rounded border border-indigo-100 bg-indigo-50 p-3">
-    <div class="mb-2 text-sm font-semibold text-indigo-900">Platzhalter einfügen</div>
-
-    <div class="flex flex-wrap gap-2">
+<div>
+    <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
         @foreach ($templatePlaceholders as $placeholder => $label)
-            <button type="button" class="template-placeholder-button rounded border border-indigo-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-700 shadow-sm hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1" data-placeholder="{{ $placeholder }}" title="{{ $label }} einfügen">{{ $placeholder }}</button>
+            <button type="button"
+                    class="template-placeholder-button flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                    data-placeholder="{{ $placeholder }}"
+                    title="{{ $label }} einfügen">
+                <span>{{ $label }}</span>
+                <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-600">{{ $placeholder }}</span>
+            </button>
         @endforeach
     </div>
 </div>

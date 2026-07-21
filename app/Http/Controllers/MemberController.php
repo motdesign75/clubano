@@ -440,7 +440,7 @@ class MemberController extends Controller
         if ($request->action === 'assign_membership') {
             if (! $request->filled('membership_id')) {
                 return redirect()->route('members.index')
-                    ->with('error', 'Bitte waehle eine Mitgliedschaft fuer die Massenverarbeitung aus.');
+                    ->with('error', 'Bitte wähle eine Mitgliedschaft für die Massenverarbeitung aus.');
             }
 
             $membership = Membership::query()
@@ -449,7 +449,7 @@ class MemberController extends Controller
 
             if (! $membership) {
                 return redirect()->route('members.index')
-                    ->with('error', 'Die ausgewaehlte Mitgliedschaft gehoert nicht zu diesem Verein.');
+                    ->with('error', 'Die ausgewählte Mitgliedschaft gehört nicht zu diesem Verein.');
             }
         }
 

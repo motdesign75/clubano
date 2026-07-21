@@ -5,7 +5,9 @@ use App\Models\Member;
 use App\Models\Protocol;
 use App\Models\PublicForm;
 use App\Models\PublicFormSubmission;
+use App\Models\Template;
 use App\Models\Tenant;
+use App\Models\Task;
 use App\Models\User;
 
 function createTenantWithUser(string $role, string $suffix): array
@@ -41,7 +43,7 @@ test('members index hides management actions for viewers and shows them for staf
 
     $viewerResponse->assertOk();
     $viewerResponse->assertDontSee('Neues Mitglied');
-    $viewerResponse->assertDontSee('Serienaktionen fuer die aktuelle Auswahl');
+    $viewerResponse->assertDontSee('Serienaktionen für die aktuelle Auswahl');
     $viewerResponse->assertDontSee('Datenauskunft');
     $viewerResponse->assertDontSee('Bearbeiten');
     $viewerResponse->assertDontSee('Archivieren');
@@ -60,7 +62,7 @@ test('members index hides management actions for viewers and shows them for staf
 
     $staffResponse->assertOk();
     $staffResponse->assertSee('Neues Mitglied');
-    $staffResponse->assertSee('Serienaktionen fuer die aktuelle Auswahl');
+    $staffResponse->assertSee('Serienaktionen für die aktuelle Auswahl');
     $staffResponse->assertSee('Datenauskunft');
     $staffResponse->assertSee('Bearbeiten');
     $staffResponse->assertSee('Archivieren');
@@ -138,7 +140,7 @@ test('forms pages hide management actions for viewers and show them for staff', 
     $viewerIndex->assertDontSee('Neues Formular');
     $viewerIndex->assertDontSee('Bearbeiten');
     $viewerIndex->assertDontSee('Einbetten');
-    $viewerIndex->assertDontSee('Loeschen');
+    $viewerIndex->assertDontSee('Löschen');
 
     $viewerSubmissions = $this->actingAs($viewer)->get(route('forms.submissions', $form));
     $viewerSubmissions->assertOk();
@@ -197,7 +199,7 @@ test('protocol pages hide management actions for viewers and show them for staff
     $viewerIndex->assertDontSee('Bearbeiten');
     $viewerIndex->assertDontSee('Versenden');
     $viewerIndex->assertDontSee('Archivieren');
-    $viewerIndex->assertDontSee('Loeschen');
+    $viewerIndex->assertDontSee('Löschen');
 
     $viewerShow = $this->actingAs($viewer)->get(route('protocols.show', $protocol));
     $viewerShow->assertOk();
@@ -220,10 +222,249 @@ test('protocol pages hide management actions for viewers and show them for staff
     $staffIndex->assertSee('Bearbeiten');
     $staffIndex->assertSee('Versenden');
     $staffIndex->assertSee('Archivieren');
-    $staffIndex->assertSee('Loeschen');
+    $staffIndex->assertSee('Löschen');
 
     $staffShow = $this->actingAs($staff)->get(route('protocols.show', $staffProtocol));
     $staffShow->assertOk();
     $staffShow->assertSee('Bearbeiten');
     $staffShow->assertSee('Versenden');
+});
+
+test('protocol mail form excludes archived members from recipients', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'protocol-mail-archived');
+
+    $activeMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Aktive',
+        'last_name' => 'Person',
+        'email' => 'aktive@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $archivedMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Archivierte',
+        'last_name' => 'Person',
+        'email' => 'archivierte@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+        'archived_at' => now()->subDay(),
+    ]);
+
+    $protocol = Protocol::create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $staff->id,
+        'title' => 'Versandtest',
+        'type' => 'Team',
+        'content' => '<p>Versand</p>',
+    ]);
+
+    $response = $this->actingAs($staff)->get(route('protocols.mail.form', $protocol));
+
+    $response->assertOk();
+    $response->assertSee($activeMember->email);
+    $response->assertDontSee($archivedMember->email);
+});
+
+test('protocol create ignores archived members as participants', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'protocol-create-archived');
+
+    $activeMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Aktive',
+        'last_name' => 'Teilnehmerin',
+        'email' => 'aktive-teilnehmerin@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $archivedMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Archivierter',
+        'last_name' => 'Teilnehmer',
+        'email' => 'archivierter-teilnehmer@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+        'archived_at' => now()->subDay(),
+    ]);
+
+    $formResponse = $this->actingAs($staff)->get(route('protocols.create'));
+
+    $formResponse->assertOk();
+    $formResponse->assertSee($activeMember->full_name);
+    $formResponse->assertDontSee($archivedMember->full_name);
+
+    $storeResponse = $this->actingAs($staff)->post(route('protocols.store'), [
+        'title' => 'Teilnehmertest',
+        'type' => 'Team',
+        'location' => 'Clubhaus',
+        'content' => '<p>Inhalt</p>',
+        'participant_ids' => [
+            $activeMember->id,
+            $archivedMember->id,
+        ],
+    ]);
+
+    $storeResponse->assertRedirect(route('protocols.index'));
+
+    $protocol = Protocol::where('tenant_id', $tenant->id)
+        ->where('title', 'Teilnehmertest')
+        ->firstOrFail();
+
+    $participantIds = $protocol->participants()
+        ->pluck('members.id')
+        ->all();
+
+    expect($participantIds)->toContain($activeMember->id);
+    expect($participantIds)->not->toContain($archivedMember->id);
+});
+
+test('protocol index paginates and can be searched', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'protocol-search');
+
+    foreach (range(1, 16) as $number) {
+        Protocol::create([
+            'tenant_id' => $tenant->id,
+            'user_id' => $staff->id,
+            'title' => 'Protokoll ' . sprintf('%02d', $number),
+            'type' => 'Team',
+            'content' => '<p>Inhalt ' . $number . '</p>',
+            'created_at' => now()->subMinutes($number),
+            'updated_at' => now()->subMinutes($number),
+        ]);
+    }
+
+    $indexResponse = $this->actingAs($staff)->get(route('protocols.index'));
+
+    $indexResponse->assertOk();
+    $indexResponse->assertSee('1-15 von 16 Protokollen');
+    $indexResponse->assertSee('Protokoll 01');
+    $indexResponse->assertDontSee('Protokoll 16');
+
+    $searchResponse = $this->actingAs($staff)->get(route('protocols.index', ['search' => 'Protokoll 16']));
+
+    $searchResponse->assertOk();
+    $searchResponse->assertSee('1-1 von 1 Protokollen');
+    $searchResponse->assertSee('Protokoll 16');
+    $searchResponse->assertDontSee('Protokoll 01');
+});
+
+test('template index paginates and can be searched', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'template-search');
+
+    foreach (range(1, 16) as $number) {
+        Template::create([
+            'tenant_id' => $tenant->id,
+            'name' => 'Vorlage ' . sprintf('%02d', $number),
+            'subject' => 'Betreff ' . $number,
+            'body' => '<p>Inhalt ' . $number . '</p>',
+            'type' => Template::TYPE_MAIL,
+        ]);
+    }
+
+    $indexResponse = $this->actingAs($staff)->get(route('templates.index'));
+
+    $indexResponse->assertOk();
+    $indexResponse->assertSee('1-15 von 16 Vorlagen');
+    $indexResponse->assertSee('Vorlage 01');
+    $indexResponse->assertDontSee('Vorlage 16');
+
+    $searchResponse = $this->actingAs($staff)->get(route('templates.index', ['search' => 'Vorlage 16']));
+
+    $searchResponse->assertOk();
+    $searchResponse->assertSee('1-1 von 1 Vorlagen');
+    $searchResponse->assertSee('Vorlage 16');
+    $searchResponse->assertDontSee('Vorlage 01');
+});
+
+test('template create shows the guided template editor', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [, $staff] = createTenantWithUser(User::ROLE_STAFF, 'template-editor');
+
+    $response = $this->actingAs($staff)->get(route('templates.create'));
+
+    $response->assertOk();
+    $response->assertSee('Vorlageneditor');
+    $response->assertSee('Text gestalten');
+    $response->assertSee('Platzhalter');
+    $response->assertSee('So wirkt die Vorlage');
+    $response->assertSee('Vorlage speichern');
+    $response->assertSee('link image table', false);
+    $response->assertSee('paste_data_images', false);
+});
+
+test('tasks index shows the calmer guided task overview', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'tasks-overview');
+
+    Task::create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Belege prüfen',
+        'description' => 'Die offenen Belege noch einmal prüfen.',
+        'status' => 'open',
+        'assignee_id' => $staff->id,
+        'created_by' => $staff->id,
+        'plan_end' => now()->subDay()->toDateString(),
+        'priority' => 2,
+        'percent_done' => 0,
+        'type' => 'task',
+    ]);
+
+    Task::create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Einladung vorbereiten',
+        'status' => 'in_progress',
+        'assignee_id' => $staff->id,
+        'created_by' => $staff->id,
+        'plan_end' => now()->addDays(3)->toDateString(),
+        'priority' => 3,
+        'percent_done' => 40,
+        'type' => 'task',
+    ]);
+
+    $response = $this->actingAs($staff)->get(route('tasks.index'));
+
+    $response->assertOk();
+    $response->assertSee('Was ist als Nächstes dran?');
+    $response->assertSee('Nächster sinnvoller Schritt');
+    $response->assertSee('Das mache ich jetzt');
+    $response->assertSee('Belege prüfen');
+    $response->assertSee('Aufmerksamkeit');
+    $response->assertSee('Archivierter Blick');
+});
+
+test('task quick action starts the next task', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'tasks-quick-action');
+
+    $task = Task::create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Sponsoren anrufen',
+        'status' => 'open',
+        'created_by' => $staff->id,
+        'plan_end' => now()->toDateString(),
+        'priority' => 2,
+        'percent_done' => 0,
+        'type' => 'task',
+    ]);
+
+    $response = $this->actingAs($staff)->patch(route('tasks.quick-action', $task), [
+        'action' => 'start',
+    ]);
+
+    $response->assertRedirect(route('tasks.index'));
+
+    $task->refresh();
+
+    expect($task->status)->toBe('in_progress');
+    expect($task->percent_done)->toBe(10);
+    expect($task->assignee_id)->toBe($staff->id);
 });

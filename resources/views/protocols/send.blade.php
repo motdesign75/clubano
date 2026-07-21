@@ -13,26 +13,26 @@
 
 @section('content')
 <div x-data="protocolSendPage()" x-init="init()" class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-    <section class="rounded-3xl bg-slate-950 px-6 py-6 text-white shadow-sm sm:px-8">
+    <section class="rounded-3xl bg-slate-950 px-6 py-6 text-white sm:px-8">
         <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div class="max-w-3xl">
                 <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Protokollversand</div>
                 <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{{ $protocol->title }}</h1>
                 <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
-                    Das erzeugte Protokoll-PDF wird immer mitgesendet. Bestehende Protokoll-Anhaenge gehen automatisch mit in dieselbe Mail.
+                    Das erzeugte Protokoll-PDF wird immer mitgesendet. Bestehende Protokoll-Anhänge gehen automatisch mit in dieselbe Mail.
                 </p>
             </div>
 
             <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
                 <div class="font-semibold text-white">{{ count($protocolAttachments) + 1 }} Datei(en) im Versand</div>
-                <div class="mt-0.5 text-xs text-slate-300">1 PDF + {{ count($protocolAttachments) }} gespeicherte Anhaenge</div>
+                <div class="mt-0.5 text-xs text-slate-300">1 PDF + {{ count($protocolAttachments) }} gespeicherte Anhänge</div>
             </div>
         </div>
     </section>
 
     @if ($errors->any())
         <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800">
-            <div class="font-semibold">Bitte pruefe den Versand noch einmal.</div>
+            <div class="font-semibold">Bitte prüfe den Versand noch einmal.</div>
             <ul class="mt-2 list-disc space-y-1 pl-5">
                 @foreach ($errors->all() as $error)
                     <li>{{ $error }}</li>
@@ -41,19 +41,19 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('protocols.mail.send', $protocol) }}" class="grid gap-6 xl:grid-cols-[0.96fr_1.04fr]">
+    <form method="POST" action="{{ route('protocols.mail.send', $protocol) }}" class="grid gap-6 xl:grid-cols-3">
         @csrf
 
-        <div class="space-y-6">
-            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="space-y-6 xl:col-span-2">
+            <section class="rounded-2xl border border-slate-200 bg-white p-6">
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Empfaenger</div>
+                        <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Empfänger</div>
                         <h2 class="mt-2 text-xl font-semibold text-slate-900">An wen soll das Protokoll gehen?</h2>
                         <p class="mt-2 text-sm text-slate-500">Mitglieder, Kontakte und freie Mailadressen lassen sich hier in einem Schritt kombinieren.</p>
                     </div>
                     <div class="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
-                        <span x-text="selectedCount"></span> ausgewaehlt
+                        <span x-text="selectedCount"></span> ausgewählt
                     </div>
                 </div>
 
@@ -62,18 +62,18 @@
                         Alle markieren
                     </button>
                     <button type="button" @click="unselectAll('.member-checkbox, .contact-checkbox')" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-                        Alles loesen
+                        Alles lösen
                     </button>
                 </div>
 
                 <div class="mt-5 space-y-5">
                     <div class="overflow-hidden rounded-2xl border border-slate-200">
-                        <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Mitglieder</div>
                                 <div class="mt-1 text-sm text-slate-500">Alle Mitglieder mit hinterlegter E-Mail-Adresse.</div>
                             </div>
-                            <div class="flex items-center gap-3">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                                 <input type="text" x-model="memberSearch" placeholder="Mitglieder suchen..." class="w-full rounded-full border-slate-300 px-4 py-2 text-sm sm:w-64">
                                 <button type="button" @click="selectAll('.member-checkbox')" class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
                                     Alle Mitglieder
@@ -97,12 +97,12 @@
                     </div>
 
                     <div class="overflow-hidden rounded-2xl border border-slate-200">
-                        <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Kontakte</div>
                                 <div class="mt-1 text-sm text-slate-500">Externe Ansprechpartner und Organisationen direkt mitversenden.</div>
                             </div>
-                            <div class="flex items-center gap-3">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                                 <input type="text" x-model="contactSearch" placeholder="Kontakte suchen..." class="w-full rounded-full border-slate-300 px-4 py-2 text-sm sm:w-64">
                                 <button type="button" @click="selectAll('.contact-checkbox')" class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
                                     Alle Kontakte
@@ -126,7 +126,7 @@
                     </div>
                 </div>
 
-                <div class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div class="mt-6 border-t border-slate-100 pt-5">
                     <label for="direct_emails" class="block text-sm font-medium text-slate-700">Freie E-Mail-Adressen</label>
                     <p class="mt-1 text-sm text-slate-500">Eine Adresse pro Zeile oder durch Komma bzw. Semikolon getrennt.</p>
                     <textarea id="direct_emails" name="direct_emails" rows="4" x-model="directEmails" @input="updateCount()" class="mt-3 w-full rounded-2xl border-slate-300 text-sm" placeholder="info@example.org&#10;vorstand@example.org">{{ old('direct_emails') }}</textarea>
@@ -134,34 +134,34 @@
             </section>
 
             <div class="flex flex-wrap gap-3">
-                <button type="submit" class="inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800">
+                <button type="submit" class="inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
                     Protokoll jetzt senden
                 </button>
-                <a href="{{ route('protocols.show', $protocol) }}" class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
-                    Zurueck zum Protokoll
+                <a href="{{ route('protocols.show', $protocol) }}" class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                    Zurück zum Protokoll
                 </a>
             </div>
         </div>
 
         <aside class="space-y-6">
-            <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <section class="rounded-2xl border border-slate-200 bg-white p-6">
                 <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Versandinhalt</div>
                 <h2 class="mt-2 text-xl font-semibold text-slate-900">Was in der Mail steckt</h2>
 
                 <div class="mt-5 space-y-3">
-                    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                        <div class="text-sm font-semibold text-emerald-900">Protokoll-PDF</div>
-                        <div class="mt-1 text-sm text-emerald-800">Wird automatisch aus dem aktuellen Protokoll erzeugt und angehaengt.</div>
+                    <div class="border-t border-slate-100 py-3 first:border-t-0 first:pt-0">
+                        <div class="text-sm font-semibold text-slate-900">Protokoll-PDF</div>
+                        <div class="mt-1 text-sm text-slate-500">Wird automatisch aus dem aktuellen Protokoll erzeugt und angehängt.</div>
                     </div>
 
                     @forelse($protocolAttachments as $file)
-                        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="border-t border-slate-100 py-3">
                             <div class="text-sm font-semibold text-slate-900">{{ basename($file) }}</div>
                             <div class="mt-1 text-xs text-slate-500">Bereits am Protokoll gespeichert und wird mitgesendet.</div>
                         </div>
                     @empty
-                        <div class="rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500">
-                            Zusaetzlich zur PDF sind aktuell keine weiteren Protokoll-Anhaenge gespeichert.
+                        <div class="border-t border-slate-100 py-3 text-sm text-slate-500">
+                            Zusätzlich zur PDF sind aktuell keine weiteren Protokoll-Anhänge gespeichert.
                         </div>
                     @endforelse
                 </div>

@@ -195,6 +195,41 @@ class TaskController extends Controller
         return $this->redirectAfterSave($task, 'Aufgabe wurde aktualisiert.');
     }
 
+    public function quickAction(Request $request, Task $task)
+    {
+        $this->ensureTaskAccess($task);
+
+        $validated = $request->validate([
+            'action' => ['required', 'string', 'in:start,done,tomorrow,assign_me'],
+        ]);
+
+        $payload = match ($validated['action']) {
+            'start' => [
+                'status' => 'in_progress',
+                'percent_done' => max((int) $task->percent_done, 10),
+                'assignee_id' => $task->assignee_id ?: auth()->id(),
+            ],
+            'done' => [
+                'status' => 'done',
+                'percent_done' => 100,
+                'completed_at' => now(),
+            ],
+            'tomorrow' => [
+                'plan_end' => now()->addDay()->toDateString(),
+                'follow_up_at' => now()->addDay()->toDateString(),
+            ],
+            'assign_me' => [
+                'assignee_id' => auth()->id(),
+            ],
+        };
+
+        $task->update($payload);
+
+        return redirect()
+            ->route('tasks.index')
+            ->with('success', 'Aufgabe aktualisiert.');
+    }
+
     public function updateFromProject(Request $request, Project $project, Task $task)
     {
         $this->ensureProjectAccess($project);

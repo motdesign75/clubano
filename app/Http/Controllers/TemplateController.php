@@ -14,18 +14,50 @@ class TemplateController extends Controller
 {
     public function index()
     {
-        $templates = Template::where('tenant_id', auth()->user()->tenant_id)
+        $tenantId = auth()->user()->tenant_id;
+        $search = trim((string) request('search', ''));
+        $type = trim((string) request('type', ''));
+
+        $baseQuery = Template::where('tenant_id', $tenantId);
+
+        $templateTotalCount = (clone $baseQuery)->count();
+        $mailTemplateCount = (clone $baseQuery)
+            ->whereIn('type', [Template::TYPE_MAIL, Template::TYPE_MAIL_AND_LETTER])
+            ->count();
+        $letterTemplateCount = (clone $baseQuery)
+            ->whereIn('type', [Template::TYPE_LETTER, Template::TYPE_MAIL_AND_LETTER])
+            ->count();
+
+        $templates = (clone $baseQuery)
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('subject', 'like', '%' . $search . '%')
+                        ->orWhere('body', 'like', '%' . $search . '%');
+                });
+            })
+            ->when($type !== '', fn ($query) => $query->where('type', $type))
             ->orderBy('name')
-            ->get();
+            ->paginate(15)
+            ->withQueryString();
 
         $recentDispatches = TemplateDispatchLog::query()
-            ->where('tenant_id', auth()->user()->tenant_id)
+            ->where('tenant_id', $tenantId)
             ->latest('dispatched_at')
             ->latest('id')
             ->take(5)
             ->get();
 
-        return view('templates.index', compact('templates', 'recentDispatches'));
+        return view('templates.index', [
+            'templates' => $templates,
+            'recentDispatches' => $recentDispatches,
+            'templateTotalCount' => $templateTotalCount,
+            'mailTemplateCount' => $mailTemplateCount,
+            'letterTemplateCount' => $letterTemplateCount,
+            'typeOptions' => Template::typeOptions(),
+            'search' => $search,
+            'type' => $type,
+        ]);
     }
 
     public function create()

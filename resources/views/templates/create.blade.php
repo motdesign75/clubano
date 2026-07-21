@@ -1,35 +1,20 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="p-6">
-    <h1 class="text-xl font-semibold mb-4">Neue Vorlage</h1>
+<div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <section class="rounded-3xl bg-slate-950 px-6 py-6 text-white sm:px-8">
+        <div class="max-w-3xl">
+            <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Vorlageneditor</div>
+            <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Neue Vorlage erstellen</h1>
+            <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
+                Baue eine Vorlage, die sofort für Mail, Brief oder Dokument funktioniert.
+            </p>
+        </div>
+    </section>
 
     <form id="templateForm" method="POST" action="{{ route('templates.store') }}">
         @csrf
-
-        <div class="bg-white rounded shadow p-6 space-y-4">
-            @include('templates.form', ['template' => null, 'typeOptions' => $typeOptions ?? \App\Models\Template::typeOptions()])
-        </div>
+        @include('templates.form', ['template' => null, 'typeOptions' => $typeOptions ?? \App\Models\Template::typeOptions()])
     </form>
 </div>
 @endsection
-
-@push('scripts')
-<script src="/tinymce/tinymce.min.js"></script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    tinymce.init({
-        selector: '#body',
-        license_key: 'gpl',
-        height: 420,
-        plugins: 'lists link image table code fullscreen',
-        toolbar: 'undo redo | bold italic | alignleft aligncenter alignright | bullist numlist | link image | code',
-    });
-
-    const form = document.getElementById("templateForm");
-    form.addEventListener("submit", function () {
-        tinymce.triggerSave();
-    });
-});
-</script>
-@endpush

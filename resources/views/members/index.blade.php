@@ -19,8 +19,8 @@
         'archiviert' => 'Archiviert',
     ];
     $exitScopes = [
-        'kuendigungen' => 'Gekuendigt',
-        'zeitraum' => 'Naechste ' . ($exitWindowDays ?? 90) . ' Tage',
+        'kuendigungen' => 'Gekündigt',
+        'zeitraum' => 'Nächste ' . ($exitWindowDays ?? 90) . ' Tage',
         'vergangen' => 'Schon raus',
         'alle' => 'Alle mit Austritt',
     ];
@@ -70,7 +70,7 @@
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-slate-200">
                     <div class="font-semibold text-white">{{ $stats['aktiv'] }} aktiv</div>
-                    <div class="mt-0.5 text-xs text-slate-300">{{ $stats['gekuendigt'] ?? 0 }} gekuendigt, {{ $stats['zukünftig'] }} im Start</div>
+                    <div class="mt-0.5 text-xs text-slate-300">{{ $stats['gekuendigt'] ?? 0 }} gekündigt, {{ $stats['zukünftig'] }} im Start</div>
                 </div>
 
                 @if($canManageMembers)
@@ -101,7 +101,7 @@
             </div>
             <div class="rounded-2xl border border-rose-200 bg-rose-50/60 px-3.5 py-3">
                 <div class="flex items-baseline justify-between gap-3">
-                    <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-700">Gekuendigt</div>
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-700">Gekündigt</div>
                     <div class="text-2xl font-semibold tracking-tight text-rose-900">{{ $stats['gekuendigt'] ?? 0 }}</div>
                 </div>
                 <div class="mt-1 text-xs text-rose-700/70">Austritt offen</div>
@@ -109,7 +109,7 @@
             <div class="rounded-2xl border border-slate-200 bg-slate-50/70 px-3.5 py-3">
                 <div class="grid gap-2 text-xs text-slate-600 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
                     <div>
-                        <div class="font-semibold uppercase tracking-[0.16em] text-slate-400">Zukuenftig</div>
+                        <div class="font-semibold uppercase tracking-[0.16em] text-slate-400">Zukünftig</div>
                         <div class="mt-1 text-sm font-semibold text-slate-900">{{ $stats['zukünftig'] }}</div>
                     </div>
                     <div>
@@ -205,7 +205,7 @@
                 Filtern
             </button>
             <a href="{{ route('members.index') }}" class="text-sm font-medium text-slate-500 hover:text-slate-700">
-                Filter zuruecksetzen
+                Filter zurücksetzen
             </a>
         </div>
     </form>
@@ -218,11 +218,11 @@
                     <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
                         <h2 class="text-lg font-semibold tracking-tight text-slate-950">Nur bei Bedarf einblenden</h2>
                         <span class="inline-flex items-center rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
-                            {{ $stats['gekuendigt'] ?? 0 }} gekuendigt
+                            {{ $stats['gekuendigt'] ?? 0 }} gekündigt
                         </span>
                         @if(($stats['austritte_bald'] ?? 0) > 0)
                             <span class="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
-                                {{ $stats['austritte_bald'] }} bald faellig
+                                {{ $stats['austritte_bald'] }} bald fällig
                             </span>
                         @endif
                     </div>
@@ -256,7 +256,7 @@
             @foreach([30, 60, 90, 180] as $days)
                 <a href="{{ route('members.index', array_merge(request()->except(['page', 'exit_scope', 'exit_days']), ['exit_scope' => 'zeitraum', 'exit_days' => $days])) }}"
                    class="rounded-2xl border px-4 py-3 text-left transition {{ $currentExitScope === 'zeitraum' && (int) ($exitWindowDays ?? 90) === $days ? 'border-slate-300 bg-slate-50 text-slate-950 shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50' }}">
-                    <div class="text-sm font-semibold">Naechste {{ $days }} Tage</div>
+                    <div class="text-sm font-semibold">Nächste {{ $days }} Tage</div>
                 </a>
             @endforeach
             </div>
@@ -293,7 +293,7 @@
                 </div>
             @else
                 <div class="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                    Fuer diesen Blick gibt es aktuell keine passenden Austritte.
+                    Für diesen Blick gibt es aktuell keine passenden Austritte.
                 </div>
             @endif
         </div>
@@ -307,7 +307,7 @@
         <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                    <div class="text-sm font-semibold text-slate-900">Serienaktionen fuer die aktuelle Auswahl</div>
+                    <div class="text-sm font-semibold text-slate-900">Serienaktionen für die aktuelle Auswahl</div>
                     <div class="mt-1 text-sm text-slate-500">{{ count($filteredMemberIds) }} Mitglied(er) im aktuellen Ergebnis.</div>
                 </div>
 
@@ -337,16 +337,16 @@
         @if($canManageMembers)
             <div class="mb-3 mt-4 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center">
                     <select name="action" id="members-bulk-action-select" form="members-bulk-action-form" required class="w-full rounded-2xl border-gray-300 px-3 py-2 sm:w-auto">
-                        <option value="">Aktion waehlen</option>
+                        <option value="">Aktion wählen</option>
                         <option value="set_status_aktiv">Status: Aktiv</option>
-                        <option value="set_status_zukuenftig">Status: Zukuenftig</option>
+                        <option value="set_status_zukuenftig">Status: Zukünftig</option>
                         <option value="set_status_ehemalig">Status: Ehemalig</option>
                         <option value="assign_membership">Mitgliedschaft zuweisen</option>
-                        <option value="delete">Loeschen</option>
+                        <option value="delete">Löschen</option>
                     </select>
 
                     <select name="membership_id" id="members-bulk-membership-select" form="members-bulk-action-form" class="hidden w-full rounded-2xl border-gray-300 px-3 py-2 sm:w-auto">
-                        <option value="">Mitgliedschaft waehlen</option>
+                        <option value="">Mitgliedschaft wählen</option>
                         @foreach($memberships as $membership)
                             <option value="{{ $membership->id }}">
                                 {{ $membership->name }} · {{ number_format((float) $membership->amount, 2, ',', '.') }} € / {{ $membership->interval }}
@@ -354,10 +354,10 @@
                         @endforeach
                     </select>
 
-                    <x-primary-button type="submit" form="members-bulk-action-form" class="w-full justify-center sm:w-auto">Ausfuehren</x-primary-button>
+                    <x-primary-button type="submit" form="members-bulk-action-form" class="w-full justify-center sm:w-auto">Ausführen</x-primary-button>
 
                     <div class="text-xs text-slate-500" id="members-bulk-action-hint">
-                        Loeschen verschiebt markierte Mitglieder sicher ins Archiv.
+                        Löschen verschiebt markierte Mitglieder sicher ins Archiv.
                     </div>
             </div>
         @endif
@@ -457,7 +457,7 @@
             <div class="hidden overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm lg:block">
                 <div class="overflow-x-auto">
                     <div class="min-w-[1120px]">
-                        <div class="grid grid-cols-[40px_minmax(260px,1.3fr)_180px_minmax(250px,1fr)_110px_96px] gap-4 border-b border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        <div class="grid gap-4 border-b border-slate-200 px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500" style="grid-template-columns: 40px minmax(260px, 1.3fr) 180px minmax(250px, 1fr) 110px 96px;">
                             <label class="flex items-center justify-center">
                                 @if($canManageMembers)
                                     <input type="checkbox" id="checkAll" class="rounded border-slate-300 text-slate-900 focus:ring-slate-800">
@@ -482,7 +482,7 @@
                                 default => 'bg-yellow-100 text-yellow-800'
                             };
                         @endphp
-                        <article class="grid grid-cols-[40px_minmax(260px,1.3fr)_180px_minmax(250px,1fr)_110px_96px] gap-4 px-4 py-4 transition hover:bg-slate-50/70">
+                        <article class="grid gap-4 px-4 py-4 transition hover:bg-slate-50/70" style="grid-template-columns: 40px minmax(260px, 1.3fr) 180px minmax(250px, 1fr) 110px 96px;">
                             <div class="flex justify-center pt-1">
                                 @if($canManageMembers)
                                     <input type="checkbox" name="selected[]" value="{{ $member->id }}" form="members-bulk-action-form" class="member-checkbox rounded border-slate-300 text-slate-900 focus:ring-slate-800">
@@ -621,8 +621,8 @@
 
             if (bulkActionHint) {
                 bulkActionHint.textContent = needsMembership
-                    ? 'Die gewaehlte Mitgliedschaft wird inkl. Beitrag und Rhythmus auf alle markierten Mitglieder uebernommen.'
-                    : 'Loeschen verschiebt markierte Mitglieder sicher ins Archiv.';
+                    ? 'Die gewählte Mitgliedschaft wird inkl. Beitrag und Rhythmus auf alle markierten Mitglieder übernommen.'
+                    : 'Löschen verschiebt markierte Mitglieder sicher ins Archiv.';
             }
         };
 
@@ -632,7 +632,7 @@
         bulkActionForm.addEventListener('submit', function (event) {
             if (bulkActionSelect.value === 'assign_membership' && bulkMembershipSelect && !bulkMembershipSelect.value) {
                 event.preventDefault();
-                window.alert('Bitte waehle zuerst eine Mitgliedschaft aus.');
+                window.alert('Bitte wähle zuerst eine Mitgliedschaft aus.');
                 return;
             }
 
