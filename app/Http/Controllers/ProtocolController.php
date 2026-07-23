@@ -80,6 +80,63 @@ class ProtocolController extends Controller
             ->all();
     }
 
+    private function entriesFromRawNotes(?string $rawNotes): array
+    {
+        $lines = preg_split('/\R/', (string) $rawNotes) ?: [];
+
+        return collect($lines)
+            ->map(fn (string $line) => trim(preg_replace('/^\s*[-*•]\s*/', '', $line) ?? ''))
+            ->filter()
+            ->map(function (string $line) {
+                $type = ProtocolEntry::TYPE_INFORMATION;
+                $lower = Str::lower($line);
+
+                if (Str::contains($lower, ['beschluss', 'beschlossen', 'entscheidet', 'entscheidung'])) {
+                    $type = ProtocolEntry::TYPE_RESOLUTION;
+                } elseif (Str::contains($lower, ['diskussion', 'diskutiert', 'beratung', 'besprochen'])) {
+                    $type = ProtocolEntry::TYPE_DISCUSSION;
+                } elseif (Str::contains($lower, ['wiedervorlage', 'nächste sitzung', 'naechste sitzung', 'erneut beraten'])) {
+                    $type = ProtocolEntry::TYPE_FOLLOW_UP;
+                } elseif (Str::contains($lower, ['organisiert', 'erledigt', 'kümmert', 'kuemmert', 'bis '])) {
+                    $type = ProtocolEntry::TYPE_TASK;
+                } elseif (Str::contains($lower, ['termin', 'braukurs', 'veranstaltung']) || preg_match('/\b\d{1,2}\.\d{1,2}\.(\d{2}|\d{4})\b/', $line)) {
+                    $type = ProtocolEntry::TYPE_DATE;
+                }
+
+                return [
+                    'type' => $type,
+                    'title' => Str::limit($line, 70, ''),
+                    'content' => $line,
+                    'responsible_name' => '',
+                    'due_date' => null,
+                    'scheduled_date' => null,
+                    'visible_in_protocol' => true,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function entriesFromAgenda(?string $rawAgenda): array
+    {
+        $lines = preg_split('/\R/', (string) $rawAgenda) ?: [];
+
+        return collect($lines)
+            ->map(fn (string $line) => trim(preg_replace('/^\s*(?:[-*•]|\d+[\).]|TOP\s*\d+[\).:-]?)\s*/i', '', $line) ?? ''))
+            ->filter()
+            ->map(fn (string $line) => [
+                'type' => ProtocolEntry::TYPE_INFORMATION,
+                'title' => Str::limit($line, 90, ''),
+                'content' => '',
+                'responsible_name' => '',
+                'due_date' => null,
+                'scheduled_date' => null,
+                'visible_in_protocol' => true,
+            ])
+            ->values()
+            ->all();
+    }
+
     private function buildContentFromEntries(array $entries): string
     {
         if (empty($entries)) {
@@ -217,6 +274,8 @@ class ProtocolController extends Controller
                         ->orWhere('type', 'like', '%' . $search . '%')
                         ->orWhere('location', 'like', '%' . $search . '%')
                         ->orWhere('content', 'like', '%' . $search . '%')
+                        ->orWhere('raw_agenda', 'like', '%' . $search . '%')
+                        ->orWhere('raw_notes', 'like', '%' . $search . '%')
                         ->orWhere('resolutions', 'like', '%' . $search . '%')
                         ->orWhere('next_meeting', 'like', '%' . $search . '%');
                 });
@@ -292,6 +351,8 @@ class ProtocolController extends Controller
             'location'          => 'nullable|string|max:255',
             'start_time'        => 'nullable|date_format:H:i',
             'end_time'          => 'nullable|date_format:H:i',
+            'raw_agenda'        => 'nullable|string',
+            'raw_notes'         => 'nullable|string',
             'content'           => 'nullable|string',
             'resolutions'       => 'nullable|string',
             'next_meeting'      => 'nullable|string',
@@ -305,6 +366,16 @@ class ProtocolController extends Controller
         ] + $this->validatedEntryRules());
 
         $entries = $this->normalizeProtocolEntries($validated['entries'] ?? []);
+        $rawAgenda = trim((string) ($validated['raw_agenda'] ?? ''));
+        $rawNotes = trim((string) ($validated['raw_notes'] ?? ''));
+
+        if (empty($entries)) {
+            $entries = array_merge(
+                $this->entriesFromAgenda($rawAgenda),
+                $this->entriesFromRawNotes($rawNotes)
+            );
+        }
+
         $content = trim((string) ($validated['content'] ?? ''));
 
         if (! empty($entries)) {
@@ -340,6 +411,8 @@ class ProtocolController extends Controller
             'location'      => $validated['location'] ?? null,
             'start_time'    => $validated['start_time'] ?? null,
             'end_time'      => $validated['end_time'] ?? null,
+            'raw_agenda'    => $rawAgenda !== '' ? $rawAgenda : null,
+            'raw_notes'     => $rawNotes !== '' ? $rawNotes : null,
             'content'       => $content,
             'resolutions'   => $validated['resolutions'] ?? null,
             'next_meeting'  => $validated['next_meeting'] ?? null,
@@ -433,6 +506,8 @@ class ProtocolController extends Controller
             'location'          => 'nullable|string|max:255',
             'start_time'        => 'nullable|date_format:H:i',
             'end_time'          => 'nullable|date_format:H:i',
+            'raw_agenda'        => 'nullable|string',
+            'raw_notes'         => 'nullable|string',
             'content'           => 'nullable|string',
             'resolutions'       => 'nullable|string',
             'next_meeting'      => 'nullable|string',
@@ -446,6 +521,16 @@ class ProtocolController extends Controller
         ] + $this->validatedEntryRules());
 
         $entries = $this->normalizeProtocolEntries($validated['entries'] ?? []);
+        $rawAgenda = trim((string) ($validated['raw_agenda'] ?? ''));
+        $rawNotes = trim((string) ($validated['raw_notes'] ?? ''));
+
+        if (empty($entries)) {
+            $entries = array_merge(
+                $this->entriesFromAgenda($rawAgenda),
+                $this->entriesFromRawNotes($rawNotes)
+            );
+        }
+
         $content = trim((string) ($validated['content'] ?? ''));
 
         if (! empty($entries)) {
@@ -479,6 +564,8 @@ class ProtocolController extends Controller
             'location'      => $validated['location'] ?? null,
             'start_time'    => $validated['start_time'] ?? null,
             'end_time'      => $validated['end_time'] ?? null,
+            'raw_agenda'    => $rawAgenda !== '' ? $rawAgenda : null,
+            'raw_notes'     => $rawNotes !== '' ? $rawNotes : null,
             'content'       => $content,
             'resolutions'   => $validated['resolutions'] ?? null,
             'next_meeting'  => $validated['next_meeting'] ?? null,

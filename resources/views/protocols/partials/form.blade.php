@@ -8,6 +8,8 @@
     $endTimeValue = old('end_time', isset($protocol->end_time) && $protocol->end_time ? \Illuminate\Support\Str::of($protocol->end_time)->substr(0, 5) : '');
     $resolutionsValue = old('resolutions', $protocol->resolutions ?? '');
     $nextMeetingValue = old('next_meeting', $protocol->next_meeting ?? '');
+    $rawAgendaValue = old('raw_agenda', $protocol->raw_agenda ?? '');
+    $rawNotesValue = old('raw_notes', $protocol->raw_notes ?? '');
     $contentValue = old('content', $protocol->content ?? '');
     $selectedParticipants = collect(old('participant_ids', $selected ?? []))->map(fn ($id) => (int) $id)->all();
     $attachments = $protocol->attachments ?? $protocol->attachment_paths ?? [];
@@ -95,7 +97,7 @@
             <div class="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-slate-200">
                 <div class="font-semibold">{{ $editing ? 'Bearbeitung' : 'Neuanlage' }}</div>
                 <div class="mt-1 text-slate-300">
-                    {{ $editing ? 'Bestehendes Protokoll aktualisieren' : 'Mit Trix-Editor, Teilnehmern und Anhängen' }}
+                    {{ $editing ? 'Bestehendes Protokoll aktualisieren' : 'Agenda vorbereiten, Sitzung führen, Protokoll erzeugen' }}
                 </div>
             </div>
         </div>
@@ -123,7 +125,7 @@
             <div class="mt-3 flex flex-wrap gap-2">
                 <a href="#protocol-basics" class="rounded-full bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white">Rahmen</a>
                 <a href="#protocol-people" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Teilnehmer</a>
-                <a href="#protocol-content" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Punkte</a>
+                <a href="#protocol-content" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Agenda & Mitschrift</a>
                 <a href="#protocol-files" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Anhänge</a>
             </div>
         </nav>
@@ -227,18 +229,123 @@
         </section>
 
         <section id="protocol-content" class="rounded-2xl border border-slate-200 bg-white p-6 scroll-mt-6"
-                 x-data="protocolEntryEditor(@js($entryValues))">
+                 x-data="protocolEntryEditor(@js($entryValues), @js($rawAgendaValue), @js($rawNotesValue))">
             <div class="grid gap-6 xl:grid-cols-4">
                 <div>
                     <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protokoll</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Was ist passiert?</h2>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Aus der Agenda entsteht das Protokoll.</h2>
                     <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Erfasse jeden Punkt als Information, Diskussion, Beschluss, Aufgabe, Termin oder Wiedervorlage.
+                        Bereite die Tagesordnung vor, schreibe während der Sitzung mit und erzeuge daraus die fertige Niederschrift.
                     </p>
                 </div>
 
                 <div class="space-y-6 xl:col-span-3">
-                    <div class="space-y-4">
+                    <div class="grid gap-3 sm:grid-cols-4">
+                        <button type="button"
+                                class="rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition"
+                                :class="step === 'agenda' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                                @click="step = 'agenda'">
+                            1. Agenda
+                        </button>
+                        <button type="button"
+                                class="rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition"
+                                :class="step === 'notes' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                                @click="step = 'notes'">
+                            2. Mitschrift
+                        </button>
+                        <button type="button"
+                                class="rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition"
+                                :class="step === 'structure' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                                @click="step = 'structure'">
+                            3. Ordnen
+                        </button>
+                        <button type="button"
+                                class="rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition"
+                                :class="step === 'finish' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                                @click="step = 'finish'">
+                            4. Fertig
+                        </button>
+                    </div>
+
+                    <div class="rounded-3xl border border-slate-200 bg-white p-4 sm:p-5" x-show="step === 'agenda'">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Vor der Sitzung</div>
+                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Tagesordnung</h3>
+                            </div>
+                            <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                <span x-text="agendaLineCount()"></span> TOPs
+                            </div>
+                        </div>
+
+                        <textarea id="raw_agenda"
+                                  name="raw_agenda"
+                                  x-model="rawAgenda"
+                                  rows="9"
+                                  class="mt-4 w-full rounded-2xl border-slate-200 bg-white text-base leading-7 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300"
+                                  placeholder="TOP 1 Begrüßung&#10;TOP 2 Renovierung Vereinsheim&#10;TOP 3 Kartoffelmarkt&#10;TOP 4 Braukurs&#10;TOP 5 Sonstiges">{{ $rawAgendaValue }}</textarea>
+                        @error('raw_agenda')
+                            <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
+                        @enderror
+
+                        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="text-sm leading-6 text-slate-600">
+                                Jeder Tagesordnungspunkt wird zur geführten Schreibfläche für die Sitzung.
+                            </div>
+                            <button type="button"
+                                    class="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                                    @click="structureFromAgenda()">
+                                Agenda übernehmen
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-5" x-show="step === 'notes'">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Sitzungsmodus</div>
+                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Schnelle Mitschrift</h3>
+                            </div>
+                            <div class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                                <span x-text="noteLineCount()"></span> Stichpunkte
+                            </div>
+                        </div>
+
+                        <textarea id="raw_notes"
+                                  name="raw_notes"
+                                  x-model="rawNotes"
+                                  rows="11"
+                                  class="mt-4 w-full rounded-2xl border-slate-200 bg-white text-base leading-7 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300"
+                                  placeholder="- Vorsitzender berichtet über Renovierung&#10;- Diskussion Kartoffelmarkt&#10;- Beschluss: Teilnahme am Kartoffelmarkt&#10;- Dirk organisiert Getränke bis 15.08.2026&#10;- Braukurs am 15.08.2026&#10;- Getränkepreise nächste Sitzung">{{ $rawNotesValue }}</textarea>
+                        @error('raw_notes')
+                            <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
+                        @enderror
+
+                        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="text-sm leading-6 text-slate-600">
+                                Eine Zeile ist ein Gedanke. Wörter wie Beschluss, diskutiert, bis oder nächste Sitzung helfen beim Einordnen.
+                            </div>
+                            <button type="button"
+                                    class="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                                    @click="structureFromNotes(true)">
+                                Mitschrift ergänzen
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4" x-show="step === 'structure'">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Ordnen</div>
+                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Aus Stichpunkten werden Protokollpunkte</h3>
+                            </div>
+                            <button type="button"
+                                    class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                    @click="add()">
+                                Punkt hinzufügen
+                            </button>
+                        </div>
+
                         <template x-for="(entry, index) in entries" :key="entry.key">
                             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                                 <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -344,15 +451,9 @@
                                 </div>
                             </article>
                         </template>
-
-                        <button type="button"
-                                class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                                @click="add()">
-                            Punkt hinzufügen
-                        </button>
                     </div>
 
-                    <div class="border-t border-slate-100 pt-6">
+                    <div class="border-t border-slate-100 pt-6" x-show="step === 'finish'">
                         <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Ergebnisse & nächste Schritte</div>
                         <div class="mt-4 grid gap-5 lg:grid-cols-2">
                             <div>
@@ -377,8 +478,8 @@
                         </div>
                     </div>
 
-                    <details class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <summary class="cursor-pointer text-sm font-semibold text-slate-800">Feinschliff als klassischer Protokolltext</summary>
+                    <details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" x-show="step === 'finish'" :open="step === 'finish'">
+                        <summary class="cursor-pointer text-sm font-semibold text-slate-800">Fertiges Protokoll bei Bedarf manuell nachziehen</summary>
                         <div class="mt-4">
                             <label for="content" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protokolltext</label>
                             <input id="content" type="hidden" name="content" value="{{ $contentValue }}">
@@ -445,8 +546,11 @@
 </div>
 
 <script>
-    function protocolEntryEditor(initialEntries) {
+    function protocolEntryEditor(initialEntries, initialRawAgenda, initialRawNotes) {
         return {
+            step: initialRawAgenda ? 'agenda' : (initialRawNotes ? 'notes' : (initialEntries.some((entry) => (entry.title || entry.content)) ? 'structure' : 'agenda')),
+            rawAgenda: initialRawAgenda || '',
+            rawNotes: initialRawNotes || '',
             entries: initialEntries.map((entry, index) => ({ key: Date.now() + index, ...entry })),
             labels: @js($entryTypes),
             hints: @js($entryTypeHints),
@@ -484,6 +588,154 @@
             },
             toneFor(type) {
                 return this.tones[type] || this.tones.information;
+            },
+            noteLineCount() {
+                return this.rawNotes
+                    .split(/\r?\n/)
+                    .map((line) => line.replace(/^\s*[-*•]\s*/, '').trim())
+                    .filter(Boolean)
+                    .length;
+            },
+            agendaLineCount() {
+                return this.agendaLines().length;
+            },
+            agendaLines() {
+                return this.rawAgenda
+                    .split(/\r?\n/)
+                    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).]|TOP\s*\d+[\).:-]?)\s*/i, '').trim())
+                    .filter(Boolean);
+            },
+            structureFromAgenda() {
+                const lines = this.agendaLines();
+
+                if (lines.length === 0) {
+                    this.entries = [{
+                        key: Date.now(),
+                        type: 'information',
+                        title: '',
+                        content: '',
+                        responsible_name: '',
+                        due_date: '',
+                        scheduled_date: '',
+                        visible_in_protocol: true,
+                    }];
+                    this.step = 'notes';
+                    return;
+                }
+
+                this.entries = lines.map((line, index) => ({
+                    key: Date.now() + index,
+                    type: 'information',
+                    title: line.slice(0, 90),
+                    content: '',
+                    responsible_name: '',
+                    due_date: '',
+                    scheduled_date: '',
+                    visible_in_protocol: true,
+                }));
+
+                this.step = 'notes';
+            },
+            structureFromNotes(append = false) {
+                const lines = this.rawNotes
+                    .split(/\r?\n/)
+                    .map((line) => line.replace(/^\s*[-*•]\s*/, '').trim())
+                    .filter(Boolean);
+
+                if (lines.length === 0) {
+                    if (!append) {
+                        this.entries = [{
+                            key: Date.now(),
+                            type: 'information',
+                            title: '',
+                            content: '',
+                            responsible_name: '',
+                            due_date: '',
+                            scheduled_date: '',
+                            visible_in_protocol: true,
+                        }];
+                    }
+                    this.step = 'structure';
+                    return;
+                }
+
+                const newEntries = lines.map((line, index) => {
+                    const type = this.detectType(line);
+                    const date = this.extractDate(line);
+
+                    return {
+                        key: Date.now() + index,
+                        type,
+                        title: this.titleFromLine(line),
+                        content: line,
+                        responsible_name: type === 'task' || type === 'follow_up' ? this.detectResponsible(line) : '',
+                        due_date: type === 'task' || type === 'follow_up' ? date : '',
+                        scheduled_date: type === 'date' ? date : '',
+                        visible_in_protocol: true,
+                    };
+                });
+
+                const hasOnlyEmptyPlaceholder = this.entries.length === 1
+                    && !this.entries[0].title
+                    && !this.entries[0].content;
+
+                this.entries = append && !hasOnlyEmptyPlaceholder
+                    ? this.entries.concat(newEntries)
+                    : newEntries;
+
+                this.step = 'structure';
+            },
+            detectType(line) {
+                const text = line.toLowerCase();
+
+                if (text.includes('beschluss') || text.includes('beschlossen') || text.includes('entscheidung') || text.includes('entscheidet')) {
+                    return 'resolution';
+                }
+
+                if (text.includes('diskussion') || text.includes('diskutiert') || text.includes('beratung') || text.includes('besprochen')) {
+                    return 'discussion';
+                }
+
+                if (text.includes('wiedervorlage') || text.includes('nächste sitzung') || text.includes('naechste sitzung') || text.includes('erneut beraten')) {
+                    return 'follow_up';
+                }
+
+                if (text.includes('organisiert') || text.includes('erledigt') || text.includes('kümmert') || text.includes('kuemmert') || text.includes(' bis ')) {
+                    return 'task';
+                }
+
+                if (text.includes('termin') || text.includes('veranstaltung') || text.includes('braukurs')) {
+                    return 'date';
+                }
+
+                if (/\b\d{1,2}\.\d{1,2}\.(\d{2}|\d{4})\b/.test(text)) {
+                    return 'date';
+                }
+
+                return 'information';
+            },
+            titleFromLine(line) {
+                return line
+                    .replace(/^\s*(beschluss|diskussion|termin|aufgabe|wiedervorlage)\s*[:|-]\s*/i, '')
+                    .slice(0, 70);
+            },
+            detectResponsible(line) {
+                const match = line.match(/^([A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+)?)/);
+
+                return match ? match[1] : '';
+            },
+            extractDate(line) {
+                const match = line.match(/\b(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})\b/);
+
+                if (!match) {
+                    return '';
+                }
+
+                const day = match[1].padStart(2, '0');
+                const month = match[2].padStart(2, '0');
+                const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+
+                return `${year}-${month}-${day}`;
             },
         };
     }

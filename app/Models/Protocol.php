@@ -22,6 +22,8 @@ class Protocol extends Model
         'location',
         'start_time',
         'end_time',
+        'raw_agenda',
+        'raw_notes',
         'content',
 
         // 🔥 NEU
