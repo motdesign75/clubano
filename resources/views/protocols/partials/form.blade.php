@@ -85,19 +85,22 @@
             <div class="max-w-3xl">
                 <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Protokolle</div>
                 <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-                    {{ $editing ? 'Protokoll ruhig nachziehen' : 'Neues Protokoll anlegen' }}
+                    {{ $editing ? 'Protokoll fertigstellen' : 'Sitzung vorbereiten' }}
                 </h1>
                 <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
                     {{ $editing
-                        ? 'Bringe Inhalt, Teilnehmer und Anhänge in eine Form, die später schnell wieder lesbar ist.'
-                        : 'Halte Beschlüsse, Ergebnisse und Teilnehmer so fest, dass der Verein später nicht mehr suchen muss.' }}
+                        ? 'Prüfe die Mitschrift, schärfe Beschlüsse und bringe alles in eine Form, die später sofort verständlich ist.'
+                        : 'Starte mit der Tagesordnung. Während der Sitzung schreibst du nur mit, Clubano formt daraus Protokollpunkte, Aufgaben und Beschlüsse.' }}
                 </p>
             </div>
 
             <div class="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-slate-200">
-                <div class="font-semibold">{{ $editing ? 'Bearbeitung' : 'Neuanlage' }}</div>
-                <div class="mt-1 text-slate-300">
-                    {{ $editing ? 'Bestehendes Protokoll aktualisieren' : 'Agenda vorbereiten, Sitzung führen, Protokoll erzeugen' }}
+                <div class="font-semibold">Empfohlener Ablauf</div>
+                <div class="mt-3 grid gap-2 text-slate-300 sm:grid-cols-2 lg:grid-cols-1">
+                    <div>1. Agenda einfügen</div>
+                    <div>2. Sitzung mitschreiben</div>
+                    <div>3. Ergebnisse prüfen</div>
+                    <div>4. Speichern und versenden</div>
                 </div>
             </div>
         </div>
@@ -233,37 +236,41 @@
             <div class="grid gap-6 xl:grid-cols-4">
                 <div>
                     <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protokoll</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Aus der Agenda entsteht das Protokoll.</h2>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Dein roter Faden</h2>
                     <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Bereite die Tagesordnung vor, schreibe während der Sitzung mit und erzeuge daraus die fertige Niederschrift.
+                        Folge den vier Schritten. Jeder Schritt zeigt nur das, was gerade wichtig ist.
                     </p>
                 </div>
 
                 <div class="space-y-6 xl:col-span-3">
-                    <div class="grid gap-3 sm:grid-cols-4">
+                    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <button type="button"
-                                class="rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition"
+                                class="rounded-2xl border px-4 py-3 text-left text-sm transition"
                                 :class="step === 'agenda' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
                                 @click="step = 'agenda'">
-                            1. Agenda
+                            <span class="block text-xs font-semibold uppercase tracking-[0.18em] opacity-70">Schritt 1</span>
+                            <span class="mt-1 block font-semibold">Tagesordnung</span>
                         </button>
                         <button type="button"
-                                class="rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition"
+                                class="rounded-2xl border px-4 py-3 text-left text-sm transition"
                                 :class="step === 'notes' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
                                 @click="step = 'notes'">
-                            2. Mitschrift
+                            <span class="block text-xs font-semibold uppercase tracking-[0.18em] opacity-70">Schritt 2</span>
+                            <span class="mt-1 block font-semibold">Mitschrift</span>
                         </button>
                         <button type="button"
-                                class="rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition"
+                                class="rounded-2xl border px-4 py-3 text-left text-sm transition"
                                 :class="step === 'structure' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
                                 @click="step = 'structure'">
-                            3. Ordnen
+                            <span class="block text-xs font-semibold uppercase tracking-[0.18em] opacity-70">Schritt 3</span>
+                            <span class="mt-1 block font-semibold">Prüfen</span>
                         </button>
                         <button type="button"
-                                class="rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition"
+                                class="rounded-2xl border px-4 py-3 text-left text-sm transition"
                                 :class="step === 'finish' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
                                 @click="step = 'finish'">
-                            4. Fertig
+                            <span class="block text-xs font-semibold uppercase tracking-[0.18em] opacity-70">Schritt 4</span>
+                            <span class="mt-1 block font-semibold">Abschluss</span>
                         </button>
                     </div>
 
@@ -271,7 +278,8 @@
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                             <div>
                                 <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Vor der Sitzung</div>
-                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Tagesordnung</h3>
+                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Was wird besprochen?</h3>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">Füge die Agenda ein. Eine Zeile wird ein Protokollpunkt.</p>
                             </div>
                             <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                                 <span x-text="agendaLineCount()"></span> TOPs
@@ -295,7 +303,7 @@
                             <button type="button"
                                     class="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                                     @click="structureFromAgenda()">
-                                Agenda übernehmen
+                                Agenda übernehmen und Sitzung starten
                             </button>
                         </div>
                     </div>
@@ -304,7 +312,8 @@
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                             <div>
                                 <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Sitzungsmodus</div>
-                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Schnelle Mitschrift</h3>
+                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Schreib einfach mit</h3>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">Kein Nachdenken über Felder. Jede neue Zeile ist ein Gedanke.</p>
                             </div>
                             <div class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
                                 <span x-text="noteLineCount()"></span> Stichpunkte
@@ -325,25 +334,38 @@
                             <div class="text-sm leading-6 text-slate-600">
                                 Eine Zeile ist ein Gedanke. Wörter wie Beschluss, diskutiert, bis oder nächste Sitzung helfen beim Einordnen.
                             </div>
-                            <button type="button"
-                                    class="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                                    @click="structureFromNotes(true)">
-                                Mitschrift ergänzen
-                            </button>
+                            <div class="flex flex-col gap-2 sm:flex-row">
+                                <button type="button"
+                                        class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                        @click="step = 'agenda'">
+                                    Zur Agenda
+                                </button>
+                                <button type="button"
+                                        class="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                                        @click="structureFromNotes(true)">
+                                    Mitschrift ergänzen und prüfen
+                                </button>
+                            </div>
                         </div>
                     </div>
 
                     <div class="space-y-4" x-show="step === 'structure'">
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Ordnen</div>
-                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Aus Stichpunkten werden Protokollpunkte</h3>
+                                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Prüfung</div>
+                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Prüfen statt schreiben</h3>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">Clubano hat vorgeordnet. Du entscheidest nur noch, ob Art, Inhalt und Fristen stimmen.</p>
                             </div>
-                            <button type="button"
-                                    class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                                    @click="add()">
-                                Punkt hinzufügen
-                            </button>
+                            <div class="flex flex-col gap-2 sm:items-end">
+                                <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                                    <span x-text="entries.length"></span> Punkte
+                                </div>
+                                <button type="button"
+                                        class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                        @click="add()">
+                                    Punkt hinzufügen
+                                </button>
+                            </div>
                         </div>
 
                         <template x-for="(entry, index) in entries" :key="entry.key">
@@ -357,7 +379,7 @@
 
                                         <div class="grid min-w-0 flex-1 gap-3 md:grid-cols-2">
                                             <div>
-                                                <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Typ</label>
+                                                <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Art</label>
                                                 <select :name="`entries[${index}][type]`"
                                                         x-model="entry.type"
                                                         class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300">
@@ -369,7 +391,7 @@
                                             </div>
 
                                             <div>
-                                                <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Überschrift</label>
+                                                <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Punkt</label>
                                                 <input type="text"
                                                        :name="`entries[${index}][title]`"
                                                        x-model="entry.title"
@@ -410,7 +432,7 @@
                                               x-model="entry.content"
                                               rows="4"
                                               class="mt-2 w-full rounded-2xl border-slate-200 text-sm leading-6 focus:border-slate-400 focus:ring-slate-300"
-                                              placeholder="Was soll im Protokoll stehen?"></textarea>
+                                              :placeholder="placeholderFor(entry.type)"></textarea>
                                 </div>
 
                                 <div class="mt-4 grid gap-3 md:grid-cols-3">
@@ -451,44 +473,86 @@
                                 </div>
                             </article>
                         </template>
-                    </div>
 
-                    <div class="border-t border-slate-100 pt-6" x-show="step === 'finish'">
-                        <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Ergebnisse & nächste Schritte</div>
-                        <div class="mt-4 grid gap-5 lg:grid-cols-2">
-                            <div>
-                                <label for="resolutions" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Beschlüsse / Ergebnisse</label>
-                                <textarea id="resolutions" name="resolutions" rows="5"
-                                          class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
-                                          placeholder="Was wurde entschieden oder verbindlich festgehalten?">{{ $resolutionsValue }}</textarea>
-                                @error('resolutions')
-                                    <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
-                                @enderror
-                            </div>
-
-                            <div>
-                                <label for="next_meeting" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Nächstes Treffen / To-dos</label>
-                                <textarea id="next_meeting" name="next_meeting" rows="5"
-                                          class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
-                                          placeholder="Was steht als Nächstes an?">{{ $nextMeetingValue }}</textarea>
-                                @error('next_meeting')
-                                    <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
-                                @enderror
-                            </div>
+                        <div class="flex flex-col gap-2 sm:flex-row sm:justify-between">
+                            <button type="button"
+                                    class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                    @click="step = 'notes'">
+                                Zur Mitschrift
+                            </button>
+                            <button type="button"
+                                    class="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                                    @click="step = 'finish'">
+                                Prüfung abschließen
+                            </button>
                         </div>
                     </div>
 
-                    <details class="rounded-2xl border border-slate-200 bg-slate-50 p-4" x-show="step === 'finish'" :open="step === 'finish'">
-                        <summary class="cursor-pointer text-sm font-semibold text-slate-800">Fertiges Protokoll bei Bedarf manuell nachziehen</summary>
-                        <div class="mt-4">
-                            <label for="content" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protokolltext</label>
-                            <input id="content" type="hidden" name="content" value="{{ $contentValue }}">
-                            <trix-editor input="content" class="mt-2 min-h-[240px] rounded-2xl border border-slate-200 bg-white"></trix-editor>
-                            @error('content')
-                                <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
-                            @enderror
+                    <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-5" x-show="step === 'finish'">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Abschluss</div>
+                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Bereit zum Speichern</h3>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">Ein letzter Blick auf die wichtigsten Ergebnisse. Danach kannst du speichern und das Protokoll versenden.</p>
+                            </div>
                         </div>
-                    </details>
+
+                        <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Beschlüsse</div>
+                                <div class="mt-2 text-2xl font-semibold text-slate-950" x-text="countByType('resolution')"></div>
+                            </div>
+                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Aufgaben</div>
+                                <div class="mt-2 text-2xl font-semibold text-slate-950" x-text="countByType('task')"></div>
+                            </div>
+                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Termine</div>
+                                <div class="mt-2 text-2xl font-semibold text-slate-950" x-text="countByType('date')"></div>
+                            </div>
+                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Wiedervorlagen</div>
+                                <div class="mt-2 text-2xl font-semibold text-slate-950" x-text="countByType('follow_up')"></div>
+                            </div>
+                        </div>
+
+                        <details class="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+                            <summary class="cursor-pointer text-sm font-semibold text-slate-800">Zusätzliche Zusammenfassung ergänzen</summary>
+                            <div class="mt-4 grid gap-5 lg:grid-cols-2">
+                                <div>
+                                    <label for="resolutions" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Kurzfassung Beschlüsse</label>
+                                    <textarea id="resolutions" name="resolutions" rows="5"
+                                              class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
+                                              placeholder="Nur wenn du eine zusätzliche Kurzfassung brauchst.">{{ $resolutionsValue }}</textarea>
+                                    @error('resolutions')
+                                        <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
+                                    @enderror
+                                </div>
+
+                                <div>
+                                    <label for="next_meeting" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Nächstes Treffen / Hinweis</label>
+                                    <textarea id="next_meeting" name="next_meeting" rows="5"
+                                              class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
+                                              placeholder="Optionaler Hinweis für das nächste Treffen.">{{ $nextMeetingValue }}</textarea>
+                                    @error('next_meeting')
+                                        <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
+                                    @enderror
+                                </div>
+                            </div>
+                        </details>
+
+                        <details class="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+                            <summary class="cursor-pointer text-sm font-semibold text-slate-800">Fertigen Protokolltext manuell nachziehen</summary>
+                            <div class="mt-4">
+                                <label for="content" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protokolltext</label>
+                                <input id="content" type="hidden" name="content" value="{{ $contentValue }}">
+                                <trix-editor input="content" class="mt-2 min-h-[240px] rounded-2xl border border-slate-200 bg-white"></trix-editor>
+                                @error('content')
+                                    <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </details>
+                    </div>
                 </div>
             </div>
         </section>
@@ -589,6 +653,21 @@
             toneFor(type) {
                 return this.tones[type] || this.tones.information;
             },
+            countByType(type) {
+                return this.entries.filter((entry) => entry.visible_in_protocol && entry.type === type).length;
+            },
+            placeholderFor(type) {
+                const placeholders = {
+                    information: 'Welcher Sachstand soll festgehalten werden?',
+                    discussion: 'Worüber wurde gesprochen? Welche Argumente waren wichtig?',
+                    resolution: 'Was wurde verbindlich beschlossen?',
+                    task: 'Was ist zu tun? Wer übernimmt es und bis wann?',
+                    date: 'Welcher Termin wurde vereinbart?',
+                    follow_up: 'Was soll in der nächsten Sitzung wieder aufgegriffen werden?',
+                };
+
+                return placeholders[type] || 'Was soll im Protokoll stehen?';
+            },
             noteLineCount() {
                 return this.rawNotes
                     .split(/\r?\n/)
@@ -637,12 +716,9 @@
                 this.step = 'notes';
             },
             structureFromNotes(append = false) {
-                const lines = this.rawNotes
-                    .split(/\r?\n/)
-                    .map((line) => line.replace(/^\s*[-*•]\s*/, '').trim())
-                    .filter(Boolean);
+                const noteItems = this.noteItemsWithContext();
 
-                if (lines.length === 0) {
+                if (noteItems.length === 0) {
                     if (!append) {
                         this.entries = [{
                             key: Date.now(),
@@ -659,31 +735,132 @@
                     return;
                 }
 
-                const newEntries = lines.map((line, index) => {
-                    const type = this.detectType(line);
-                    const date = this.extractDate(line);
-
-                    return {
-                        key: Date.now() + index,
-                        type,
-                        title: this.titleFromLine(line),
-                        content: line,
-                        responsible_name: type === 'task' || type === 'follow_up' ? this.detectResponsible(line) : '',
-                        due_date: type === 'task' || type === 'follow_up' ? date : '',
-                        scheduled_date: type === 'date' ? date : '',
-                        visible_in_protocol: true,
-                    };
-                });
+                const newEntries = noteItems.map((item, index) => ({
+                    ...this.entryFromNoteLine(item.line, index),
+                    agendaIndex: item.agendaIndex,
+                }));
 
                 const hasOnlyEmptyPlaceholder = this.entries.length === 1
                     && !this.entries[0].title
                     && !this.entries[0].content;
 
                 this.entries = append && !hasOnlyEmptyPlaceholder
-                    ? this.entries.concat(newEntries)
-                    : newEntries;
+                    ? this.mergeNotesIntoAgenda(newEntries)
+                    : newEntries.map(({ agendaIndex, ...entry }) => entry);
 
                 this.step = 'structure';
+            },
+            noteItemsWithContext() {
+                let currentAgendaIndex = null;
+
+                return this.rawNotes
+                    .split(/\r?\n/)
+                    .map((line) => line.replace(/^\s*[-*•]\s*/, '').trim())
+                    .filter(Boolean)
+                    .flatMap((line) => {
+                        const topMatch = line.match(/^TOP\s*(\d+)(?:[\).:-]\s*)?(.*)$/i);
+
+                        if (topMatch) {
+                            currentAgendaIndex = Math.max(0, Number.parseInt(topMatch[1], 10) - 1);
+
+                            if (!topMatch[2]?.trim()) {
+                                return [];
+                            }
+
+                            line = topMatch[2].trim();
+                        }
+
+                        return [{ line, agendaIndex: currentAgendaIndex }];
+                    });
+            },
+            entryFromNoteLine(line, index = 0) {
+                const type = this.detectType(line);
+                const date = this.extractDate(line);
+
+                return {
+                    key: Date.now() + index + Math.random(),
+                    type,
+                    title: this.titleFromLine(line),
+                    content: line,
+                    responsible_name: type === 'task' || type === 'follow_up' ? this.detectResponsible(line) : '',
+                    due_date: type === 'task' || type === 'follow_up' ? date : '',
+                    scheduled_date: type === 'date' ? date : '',
+                    visible_in_protocol: true,
+                };
+            },
+            mergeNotesIntoAgenda(noteEntries) {
+                const mergedEntries = this.entries.map((entry) => ({ ...entry }));
+
+                noteEntries.forEach((noteEntry) => {
+                    const { agendaIndex, ...entry } = noteEntry;
+                    let targetIndex = Number.isInteger(agendaIndex) && mergedEntries[agendaIndex]
+                        ? agendaIndex
+                        : this.bestAgendaEntryIndexForLine(entry.content, mergedEntries);
+
+                    if (targetIndex === null) {
+                        mergedEntries.push(entry);
+                        return;
+                    }
+
+                    const target = mergedEntries[targetIndex];
+                    target.content = this.appendContentOnce(target.content, entry.content);
+                    target.type = this.strongerType(target.type, entry.type);
+                    target.responsible_name = target.responsible_name || entry.responsible_name;
+                    target.due_date = target.due_date || entry.due_date;
+                    target.scheduled_date = target.scheduled_date || entry.scheduled_date;
+                });
+
+                return mergedEntries;
+            },
+            appendContentOnce(existingContent, newContent) {
+                if (!newContent) {
+                    return existingContent || '';
+                }
+
+                if ((existingContent || '').includes(newContent)) {
+                    return existingContent || '';
+                }
+
+                return [existingContent, newContent].filter(Boolean).join('\n');
+            },
+            bestAgendaEntryIndexForLine(line, entries) {
+                const lineWords = this.wordsForMatch(line);
+                let bestIndex = null;
+                let bestScore = 0;
+
+                entries.forEach((entry, index) => {
+                    const titleWords = this.wordsForMatch(entry.title || '');
+                    const score = lineWords.filter((word) => titleWords.includes(word)).length;
+
+                    if (score > bestScore) {
+                        bestIndex = index;
+                        bestScore = score;
+                    }
+                });
+
+                return bestScore > 0 ? bestIndex : null;
+            },
+            wordsForMatch(value) {
+                return String(value || '')
+                    .toLowerCase()
+                    .replaceAll('ä', 'ae')
+                    .replaceAll('ö', 'oe')
+                    .replaceAll('ü', 'ue')
+                    .replaceAll('ß', 'ss')
+                    .split(/[^a-z0-9]+/i)
+                    .filter((word, index, words) => word.length >= 4 && words.indexOf(word) === index);
+            },
+            strongerType(currentType, newType) {
+                const rank = {
+                    information: 0,
+                    discussion: 1,
+                    follow_up: 2,
+                    date: 3,
+                    task: 4,
+                    resolution: 5,
+                };
+
+                return (rank[newType] || 0) > (rank[currentType] || 0) ? newType : currentType;
             },
             detectType(line) {
                 const text = line.toLowerCase();

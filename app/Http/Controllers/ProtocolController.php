@@ -117,6 +117,139 @@ class ProtocolController extends Controller
             ->all();
     }
 
+    private function noteLinesWithContext(?string $rawNotes): array
+    {
+        $lines = preg_split('/\R/', (string) $rawNotes) ?: [];
+        $currentAgendaIndex = null;
+        $items = [];
+
+        foreach ($lines as $line) {
+            $line = trim(preg_replace('/^\s*[-*•]\s*/', '', $line) ?? '');
+
+            if ($line === '') {
+                continue;
+            }
+
+            if (preg_match('/^TOP\s*(\d+)(?:[\).:-]\s*)?(.*)$/i', $line, $match) === 1) {
+                $currentAgendaIndex = max(0, ((int) $match[1]) - 1);
+                $remainder = trim($match[2] ?? '');
+
+                if ($remainder === '') {
+                    continue;
+                }
+
+                $line = $remainder;
+            }
+
+            $items[] = [
+                'line' => $line,
+                'agenda_index' => $currentAgendaIndex,
+            ];
+        }
+
+        return $items;
+    }
+
+    private function protocolEntryTypeRank(string $type): int
+    {
+        return [
+            ProtocolEntry::TYPE_INFORMATION => 0,
+            ProtocolEntry::TYPE_DISCUSSION => 1,
+            ProtocolEntry::TYPE_FOLLOW_UP => 2,
+            ProtocolEntry::TYPE_DATE => 3,
+            ProtocolEntry::TYPE_TASK => 4,
+            ProtocolEntry::TYPE_RESOLUTION => 5,
+        ][$type] ?? 0;
+    }
+
+    private function strongerProtocolEntryType(string $currentType, string $newType): string
+    {
+        return $this->protocolEntryTypeRank($newType) > $this->protocolEntryTypeRank($currentType)
+            ? $newType
+            : $currentType;
+    }
+
+    private function normalizedWordsForMatch(string $value): array
+    {
+        $value = Str::lower($value);
+        $value = str_replace(['ä', 'ö', 'ü', 'ß'], ['ae', 'oe', 'ue', 'ss'], $value);
+        $words = preg_split('/[^a-z0-9]+/i', $value) ?: [];
+
+        return collect($words)
+            ->filter(fn (string $word) => strlen($word) >= 4)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function bestAgendaEntryIndexForLine(string $line, array $agendaEntries): ?int
+    {
+        $lineWords = $this->normalizedWordsForMatch($line);
+        $bestIndex = null;
+        $bestScore = 0;
+
+        foreach ($agendaEntries as $index => $entry) {
+            $titleWords = $this->normalizedWordsForMatch($entry['title'] ?? '');
+            $score = count(array_intersect($lineWords, $titleWords));
+
+            if ($score > $bestScore) {
+                $bestIndex = $index;
+                $bestScore = $score;
+            }
+        }
+
+        return $bestScore > 0 ? $bestIndex : null;
+    }
+
+    private function entryFromNoteLine(string $line): array
+    {
+        return $this->entriesFromRawNotes($line)[0] ?? [
+            'type' => ProtocolEntry::TYPE_INFORMATION,
+            'title' => Str::limit($line, 70, ''),
+            'content' => $line,
+            'responsible_name' => '',
+            'due_date' => null,
+            'scheduled_date' => null,
+            'visible_in_protocol' => true,
+        ];
+    }
+
+    private function entriesFromAgendaAndNotes(?string $rawAgenda, ?string $rawNotes): array
+    {
+        $agendaEntries = $this->entriesFromAgenda($rawAgenda);
+
+        if (empty($agendaEntries)) {
+            return $this->entriesFromRawNotes($rawNotes);
+        }
+
+        $entries = $agendaEntries;
+
+        foreach ($this->noteLinesWithContext($rawNotes) as $item) {
+            $noteEntry = $this->entryFromNoteLine($item['line']);
+            $targetIndex = $item['agenda_index'];
+
+            if ($targetIndex === null || ! array_key_exists($targetIndex, $entries)) {
+                $targetIndex = $this->bestAgendaEntryIndexForLine($item['line'], $agendaEntries);
+            }
+
+            if ($targetIndex === null || ! array_key_exists($targetIndex, $entries)) {
+                $entries[] = $noteEntry;
+                continue;
+            }
+
+            $entries[$targetIndex]['content'] = trim(collect([
+                $entries[$targetIndex]['content'] ?? '',
+                $noteEntry['content'],
+            ])->filter()->implode("\n"));
+            $entries[$targetIndex]['type'] = $this->strongerProtocolEntryType($entries[$targetIndex]['type'], $noteEntry['type']);
+            $entries[$targetIndex]['responsible_name'] = $entries[$targetIndex]['responsible_name'] ?: $noteEntry['responsible_name'];
+            $entries[$targetIndex]['due_date'] = $entries[$targetIndex]['due_date'] ?: $noteEntry['due_date'];
+            $entries[$targetIndex]['scheduled_date'] = $entries[$targetIndex]['scheduled_date'] ?: $noteEntry['scheduled_date'];
+        }
+
+        return array_values($entries);
+    }
+
     private function entriesFromAgenda(?string $rawAgenda): array
     {
         $lines = preg_split('/\R/', (string) $rawAgenda) ?: [];
@@ -370,10 +503,7 @@ class ProtocolController extends Controller
         $rawNotes = trim((string) ($validated['raw_notes'] ?? ''));
 
         if (empty($entries)) {
-            $entries = array_merge(
-                $this->entriesFromAgenda($rawAgenda),
-                $this->entriesFromRawNotes($rawNotes)
-            );
+            $entries = $this->entriesFromAgendaAndNotes($rawAgenda, $rawNotes);
         }
 
         $content = trim((string) ($validated['content'] ?? ''));
@@ -525,10 +655,7 @@ class ProtocolController extends Controller
         $rawNotes = trim((string) ($validated['raw_notes'] ?? ''));
 
         if (empty($entries)) {
-            $entries = array_merge(
-                $this->entriesFromAgenda($rawAgenda),
-                $this->entriesFromRawNotes($rawNotes)
-            );
+            $entries = $this->entriesFromAgendaAndNotes($rawAgenda, $rawNotes);
         }
 
         $content = trim((string) ($validated['content'] ?? ''));

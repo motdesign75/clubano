@@ -135,3 +135,50 @@ test('protocols can be prepared from an agenda', function () {
     expect($protocol->entries->pluck('title')->all())->toContain('Begrüßung');
     expect($protocol->entries->pluck('title')->all())->toContain('Renovierung Vereinsheim');
 });
+
+test('protocol notes are merged into matching agenda topics', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Agenda Mitschrift Verein',
+        'slug' => 'agenda-mitschrift-verein',
+        'email' => 'agenda-mitschrift@example.test',
+        'license_mode' => 'gifted',
+    ]);
+
+    $user = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+    ]);
+
+    $agenda = implode("\n", [
+        'TOP 1 Begrüßung',
+        'TOP 2 Renovierung Vereinsheim',
+        'TOP 3 Kartoffelmarkt',
+    ]);
+
+    $notes = implode("\n", [
+        'TOP 2',
+        '- Vorsitzender berichtet über Renovierung',
+        'TOP 3',
+        '- Beschluss: Teilnahme am Kartoffelmarkt',
+    ]);
+
+    $response = $this->actingAs($user)->post(route('protocols.store'), [
+        'title' => 'Agenda mit Mitschrift',
+        'type' => 'Vorstandssitzung',
+        'raw_agenda' => $agenda,
+        'raw_notes' => $notes,
+    ]);
+
+    $protocol = Protocol::query()->where('tenant_id', $tenant->id)->first();
+    $entries = $protocol->entries;
+
+    $response->assertRedirect(route('protocols.index'));
+    expect($entries)->toHaveCount(3);
+    expect($entries[1]->title)->toBe('Renovierung Vereinsheim');
+    expect($entries[1]->content)->toContain('Renovierung');
+    expect($entries[2]->title)->toBe('Kartoffelmarkt');
+    expect($entries[2]->content)->toContain('Teilnahme am Kartoffelmarkt');
+    expect($entries[2]->type)->toBe(ProtocolEntry::TYPE_RESOLUTION);
+});
