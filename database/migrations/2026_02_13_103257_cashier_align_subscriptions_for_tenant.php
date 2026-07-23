@@ -26,11 +26,7 @@ return new class extends Migration
         // 3) Index nur anlegen, wenn er noch nicht existiert
         $indexName = 'subscriptions_tenant_id_stripe_status_index';
 
-        $exists = DB::table('information_schema.statistics')
-            ->where('table_schema', DB::raw('DATABASE()'))
-            ->where('table_name', 'subscriptions')
-            ->where('index_name', $indexName)
-            ->exists();
+        $exists = $this->indexExists($indexName);
 
         if (!$exists) {
             Schema::table('subscriptions', function (Blueprint $table) use ($indexName) {
@@ -40,13 +36,8 @@ return new class extends Migration
         }
 
         // 4) Backfill (falls Subscriptions bereits existieren und tenant_id leer ist)
-        if (Schema::hasColumn('subscriptions', 'user_id') && Schema::hasTable('users')) {
-            DB::statement("
-                UPDATE subscriptions s
-                JOIN users u ON u.id = s.user_id
-                SET s.tenant_id = u.tenant_id
-                WHERE s.tenant_id IS NULL
-            ");
+        if (Schema::hasColumn('subscriptions', 'user_id') && Schema::hasColumn('users', 'tenant_id')) {
+            $this->backfillTenantIds();
         }
     }
 
@@ -55,11 +46,7 @@ return new class extends Migration
         $indexName = 'subscriptions_tenant_id_stripe_status_index';
 
         // Index nur droppen, wenn er existiert
-        $exists = DB::table('information_schema.statistics')
-            ->where('table_schema', DB::raw('DATABASE()'))
-            ->where('table_name', 'subscriptions')
-            ->where('index_name', $indexName)
-            ->exists();
+        $exists = $this->indexExists($indexName);
 
         if ($exists) {
             Schema::table('subscriptions', function (Blueprint $table) use ($indexName) {
@@ -76,5 +63,42 @@ return new class extends Migration
                 $table->renameColumn('name', 'type');
             }
         });
+    }
+
+    private function indexExists(string $indexName): bool
+    {
+        if (DB::getDriverName() === 'mysql') {
+            return DB::table('information_schema.statistics')
+                ->where('table_schema', DB::raw('DATABASE()'))
+                ->where('table_name', 'subscriptions')
+                ->where('index_name', $indexName)
+                ->exists();
+        }
+
+        return collect(Schema::getIndexes('subscriptions'))
+            ->contains(fn ($index) => ($index['name'] ?? null) === $indexName);
+    }
+
+    private function backfillTenantIds(): void
+    {
+        DB::table('subscriptions')
+            ->whereNull('tenant_id')
+            ->whereNotNull('user_id')
+            ->orderBy('id')
+            ->chunkById(100, function ($subscriptions) {
+                $tenantIds = DB::table('users')
+                    ->whereIn('id', $subscriptions->pluck('user_id')->filter()->unique())
+                    ->pluck('tenant_id', 'id');
+
+                foreach ($subscriptions as $subscription) {
+                    $tenantId = $tenantIds[$subscription->user_id] ?? null;
+
+                    if ($tenantId) {
+                        DB::table('subscriptions')
+                            ->where('id', $subscription->id)
+                            ->update(['tenant_id' => $tenantId]);
+                    }
+                }
+            });
     }
 };

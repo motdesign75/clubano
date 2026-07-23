@@ -1,144 +1,175 @@
-<div>
-    <label for="title" class="block text-sm font-medium text-gray-700 mb-1">Titel</label>
-    <input type="text" name="title" id="title" required
-           value="{{ old('title', $event->title) }}"
-           class="w-full rounded-xl border-gray-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
-</div>
+@php
+    $isPublic = (int) old('is_public', $event->is_public ?? 1);
+    $bookingEnabled = (bool) old('booking_enabled', $event->booking_enabled ?? false);
+@endphp
 
-<div>
-    <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Beschreibung</label>
-    <textarea name="description" id="description" rows="4"
-              class="w-full rounded-xl border-gray-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm">{{ old('description', $event->description) }}</textarea>
-    <p class="mt-2 text-sm text-gray-500">Du kannst hier Absätze, Listen, Links und Hervorhebungen formatieren.</p>
-</div>
-
-<div>
-    <label for="location" class="block text-sm font-medium text-gray-700 mb-1">Ort</label>
-    <input type="text" name="location" id="location"
-           value="{{ old('location', $event->location) }}"
-           class="w-full rounded-xl border-gray-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
-</div>
-
-<div>
-    <label for="responsible_user_id" class="block text-sm font-medium text-gray-700 mb-1">Verantwortlich</label>
-    <select name="responsible_user_id" id="responsible_user_id"
-            class="w-full rounded-xl border-gray-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
-        <option value="">Niemand fest zugeordnet</option>
-        @foreach(($users ?? collect()) as $user)
-            <option value="{{ $user->id }}" @selected((string) old('responsible_user_id', $event->responsible_user_id) === (string) $user->id)>
-                {{ $user->name }}
-            </option>
-        @endforeach
-    </select>
-    <p class="mt-2 text-sm text-gray-500">Optional. Hilft bei Rückfragen und macht Zuständigkeiten im Kalender sichtbar.</p>
-</div>
-
-<div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-end">
-    <div>
-        <label for="category_id" class="block text-sm font-medium text-gray-700 mb-1">Kategorie</label>
-        <select name="category_id" id="category_id"
-                class="w-full rounded-xl border-gray-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
-            <option value="">Keine Kategorie</option>
-            @foreach(($categories ?? collect()) as $category)
-                <option value="{{ $category->id }}" @selected((string) old('category_id', $event->category_id) === (string) $category->id)>
-                    {{ $category->name }}
-                </option>
-            @endforeach
-        </select>
-    </div>
-
-    <a href="{{ route('event-categories.index') }}"
-       class="inline-flex items-center justify-center rounded-xl border border-indigo-200 px-4 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
-        Kategorien verwalten
-    </a>
-</div>
-
-<div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-    <div>
-        <label for="start" class="block text-sm font-medium text-gray-700 mb-1">Beginn</label>
-        <input type="datetime-local" name="start" id="start" required
-               value="{{ old('start', $event->start ? $event->start->format('Y-m-d\TH:i') : '') }}"
-               class="w-full rounded-xl border-gray-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
-    </div>
-
-    <div>
-        <label for="end" class="block text-sm font-medium text-gray-700 mb-1">Ende</label>
-        <input type="datetime-local" name="end" id="end" required
-               value="{{ old('end', $event->end ? $event->end->format('Y-m-d\TH:i') : '') }}"
-               class="w-full rounded-xl border-gray-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
-    </div>
-</div>
-
-<div>
-    <label for="is_public" class="block text-sm font-medium text-gray-700 mb-1">Sichtbarkeit</label>
-    <select name="is_public" id="is_public"
-            class="w-full rounded-xl border-gray-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm">
-        <option value="1" {{ old('is_public', $event->is_public) == 1 ? 'selected' : '' }}>Öffentlich</option>
-        <option value="0" {{ old('is_public', $event->is_public) == 0 ? 'selected' : '' }}>Intern</option>
-    </select>
-</div>
-
-<div class="grid gap-6 md:grid-cols-[1.2fr_0.8fr]">
-    <div>
-        <label for="image" class="block text-sm font-medium text-gray-700 mb-1">Veranstaltungsfoto</label>
-        <input type="file" name="image" id="image" accept="image/*"
-               class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">
-        <p class="mt-1 text-sm text-gray-500">Ideal fuer Eventseite, Übersicht und Social-Sharing.</p>
-
-        @if($event->image_url)
-            <div class="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-3">
-                <img src="{{ $event->image_url }}" alt="{{ $event->title }}" class="h-48 w-full rounded-xl object-cover">
-
-                <label class="mt-3 inline-flex items-center text-sm text-gray-700">
-                    <input type="checkbox" name="remove_image" value="1" class="rounded border-gray-300">
-                    <span class="ml-2">Vorhandenes Foto entfernen</span>
-                </label>
-            </div>
-        @endif
-    </div>
-
-    <div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
-        <label class="inline-flex items-start text-sm text-gray-800">
-            <input type="checkbox" name="booking_enabled" value="1" class="mt-1 rounded border-gray-300" @checked(old('booking_enabled', $event->booking_enabled))>
-            <span class="ml-3">
-                <span class="block font-medium text-indigo-900">Veranstaltung buchbar machen</span>
-                <span class="mt-1 block text-gray-600">Clubano erzeugt automatisch ein Anmeldeformular und verknüpft es mit der Eventseite.</span>
-            </span>
-        </label>
-
-        <div class="mt-5 grid gap-4 md:grid-cols-3">
-            <div>
-                <label for="price_per_person" class="mb-1 block text-sm font-medium text-gray-700">Preis pro Person</label>
-                <input type="number"
-                       step="0.01"
-                       min="0"
-                       name="price_per_person"
-                       id="price_per_person"
-                       value="{{ old('price_per_person', number_format((float) ($event->price_per_person ?? 0), 2, '.', '')) }}"
-                       class="w-full rounded-xl border-gray-300 bg-white focus:border-blue-500 focus:ring-blue-500 shadow-sm">
-                <p class="mt-1 text-xs text-gray-500">0,00 bedeutet kostenfreie Veranstaltung.</p>
+<div class="grid gap-6 lg:grid-cols-[minmax(0,1fr),320px]">
+    <section class="space-y-5">
+        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-start gap-4">
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-white">
+                    <x-heroicon-o-sparkles class="h-5 w-5" />
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h2 class="text-lg font-semibold text-slate-950">Worum geht es?</h2>
+                    <p class="mt-1 text-sm leading-6 text-slate-500">Titel, Kategorie und Beschreibung geben dem Termin seinen Platz im Kalender.</p>
+                </div>
             </div>
 
-            <div>
-                <label for="currency" class="mb-1 block text-sm font-medium text-gray-700">Währung</label>
-                <input type="text"
-                       name="currency"
-                       id="currency"
-                       maxlength="3"
-                       value="{{ old('currency', strtoupper($event->currency ?: 'EUR')) }}"
-                       class="w-full rounded-xl border-gray-300 bg-white uppercase focus:border-blue-500 focus:ring-blue-500 shadow-sm">
-            </div>
+            <div class="mt-5 space-y-4">
+                <div>
+                    <label for="title" class="text-sm font-semibold text-slate-900">Titel *</label>
+                    <input type="text" name="title" id="title" required value="{{ old('title', $event->title) }}"
+                           class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300"
+                           placeholder="z. B. Sommerfest, Vorstandssitzung, Training">
+                </div>
 
-            <div>
-                <label for="max_participants_per_booking" class="mb-1 block text-sm font-medium text-gray-700">Max. Personen pro Anmeldung</label>
-                <input type="number"
-                       min="1"
-                       max="50"
-                       name="max_participants_per_booking"
-                       id="max_participants_per_booking"
-                       value="{{ old('max_participants_per_booking', max(1, (int) ($event->max_participants_per_booking ?: 1))) }}"
-                       class="w-full rounded-xl border-gray-300 bg-white focus:border-blue-500 focus:ring-blue-500 shadow-sm">
+                <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr),auto] sm:items-end">
+                    <div>
+                        <label for="category_id" class="text-sm font-semibold text-slate-900">Kategorie</label>
+                        <select name="category_id" id="category_id" class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                            <option value="">Keine Kategorie</option>
+                            @foreach(($categories ?? collect()) as $category)
+                                <option value="{{ $category->id }}" @selected((string) old('category_id', $event->category_id) === (string) $category->id)>
+                                    {{ $category->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <a href="{{ route('event-categories.index') }}"
+                       class="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                        Kategorien
+                    </a>
+                </div>
+
+                <div>
+                    <label for="description" class="text-sm font-semibold text-slate-900">Beschreibung</label>
+                    <textarea name="description" id="description" rows="8"
+                              class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300"
+                              placeholder="Was sollen Mitglieder oder Besucher wissen?">{{ old('description', $event->description) }}</textarea>
+                </div>
             </div>
         </div>
-    </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-start gap-4">
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                    <x-heroicon-o-clock class="h-5 w-5" />
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h2 class="text-lg font-semibold text-slate-950">Wann und wo?</h2>
+                    <p class="mt-1 text-sm leading-6 text-slate-500">Zeit, Ort und Verantwortung sind die wichtigsten Orientierungspunkte.</p>
+                </div>
+            </div>
+
+            <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label for="start" class="text-sm font-semibold text-slate-900">Beginn *</label>
+                    <input type="datetime-local" name="start" id="start" required
+                           value="{{ old('start', $event->start ? $event->start->format('Y-m-d\TH:i') : '') }}"
+                           class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                </div>
+
+                <div>
+                    <label for="end" class="text-sm font-semibold text-slate-900">Ende *</label>
+                    <input type="datetime-local" name="end" id="end" required
+                           value="{{ old('end', $event->end ? $event->end->format('Y-m-d\TH:i') : '') }}"
+                           class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                </div>
+
+                <div>
+                    <label for="location" class="text-sm font-semibold text-slate-900">Ort</label>
+                    <input type="text" name="location" id="location" value="{{ old('location', $event->location) }}"
+                           class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300"
+                           placeholder="Vereinsheim, Sportplatz, online">
+                </div>
+
+                <div>
+                    <label for="responsible_user_id" class="text-sm font-semibold text-slate-900">Verantwortlich</label>
+                    <select name="responsible_user_id" id="responsible_user_id" class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                        <option value="">Niemand fest zugeordnet</option>
+                        @foreach(($users ?? collect()) as $user)
+                            <option value="{{ $user->id }}" @selected((string) old('responsible_user_id', $event->responsible_user_id) === (string) $user->id)>
+                                {{ $user->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <aside class="space-y-5">
+        <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-950">Veröffentlichen</h2>
+            <p class="mt-1 text-sm leading-6 text-slate-500">Entscheide, ob der Termin nur intern oder öffentlich sichtbar ist.</p>
+
+            <div class="mt-4 grid gap-2">
+                <label class="cursor-pointer rounded-lg border px-4 py-3 {{ $isPublic === 1 ? 'border-slate-950 bg-slate-50' : 'border-slate-200' }}">
+                    <input type="radio" name="is_public" value="1" class="sr-only" @checked($isPublic === 1)>
+                    <span class="block text-sm font-semibold text-slate-950">Öffentlich</span>
+                    <span class="mt-1 block text-sm text-slate-500">Auf öffentlicher Eventseite sichtbar.</span>
+                </label>
+                <label class="cursor-pointer rounded-lg border px-4 py-3 {{ $isPublic === 0 ? 'border-slate-950 bg-slate-50' : 'border-slate-200' }}">
+                    <input type="radio" name="is_public" value="0" class="sr-only" @checked($isPublic === 0)>
+                    <span class="block text-sm font-semibold text-slate-950">Intern</span>
+                    <span class="mt-1 block text-sm text-slate-500">Nur im Vereinskalender sichtbar.</span>
+                </label>
+            </div>
+        </section>
+
+        <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <label class="flex items-start gap-3">
+                <input type="checkbox" name="booking_enabled" value="1" class="mt-1 rounded border-slate-300" @checked($bookingEnabled)>
+                <span>
+                    <span class="block text-lg font-semibold text-slate-950">Anmeldung aktivieren</span>
+                    <span class="mt-1 block text-sm leading-6 text-slate-500">Clubano erstellt automatisch ein Buchungsformular.</span>
+                </span>
+            </label>
+
+            <div class="mt-5 grid gap-4">
+                <div>
+                    <label for="price_per_person" class="text-sm font-semibold text-slate-900">Preis pro Person</label>
+                    <input type="number" step="0.01" min="0" name="price_per_person" id="price_per_person"
+                           value="{{ old('price_per_person', number_format((float) ($event->price_per_person ?? 0), 2, '.', '')) }}"
+                           class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                    <p class="mt-1 text-xs text-slate-500">0,00 bedeutet kostenfrei.</p>
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                    <div>
+                        <label for="currency" class="text-sm font-semibold text-slate-900">Währung</label>
+                        <input type="text" name="currency" id="currency" maxlength="3"
+                               value="{{ old('currency', strtoupper($event->currency ?: 'EUR')) }}"
+                               class="mt-2 w-full rounded-lg border-slate-300 text-sm uppercase focus:border-slate-500 focus:ring-slate-300">
+                    </div>
+
+                    <div>
+                        <label for="max_participants_per_booking" class="text-sm font-semibold text-slate-900">Personen pro Anmeldung</label>
+                        <input type="number" min="1" max="50" name="max_participants_per_booking" id="max_participants_per_booking"
+                               value="{{ old('max_participants_per_booking', max(1, (int) ($event->max_participants_per_booking ?: 1))) }}"
+                               class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-950">Bild</h2>
+            <input type="file" name="image" id="image" accept="image/*"
+                   class="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white">
+            <p class="mt-2 text-xs leading-5 text-slate-500">Für öffentliche Eventseite und Teilen in sozialen Kanälen.</p>
+
+            @if($event->image_url)
+                <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <img src="{{ $event->image_url }}" alt="{{ $event->title }}" class="h-40 w-full rounded-lg object-cover">
+                    <label class="mt-3 inline-flex items-center text-sm text-slate-700">
+                        <input type="checkbox" name="remove_image" value="1" class="rounded border-slate-300">
+                        <span class="ml-2">Vorhandenes Foto entfernen</span>
+                    </label>
+                </div>
+            @endif
+        </section>
+    </aside>
 </div>

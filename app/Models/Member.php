@@ -105,7 +105,7 @@ class Member extends Model
         static::addGlobalScope(new CurrentTenantScope);
 
         static::creating(function ($member) {
-            if (Auth::check()) {
+            if (Auth::check() && blank($member->tenant_id)) {
                 $member->tenant_id = Auth::user()->tenant_id;
             }
         });

@@ -40,7 +40,7 @@ class Account extends Model
         static::addGlobalScope(new CurrentTenantScope);
 
         static::creating(function ($account) {
-            if (Auth::check()) {
+            if (Auth::check() && blank($account->tenant_id)) {
                 $account->tenant_id = Auth::user()->tenant_id;
             }
         });

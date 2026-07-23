@@ -6,12 +6,15 @@ use App\Mail\ProtocolMail;
 use App\Models\Contact;
 use App\Models\Member;
 use App\Models\Protocol;
+use App\Models\ProtocolEntry;
+use App\Models\Task;
 use App\Models\TemplateDispatchLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProtocolController extends Controller
@@ -40,6 +43,139 @@ class ProtocolController extends Controller
         }
 
         return $value;
+    }
+
+    private function validatedEntryRules(): array
+    {
+        $types = implode(',', array_keys(ProtocolEntry::typeOptions()));
+
+        return [
+            'entries' => 'nullable|array',
+            'entries.*.type' => 'nullable|in:' . $types,
+            'entries.*.title' => 'nullable|string|max:255',
+            'entries.*.content' => 'nullable|string',
+            'entries.*.responsible_name' => 'nullable|string|max:255',
+            'entries.*.due_date' => 'nullable|date',
+            'entries.*.scheduled_date' => 'nullable|date',
+            'entries.*.visible_in_protocol' => 'nullable|boolean',
+        ];
+    }
+
+    private function normalizeProtocolEntries(array $entries): array
+    {
+        return collect($entries)
+            ->map(function (array $entry) {
+                return [
+                    'type' => $entry['type'] ?? ProtocolEntry::TYPE_INFORMATION,
+                    'title' => trim((string) ($entry['title'] ?? '')),
+                    'content' => trim((string) ($entry['content'] ?? '')),
+                    'responsible_name' => trim((string) ($entry['responsible_name'] ?? '')),
+                    'due_date' => $entry['due_date'] ?? null,
+                    'scheduled_date' => $entry['scheduled_date'] ?? null,
+                    'visible_in_protocol' => (bool) ($entry['visible_in_protocol'] ?? true),
+                ];
+            })
+            ->filter(fn (array $entry) => $entry['content'] !== '' || $entry['title'] !== '')
+            ->values()
+            ->all();
+    }
+
+    private function buildContentFromEntries(array $entries): string
+    {
+        if (empty($entries)) {
+            return '';
+        }
+
+        return collect($entries)
+            ->filter(fn (array $entry) => $entry['visible_in_protocol'])
+            ->map(function (array $entry) {
+                $label = ProtocolEntry::typeLabelFor($entry['type']);
+                $title = $entry['title'] !== '' ? e($entry['title']) : $label;
+                $content = nl2br(e($entry['content']));
+                $meta = collect([
+                    $entry['responsible_name'] !== '' ? 'Verantwortlich: ' . e($entry['responsible_name']) : null,
+                    $entry['due_date'] ? 'Fällig am: ' . e($entry['due_date']) : null,
+                    $entry['scheduled_date'] ? 'Termin: ' . e($entry['scheduled_date']) : null,
+                ])->filter()->implode(' · ');
+
+                return '<h3>' . $title . '</h3><p><strong>' . e($label) . '</strong></p><p>' . $content . '</p>'
+                    . ($meta !== '' ? '<p><em>' . $meta . '</em></p>' : '');
+            })
+            ->implode("\n");
+    }
+
+    private function syncProtocolEntries(Protocol $protocol, array $entries): void
+    {
+        $previousEntryIds = $protocol->entries()->pluck('id')->map(fn ($id) => (string) $id)->all();
+
+        if (! empty($previousEntryIds) && Schema::hasTable('tasks') && Schema::hasColumn('tasks', 'related_type') && Schema::hasColumn('tasks', 'related_id')) {
+            Task::query()
+                ->where('tenant_id', $protocol->tenant_id)
+                ->where('related_type', ProtocolEntry::class)
+                ->whereIn('related_id', $previousEntryIds)
+                ->delete();
+        }
+
+        $protocol->entries()->delete();
+
+        foreach ($entries as $position => $entry) {
+            $protocol->entries()->create([
+                'tenant_id' => $protocol->tenant_id,
+                'type' => $entry['type'],
+                'title' => $entry['title'] !== '' ? $entry['title'] : null,
+                'content' => $entry['content'] !== '' ? $entry['content'] : ($entry['title'] ?: ProtocolEntry::typeLabelFor($entry['type'])),
+                'responsible_name' => $entry['responsible_name'] !== '' ? $entry['responsible_name'] : null,
+                'due_date' => $entry['due_date'] ?: null,
+                'scheduled_date' => $entry['scheduled_date'] ?: null,
+                'visible_in_protocol' => $entry['visible_in_protocol'],
+                'position' => $position,
+            ]);
+        }
+
+        $protocol->load('entries');
+        $this->syncTasksFromProtocolEntries($protocol);
+    }
+
+    private function syncTasksFromProtocolEntries(Protocol $protocol): void
+    {
+        if (! Schema::hasTable('tasks') || ! Schema::hasColumn('tasks', 'related_type') || ! Schema::hasColumn('tasks', 'related_id')) {
+            return;
+        }
+
+        $existingTasks = Task::query()
+            ->where('tenant_id', $protocol->tenant_id)
+            ->where('related_type', ProtocolEntry::class)
+            ->whereIn('related_id', $protocol->entries->pluck('id')->map(fn ($id) => (string) $id)->all())
+            ->get()
+            ->keyBy('related_id');
+
+        foreach ($protocol->entries as $entry) {
+            if ($entry->type !== ProtocolEntry::TYPE_TASK) {
+                continue;
+            }
+
+            $title = $entry->title ?: Str::limit($entry->content, 80, '');
+
+            Task::query()->updateOrCreate(
+                [
+                    'tenant_id' => $protocol->tenant_id,
+                    'related_type' => ProtocolEntry::class,
+                    'related_id' => (string) $entry->id,
+                ],
+                [
+                    'project_id' => null,
+                    'title' => $title ?: 'Aufgabe aus Protokoll',
+                    'description' => trim($entry->content . ($entry->responsible_name ? "\n\nVerantwortlich: " . $entry->responsible_name : '')),
+                    'plan_end' => $entry->due_date,
+                    'status' => optional($existingTasks->get((string) $entry->id))->status ?: 'open',
+                    'percent_done' => optional($existingTasks->get((string) $entry->id))->percent_done ?? 0,
+                    'assignee_id' => null,
+                    'created_by' => $protocol->user_id,
+                    'priority' => 3,
+                    'type' => 'task',
+                ]
+            );
+        }
     }
 
     public function index()
@@ -156,7 +292,7 @@ class ProtocolController extends Controller
             'location'          => 'nullable|string|max:255',
             'start_time'        => 'nullable|date_format:H:i',
             'end_time'          => 'nullable|date_format:H:i',
-            'content'           => 'required|string',
+            'content'           => 'nullable|string',
             'resolutions'       => 'nullable|string',
             'next_meeting'      => 'nullable|string',
             'participant_ids'   => 'nullable|array',
@@ -166,7 +302,22 @@ class ProtocolController extends Controller
             ],
             'attachments'       => 'nullable|array',
             'attachments.*'     => 'nullable|file|max:10240|mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx',
-        ]);
+        ] + $this->validatedEntryRules());
+
+        $entries = $this->normalizeProtocolEntries($validated['entries'] ?? []);
+        $content = trim((string) ($validated['content'] ?? ''));
+
+        if (! empty($entries)) {
+            $content = $this->buildContentFromEntries($entries);
+        } elseif ($content === '') {
+            $content = $this->buildContentFromEntries($entries);
+        }
+
+        if ($content === '' && empty($entries)) {
+            return back()
+                ->withErrors(['content' => 'Bitte erfasse mindestens einen Protokollpunkt oder einen Protokolltext.'])
+                ->withInput();
+        }
 
         $attachmentPaths = [];
 
@@ -189,7 +340,7 @@ class ProtocolController extends Controller
             'location'      => $validated['location'] ?? null,
             'start_time'    => $validated['start_time'] ?? null,
             'end_time'      => $validated['end_time'] ?? null,
-            'content'       => $validated['content'],
+            'content'       => $content,
             'resolutions'   => $validated['resolutions'] ?? null,
             'next_meeting'  => $validated['next_meeting'] ?? null,
         ];
@@ -203,6 +354,8 @@ class ProtocolController extends Controller
         }
 
         $protocol = Protocol::create($protocolData);
+
+        $this->syncProtocolEntries($protocol, $entries);
 
         $participantIds = collect($validated['participant_ids'] ?? [])
             ->map(fn ($id) => (int) $id)
@@ -239,6 +392,8 @@ class ProtocolController extends Controller
             ->orderByDesc('id')
             ->get();
 
+        $protocol->loadMissing(['entries', 'participants', 'user']);
+
         return view('protocols.show', compact('protocol', 'dispatchLogs'));
     }
 
@@ -253,6 +408,7 @@ class ProtocolController extends Controller
             ->orderBy('last_name')
             ->get();
 
+        $protocol->loadMissing('entries');
         $selected = $protocol->participants->pluck('id')->toArray();
 
         return view('protocols.edit', compact('protocol', 'members', 'selected'));
@@ -277,7 +433,7 @@ class ProtocolController extends Controller
             'location'          => 'nullable|string|max:255',
             'start_time'        => 'nullable|date_format:H:i',
             'end_time'          => 'nullable|date_format:H:i',
-            'content'           => 'required|string',
+            'content'           => 'nullable|string',
             'resolutions'       => 'nullable|string',
             'next_meeting'      => 'nullable|string',
             'participant_ids'   => 'nullable|array',
@@ -287,7 +443,22 @@ class ProtocolController extends Controller
             ],
             'attachments'       => 'nullable|array',
             'attachments.*'     => 'nullable|file|max:10240|mimes:pdf,jpg,jpeg,png,webp,doc,docx,xls,xlsx',
-        ]);
+        ] + $this->validatedEntryRules());
+
+        $entries = $this->normalizeProtocolEntries($validated['entries'] ?? []);
+        $content = trim((string) ($validated['content'] ?? ''));
+
+        if (! empty($entries)) {
+            $content = $this->buildContentFromEntries($entries);
+        } elseif ($content === '') {
+            $content = $this->buildContentFromEntries($entries);
+        }
+
+        if ($content === '' && empty($entries)) {
+            return back()
+                ->withErrors(['content' => 'Bitte erfasse mindestens einen Protokollpunkt oder einen Protokolltext.'])
+                ->withInput();
+        }
 
         $attachmentPaths = [];
 
@@ -308,7 +479,7 @@ class ProtocolController extends Controller
             'location'      => $validated['location'] ?? null,
             'start_time'    => $validated['start_time'] ?? null,
             'end_time'      => $validated['end_time'] ?? null,
-            'content'       => $validated['content'],
+            'content'       => $content,
             'resolutions'   => $validated['resolutions'] ?? null,
             'next_meeting'  => $validated['next_meeting'] ?? null,
         ];
@@ -326,6 +497,8 @@ class ProtocolController extends Controller
         }
 
         $protocol->update($protocolData);
+
+        $this->syncProtocolEntries($protocol, $entries);
 
         $participantIds = collect($validated['participant_ids'] ?? [])
             ->map(fn ($id) => (int) $id)

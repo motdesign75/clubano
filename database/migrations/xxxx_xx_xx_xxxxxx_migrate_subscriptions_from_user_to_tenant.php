@@ -24,21 +24,14 @@ return new class extends Migration
 
         if (
             Schema::hasColumn('subscriptions', 'user_id') &&
-            Schema::hasTable('users') &&
             Schema::hasColumn('users', 'tenant_id')
         ) {
-
-            DB::statement("
-                UPDATE subscriptions
-                JOIN users ON users.id = subscriptions.user_id
-                SET subscriptions.tenant_id = users.tenant_id
-                WHERE subscriptions.tenant_id IS NULL
-            ");
+            $this->backfillTenantIds();
         }
 
         // ===== FK auf user_id entfernen =====
 
-        if (Schema::hasColumn('subscriptions', 'user_id')) {
+        if (Schema::hasColumn('subscriptions', 'user_id') && DB::getDriverName() === 'mysql') {
 
             $foreignKeys = DB::select("
                 SELECT CONSTRAINT_NAME
@@ -61,10 +54,9 @@ return new class extends Migration
 
         if ($this->indexExists('subscriptions', 'subscriptions_user_id_stripe_status_index')) {
 
-            DB::statement("
-                ALTER TABLE subscriptions
-                DROP INDEX subscriptions_user_id_stripe_status_index
-            ");
+            Schema::table('subscriptions', function (Blueprint $table) {
+                $table->dropIndex('subscriptions_user_id_stripe_status_index');
+            });
         }
 
         // ===== user_id löschen =====
@@ -91,6 +83,10 @@ return new class extends Migration
 
         // ===== FK tenant =====
 
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
         try {
 
             Schema::table('subscriptions', function (Blueprint $table) {
@@ -115,10 +111,9 @@ return new class extends Migration
 
         if ($this->indexExists('subscriptions', 'subscriptions_tenant_id_stripe_status_index')) {
 
-            DB::statement("
-                ALTER TABLE subscriptions
-                DROP INDEX subscriptions_tenant_id_stripe_status_index
-            ");
+            Schema::table('subscriptions', function (Blueprint $table) {
+                $table->dropIndex('subscriptions_tenant_id_stripe_status_index');
+            });
         }
 
         if (Schema::hasColumn('subscriptions', 'tenant_id')) {
@@ -151,6 +146,11 @@ return new class extends Migration
 
     private function indexExists(string $table, string $indexName): bool
     {
+        if (DB::getDriverName() !== 'mysql') {
+            return collect(Schema::getIndexes($table))
+                ->contains(fn ($index) => ($index['name'] ?? null) === $indexName);
+        }
+
         $dbName = DB::getDatabaseName();
 
         return DB::table('information_schema.statistics')
@@ -158,5 +158,28 @@ return new class extends Migration
             ->where('table_name', $table)
             ->where('index_name', $indexName)
             ->exists();
+    }
+
+    private function backfillTenantIds(): void
+    {
+        DB::table('subscriptions')
+            ->whereNull('tenant_id')
+            ->whereNotNull('user_id')
+            ->orderBy('id')
+            ->chunkById(100, function ($subscriptions) {
+                $tenantIds = DB::table('users')
+                    ->whereIn('id', $subscriptions->pluck('user_id')->filter()->unique())
+                    ->pluck('tenant_id', 'id');
+
+                foreach ($subscriptions as $subscription) {
+                    $tenantId = $tenantIds[$subscription->user_id] ?? null;
+
+                    if ($tenantId) {
+                        DB::table('subscriptions')
+                            ->where('id', $subscription->id)
+                            ->update(['tenant_id' => $tenantId]);
+                    }
+                }
+            });
     }
 };

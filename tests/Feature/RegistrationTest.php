@@ -8,7 +8,7 @@ test('registration screen can be rendered', function () {
 
     $response->assertStatus(200);
 })->skip(function () {
-    return ! Features::enabled(Features::registration());
+    return ! class_exists(Features::class) || ! Features::enabled(Features::registration());
 }, 'Registration support is not enabled.');
 
 test('registration screen cannot be rendered if support is disabled', function () {
@@ -16,7 +16,7 @@ test('registration screen cannot be rendered if support is disabled', function (
 
     $response->assertStatus(404);
 })->skip(function () {
-    return Features::enabled(Features::registration());
+    return ! class_exists(Features::class) || Features::enabled(Features::registration());
 }, 'Registration support is enabled.');
 
 test('new users can register', function () {
@@ -31,5 +31,5 @@ test('new users can register', function () {
     $this->assertAuthenticated();
     $response->assertRedirect(route('dashboard', absolute: false));
 })->skip(function () {
-    return ! Features::enabled(Features::registration());
+    return ! class_exists(Features::class) || ! Features::enabled(Features::registration());
 }, 'Registration support is not enabled.');

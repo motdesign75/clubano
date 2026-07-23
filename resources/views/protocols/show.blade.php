@@ -10,6 +10,11 @@
     if (is_string($attachments)) {
         $attachments = [$attachments];
     }
+
+    $entryTypes = \App\Models\ProtocolEntry::typeOptions();
+    $entries = $protocol->entries ?? collect();
+    $visibleEntries = $entries->where('visible_in_protocol', true)->values();
+    $entriesByType = $visibleEntries->groupBy('type');
 @endphp
 
 <div class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -81,18 +86,94 @@
 
     <section class="grid gap-6 xl:grid-cols-3">
         <div class="space-y-6 xl:col-span-2">
-            <article class="rounded-2xl border border-slate-200 bg-white p-6">
-                <div class="flex items-center justify-between gap-4">
-                    <div>
-                        <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Protokoll</div>
-                        <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Der eigentliche Inhalt</h2>
+            @if($visibleEntries->isNotEmpty())
+                <article class="rounded-2xl border border-slate-200 bg-white p-6">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Protokollpunkte</div>
+                            <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Klar nach Ergebnissen geordnet</h2>
+                        </div>
+                        <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                            {{ $visibleEntries->count() }} Punkte
+                        </div>
                     </div>
-                </div>
 
-                <div class="mt-6 prose prose-slate max-w-none prose-headings:font-semibold prose-p:leading-7">
-                    {!! $protocol->content !!}
-                </div>
-            </article>
+                    <div class="mt-6 space-y-4">
+                        @foreach($visibleEntries as $entry)
+                            <section class="rounded-2xl border p-4 {{ \App\Models\ProtocolEntry::typeToneFor($entry->type) }}">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="min-w-0">
+                                        <div class="text-xs font-semibold uppercase tracking-[0.16em] opacity-75">
+                                            {{ $entryTypes[$entry->type] ?? 'Protokollpunkt' }}
+                                        </div>
+                                        <h3 class="mt-1 text-lg font-semibold leading-7">
+                                            {{ $entry->title ?: \Illuminate\Support\Str::limit($entry->content, 80) }}
+                                        </h3>
+                                    </div>
+                                    @if($entry->due_date || $entry->scheduled_date)
+                                        <div class="shrink-0 rounded-full bg-white/70 px-3 py-1 text-xs font-semibold">
+                                            {{ optional($entry->scheduled_date ?? $entry->due_date)->format('d.m.Y') }}
+                                        </div>
+                                    @endif
+                                </div>
+
+                                <div class="mt-3 whitespace-pre-line text-sm leading-7">{{ $entry->content }}</div>
+
+                                @if($entry->responsible_name || $entry->due_date)
+                                    <div class="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+                                        @if($entry->responsible_name)
+                                            <span class="rounded-full bg-white/70 px-3 py-1">Verantwortlich: {{ $entry->responsible_name }}</span>
+                                        @endif
+                                        @if($entry->due_date)
+                                            <span class="rounded-full bg-white/70 px-3 py-1">Fällig: {{ $entry->due_date->format('d.m.Y') }}</span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </section>
+                        @endforeach
+                    </div>
+                </article>
+
+                @if($entriesByType->has('resolution') || $entriesByType->has('task') || $entriesByType->has('date') || $entriesByType->has('follow_up'))
+                    <article class="rounded-2xl border border-slate-200 bg-white p-6">
+                        <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Ergebnisse</div>
+                        <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Entscheidungen und nächste Schritte</h2>
+
+                        <div class="mt-5 grid gap-4 lg:grid-cols-2">
+                            @foreach(['resolution' => 'Beschlüsse', 'task' => 'Aufgaben', 'date' => 'Termine', 'follow_up' => 'Wiedervorlagen'] as $typeKey => $headline)
+                                @if($entriesByType->has($typeKey))
+                                    <div class="rounded-2xl border border-slate-200 p-4">
+                                        <div class="text-sm font-semibold text-slate-950">{{ $headline }}</div>
+                                        <div class="mt-3 space-y-3">
+                                            @foreach($entriesByType->get($typeKey) as $entry)
+                                                <div class="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
+                                                    <div class="text-sm font-semibold text-slate-800">{{ $entry->title ?: \Illuminate\Support\Str::limit($entry->content, 70) }}</div>
+                                                    <div class="mt-1 text-sm leading-6 text-slate-600">{{ \Illuminate\Support\Str::limit($entry->content, 180) }}</div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endif
+                            @endforeach
+                        </div>
+                    </article>
+                @endif
+            @endif
+
+            @if($visibleEntries->isEmpty())
+                <article class="rounded-2xl border border-slate-200 bg-white p-6">
+                    <div class="flex items-center justify-between gap-4">
+                        <div>
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Protokoll</div>
+                            <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-900">Der eigentliche Inhalt</h2>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 prose prose-slate max-w-none prose-headings:font-semibold prose-p:leading-7">
+                        {!! $protocol->content !!}
+                    </div>
+                </article>
+            @endif
 
             @if($protocol->resolutions)
                 <article class="rounded-2xl border border-slate-200 bg-white p-6">

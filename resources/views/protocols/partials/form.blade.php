@@ -11,6 +11,59 @@
     $contentValue = old('content', $protocol->content ?? '');
     $selectedParticipants = collect(old('participant_ids', $selected ?? []))->map(fn ($id) => (int) $id)->all();
     $attachments = $protocol->attachments ?? $protocol->attachment_paths ?? [];
+    $entryTypes = \App\Models\ProtocolEntry::typeOptions();
+    $entryTypeHints = [
+        'information' => 'Bericht, Sachstand oder Hinweis',
+        'discussion' => 'Austausch ohne verbindliche Entscheidung',
+        'resolution' => 'Verbindliche Entscheidung',
+        'task' => 'Aufgabe mit Verantwortung und Frist',
+        'date' => 'Termin oder Veranstaltung',
+        'follow_up' => 'Punkt für eine spätere Sitzung',
+    ];
+    $entryTypeTone = [
+        'information' => 'border-slate-200 bg-slate-50 text-slate-800',
+        'discussion' => 'border-indigo-200 bg-indigo-50 text-indigo-800',
+        'resolution' => 'border-emerald-200 bg-emerald-50 text-emerald-800',
+        'task' => 'border-amber-200 bg-amber-50 text-amber-800',
+        'date' => 'border-sky-200 bg-sky-50 text-sky-800',
+        'follow_up' => 'border-rose-200 bg-rose-50 text-rose-800',
+    ];
+    $dateInputValue = function ($value) {
+        if ($value instanceof \Illuminate\Support\Carbon) {
+            return $value->format('Y-m-d');
+        }
+
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        return $value ?: '';
+    };
+    $entryValues = collect(old('entries', $protocol->entries ?? []))
+        ->map(fn ($entry) => [
+            'type' => data_get($entry, 'type', 'information'),
+            'title' => data_get($entry, 'title', ''),
+            'content' => data_get($entry, 'content', ''),
+            'responsible_name' => data_get($entry, 'responsible_name', ''),
+            'due_date' => $dateInputValue(data_get($entry, 'due_date')),
+            'scheduled_date' => $dateInputValue(data_get($entry, 'scheduled_date')),
+            'visible_in_protocol' => (bool) data_get($entry, 'visible_in_protocol', true),
+        ])
+        ->filter(fn ($entry) => filled($entry['title']) || filled($entry['content']))
+        ->values()
+        ->all();
+
+    if (empty($entryValues)) {
+        $entryValues = [[
+            'type' => 'information',
+            'title' => '',
+            'content' => '',
+            'responsible_name' => '',
+            'due_date' => '',
+            'scheduled_date' => '',
+            'visible_in_protocol' => true,
+        ]];
+    }
 
     if (is_string($attachments)) {
         $attachments = [$attachments];
@@ -70,7 +123,7 @@
             <div class="mt-3 flex flex-wrap gap-2">
                 <a href="#protocol-basics" class="rounded-full bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white">Rahmen</a>
                 <a href="#protocol-people" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Teilnehmer</a>
-                <a href="#protocol-content" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Inhalt</a>
+                <a href="#protocol-content" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Punkte</a>
                 <a href="#protocol-files" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Anhänge</a>
             </div>
         </nav>
@@ -173,24 +226,130 @@
             </div>
         </section>
 
-        <section id="protocol-content" class="rounded-2xl border border-slate-200 bg-white p-6 scroll-mt-6">
+        <section id="protocol-content" class="rounded-2xl border border-slate-200 bg-white p-6 scroll-mt-6"
+                 x-data="protocolEntryEditor(@js($entryValues))">
             <div class="grid gap-6 xl:grid-cols-4">
                 <div>
                     <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protokoll</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Inhalt und Ergebnisse</h2>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Was ist passiert?</h2>
                     <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Erst der Verlauf, danach die verbindlichen Punkte. So findet jeder sofort, was besprochen und entschieden wurde.
+                        Erfasse jeden Punkt als Information, Diskussion, Beschluss, Aufgabe, Termin oder Wiedervorlage.
                     </p>
                 </div>
 
                 <div class="space-y-6 xl:col-span-3">
-                    <div>
-                        <label for="content" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Verlauf und Notizen</label>
-                        <input id="content" type="hidden" name="content" value="{{ $contentValue }}">
-                        <trix-editor input="content" class="mt-2 min-h-[320px] rounded-2xl border border-slate-200 bg-white"></trix-editor>
-                        @error('content')
-                            <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
-                        @enderror
+                    <div class="space-y-4">
+                        <template x-for="(entry, index) in entries" :key="entry.key">
+                            <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start">
+                                        <div class="shrink-0 rounded-full border px-3 py-1 text-xs font-semibold"
+                                             :class="toneFor(entry.type)"
+                                             x-text="labelFor(entry.type)">
+                                        </div>
+
+                                        <div class="grid min-w-0 flex-1 gap-3 md:grid-cols-2">
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Typ</label>
+                                                <select :name="`entries[${index}][type]`"
+                                                        x-model="entry.type"
+                                                        class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300">
+                                                    @foreach($entryTypes as $entryType => $entryLabel)
+                                                        <option value="{{ $entryType }}">{{ $entryLabel }}</option>
+                                                    @endforeach
+                                                </select>
+                                                <p class="mt-1 text-xs text-slate-500" x-text="hintFor(entry.type)"></p>
+                                            </div>
+
+                                            <div>
+                                                <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Überschrift</label>
+                                                <input type="text"
+                                                       :name="`entries[${index}][title]`"
+                                                       x-model="entry.title"
+                                                       class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
+                                                       placeholder="z. B. Kartoffelmarkt">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex shrink-0 gap-2">
+                                        <button type="button"
+                                                class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                                                title="Nach oben"
+                                                @click="move(index, -1)"
+                                                x-show="index > 0">
+                                            ↑
+                                        </button>
+                                        <button type="button"
+                                                class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
+                                                title="Nach unten"
+                                                @click="move(index, 1)"
+                                                x-show="index < entries.length - 1">
+                                            ↓
+                                        </button>
+                                        <button type="button"
+                                                class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-rose-200 text-rose-600 transition hover:bg-rose-50"
+                                                title="Punkt entfernen"
+                                                @click="remove(index)"
+                                                x-show="entries.length > 1">
+                                            ×
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4">
+                                    <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Inhalt</label>
+                                    <textarea :name="`entries[${index}][content]`"
+                                              x-model="entry.content"
+                                              rows="4"
+                                              class="mt-2 w-full rounded-2xl border-slate-200 text-sm leading-6 focus:border-slate-400 focus:ring-slate-300"
+                                              placeholder="Was soll im Protokoll stehen?"></textarea>
+                                </div>
+
+                                <div class="mt-4 grid gap-3 md:grid-cols-3">
+                                    <div x-show="entry.type === 'task' || entry.type === 'follow_up'">
+                                        <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Verantwortlich</label>
+                                        <input type="text"
+                                               :name="`entries[${index}][responsible_name]`"
+                                               x-model="entry.responsible_name"
+                                               class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
+                                               placeholder="Name">
+                                    </div>
+
+                                    <div x-show="entry.type === 'task' || entry.type === 'follow_up'">
+                                        <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fällig am</label>
+                                        <input type="date"
+                                               :name="`entries[${index}][due_date]`"
+                                               x-model="entry.due_date"
+                                               class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300">
+                                    </div>
+
+                                    <div x-show="entry.type === 'date'">
+                                        <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Termin am</label>
+                                        <input type="date"
+                                               :name="`entries[${index}][scheduled_date]`"
+                                               x-model="entry.scheduled_date"
+                                               class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300">
+                                    </div>
+
+                                    <label class="flex items-center gap-3 self-end rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700">
+                                        <input type="hidden" :name="`entries[${index}][visible_in_protocol]`" value="0">
+                                        <input type="checkbox"
+                                               :name="`entries[${index}][visible_in_protocol]`"
+                                               value="1"
+                                               x-model="entry.visible_in_protocol"
+                                               class="rounded border-slate-300 text-slate-900 focus:ring-slate-400">
+                                        Im Protokoll anzeigen
+                                    </label>
+                                </div>
+                            </article>
+                        </template>
+
+                        <button type="button"
+                                class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                                @click="add()">
+                            Punkt hinzufügen
+                        </button>
                     </div>
 
                     <div class="border-t border-slate-100 pt-6">
@@ -217,6 +376,18 @@
                             </div>
                         </div>
                     </div>
+
+                    <details class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <summary class="cursor-pointer text-sm font-semibold text-slate-800">Feinschliff als klassischer Protokolltext</summary>
+                        <div class="mt-4">
+                            <label for="content" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protokolltext</label>
+                            <input id="content" type="hidden" name="content" value="{{ $contentValue }}">
+                            <trix-editor input="content" class="mt-2 min-h-[240px] rounded-2xl border border-slate-200 bg-white"></trix-editor>
+                            @error('content')
+                                <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    </details>
                 </div>
             </div>
         </section>
@@ -272,3 +443,48 @@
         </div>
     </form>
 </div>
+
+<script>
+    function protocolEntryEditor(initialEntries) {
+        return {
+            entries: initialEntries.map((entry, index) => ({ key: Date.now() + index, ...entry })),
+            labels: @js($entryTypes),
+            hints: @js($entryTypeHints),
+            tones: @js($entryTypeTone),
+            add() {
+                this.entries.push({
+                    key: Date.now() + Math.random(),
+                    type: 'information',
+                    title: '',
+                    content: '',
+                    responsible_name: '',
+                    due_date: '',
+                    scheduled_date: '',
+                    visible_in_protocol: true,
+                });
+            },
+            remove(index) {
+                this.entries.splice(index, 1);
+            },
+            move(index, direction) {
+                const target = index + direction;
+
+                if (target < 0 || target >= this.entries.length) {
+                    return;
+                }
+
+                const item = this.entries.splice(index, 1)[0];
+                this.entries.splice(target, 0, item);
+            },
+            labelFor(type) {
+                return this.labels[type] || 'Punkt';
+            },
+            hintFor(type) {
+                return this.hints[type] || '';
+            },
+            toneFor(type) {
+                return this.tones[type] || this.tones.information;
+            },
+        };
+    }
+</script>

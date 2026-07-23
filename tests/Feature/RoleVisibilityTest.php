@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Document;
 use App\Models\Event;
+use App\Models\EventCategory;
 use App\Models\Member;
 use App\Models\Protocol;
 use App\Models\PublicForm;
@@ -485,6 +486,59 @@ test('dashboard shows a calm guided cockpit', function () {
     $response->assertSee('Nächste Termine');
     $response->assertSee('Vorstandsrunde');
     $response->assertSee('Entwicklung im Verein');
+});
+
+test('events index shows the calmer calendar cockpit', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'events-cockpit');
+
+    $category = EventCategory::create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Training',
+        'color' => '#0f766e',
+    ]);
+
+    Event::create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $staff->id,
+        'title' => 'Abendtraining',
+        'description' => 'Training in der Halle.',
+        'location' => 'Sporthalle',
+        'start' => now()->addDays(3)->setTime(18, 0),
+        'end' => now()->addDays(3)->setTime(20, 0),
+        'category_id' => $category->id,
+        'responsible_user_id' => $staff->id,
+        'is_public' => false,
+    ]);
+
+    $response = $this->actingAs($staff)->get(route('events.index', [
+        'view' => 'month',
+        'month' => now()->format('Y-m'),
+    ]));
+
+    $response->assertOk();
+    $response->assertSee('Vereinskalender');
+    $response->assertSee('Kalenderwerkzeuge');
+    $response->assertSee('Agenda');
+    $response->assertSee('Abendtraining');
+    $response->assertSee('Termin planen');
+});
+
+test('event create shows the guided event editor', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [, $staff] = createTenantWithUser(User::ROLE_STAFF, 'events-editor');
+
+    $response = $this->actingAs($staff)->get(route('events.create'));
+
+    $response->assertOk();
+    $response->assertSee('Event-Editor');
+    $response->assertSee('Worum geht es?');
+    $response->assertSee('Wann und wo?');
+    $response->assertSee('Veröffentlichen');
+    $response->assertSee('Anmeldung aktivieren');
+    $response->assertSee('Termin speichern');
 });
 
 test('documents area stores searchable linked documents', function () {

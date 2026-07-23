@@ -2,12 +2,12 @@
 
 namespace Database\Factories;
 
+use App\Models\Tenant;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Laravel\Jetstream\Features;
 
 /**
  * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
@@ -29,6 +29,13 @@ class UserFactory extends Factory
         return [
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
+            'tenant_id' => fn () => Tenant::create([
+                'name' => fake()->company(),
+                'slug' => 'tenant-'.Str::uuid(),
+                'email' => fake()->unique()->safeEmail(),
+                'license_mode' => 'beta',
+                'license_expires_at' => now()->addMonth(),
+            ])->id,
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'two_factor_secret' => null,
@@ -54,7 +61,7 @@ class UserFactory extends Factory
      */
     public function withPersonalTeam(?callable $callback = null): static
     {
-        if (! Features::hasTeamFeatures()) {
+        if (! class_exists(\Laravel\Jetstream\Features::class) || ! \Laravel\Jetstream\Features::hasTeamFeatures()) {
             return $this->state([]);
         }
 

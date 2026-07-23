@@ -23,11 +23,24 @@ return new class extends Migration
         // 2) Backfill tenant_id aus users.tenant_id, sofern user_id existiert
         if (Schema::hasColumn('subscriptions', 'user_id') && Schema::hasColumn('users', 'tenant_id')) {
             DB::table('subscriptions')
-                ->join('users', 'users.id', '=', 'subscriptions.user_id')
-                ->whereNull('subscriptions.tenant_id')
-                ->update([
-                    'subscriptions.tenant_id' => DB::raw('users.tenant_id'),
-                ]);
+                ->whereNull('tenant_id')
+                ->whereNotNull('user_id')
+                ->orderBy('id')
+                ->chunkById(100, function ($subscriptions) {
+                    $tenantIds = DB::table('users')
+                        ->whereIn('id', $subscriptions->pluck('user_id')->filter()->unique())
+                        ->pluck('tenant_id', 'id');
+
+                    foreach ($subscriptions as $subscription) {
+                        $tenantId = $tenantIds[$subscription->user_id] ?? null;
+
+                        if ($tenantId) {
+                            DB::table('subscriptions')
+                                ->where('id', $subscription->id)
+                                ->update(['tenant_id' => $tenantId]);
+                        }
+                    }
+                });
         }
 
         // 3) Alten Index (user_id, stripe_status) droppen, falls er existiert – Name dynamisch ermitteln
@@ -54,7 +67,7 @@ return new class extends Migration
         }
 
         // 6) Optional: Foreign Key auf tenants (wenn Tabelle existiert)
-        if (Schema::hasTable('tenants')) {
+        if (Schema::hasTable('tenants') && DB::getDriverName() === 'mysql') {
             // FK nur hinzufügen, wenn noch keiner existiert
             $fkExists = DB::table('information_schema.KEY_COLUMN_USAGE')
                 ->where('TABLE_SCHEMA', DB::getDatabaseName())
@@ -79,6 +92,18 @@ return new class extends Migration
     private function findIndexName(string $table, array $columns): ?string
     {
         $db = DB::getDatabaseName();
+
+        if (DB::getDriverName() !== 'mysql') {
+            $needle = $columns;
+
+            foreach (Schema::getIndexes($table) as $index) {
+                if (($index['columns'] ?? []) === $needle) {
+                    return $index['name'] ?? null;
+                }
+            }
+
+            return null;
+        }
 
         $rows = DB::table('information_schema.STATISTICS')
             ->select('INDEX_NAME', DB::raw('GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) as cols'))

@@ -1,10 +1,12 @@
 <?php
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
+use App\Models\Account;
 use App\Models\Event;
 use App\Models\Member;
 use App\Models\PublicForm;
 use App\Models\Tenant;
+use App\Models\Transaction;
 use App\Models\User;
 
 test('member datenauskunft cannot be exported across tenants', function () {
@@ -36,7 +38,7 @@ test('member datenauskunft cannot be exported across tenants', function () {
 
     $response = $this->actingAs($userA)->get(route('members.datenauskunft', $memberB));
 
-    $response->assertForbidden();
+    $response->assertNotFound();
 });
 
 test('public form export cannot be accessed across tenants', function () {
@@ -105,8 +107,64 @@ test('event exports cannot be accessed across tenants', function () {
     ]);
 
     $participantsResponse = $this->actingAs($userA)->get(route('events.participants.export', $eventB));
-    $participantsResponse->assertForbidden();
+    $participantsResponse->assertNotFound();
 
     $scheduleResponse = $this->actingAs($userA)->get(route('events.schedule.export', $eventB));
-    $scheduleResponse->assertForbidden();
+    $scheduleResponse->assertNotFound();
+});
+
+test('receipt files require finance role and cannot be accessed across tenants', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenantA = Tenant::create([
+        'name' => 'Verein A',
+        'slug' => 'verein-a-receipt-export',
+        'email' => 'a-receipt-export@example.test',
+    ]);
+
+    $tenantB = Tenant::create([
+        'name' => 'Verein B',
+        'slug' => 'verein-b-receipt-export',
+        'email' => 'b-receipt-export@example.test',
+    ]);
+
+    $viewerA = User::factory()->create([
+        'tenant_id' => $tenantA->id,
+        'role' => User::ROLE_VIEWER,
+    ]);
+
+    $adminA = User::factory()->create([
+        'tenant_id' => $tenantA->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $sourceAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenantB->id,
+        'name' => 'Fremde Kasse',
+        'type' => 'kasse',
+    ]);
+
+    $targetAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenantB->id,
+        'name' => 'Fremder Aufwand',
+        'type' => 'ausgabe',
+    ]);
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenantB->id,
+        'date' => now()->toDateString(),
+        'description' => 'Fremder Beleg',
+        'amount' => 12.34,
+        'account_from_id' => $sourceAccount->id,
+        'account_to_id' => $targetAccount->id,
+        'receipt_file' => 'receipts/tenant-b/beleg.pdf',
+    ]);
+
+    $this->actingAs($viewerA)
+        ->get(route('receipts.show', ['path' => 'receipts/tenant-b/beleg.pdf']))
+        ->assertForbidden();
+
+    $this->actingAs($adminA)
+        ->get(route('receipts.show', ['path' => 'receipts/tenant-b/beleg.pdf']))
+        ->assertNotFound();
 });

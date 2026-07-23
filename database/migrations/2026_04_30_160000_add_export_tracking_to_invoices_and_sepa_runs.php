@@ -10,21 +10,21 @@ return new class extends Migration
     {
         Schema::table('invoices', function (Blueprint $table) {
             if (!Schema::hasColumn('invoices', 'sepa_exported_at')) {
-                $table->timestamp('sepa_exported_at')->nullable()->after('paid_at');
+                $table->timestamp('sepa_exported_at')->nullable();
             }
 
             if (!Schema::hasColumn('invoices', 'sepa_sequence_type')) {
-                $table->string('sepa_sequence_type', 10)->nullable()->after('sepa_exported_at');
+                $table->string('sepa_sequence_type', 10)->nullable();
             }
 
             if (!Schema::hasColumn('invoices', 'last_sepa_run_id')) {
-                $table->foreignId('last_sepa_run_id')->nullable()->after('sepa_sequence_type')->constrained('sepa_runs')->nullOnDelete();
+                $table->foreignId('last_sepa_run_id')->nullable()->constrained('sepa_runs')->nullOnDelete();
             }
         });
 
         Schema::table('sepa_runs', function (Blueprint $table) {
             if (!Schema::hasColumn('sepa_runs', 'file_path')) {
-                $table->string('file_path')->nullable()->after('file_name');
+                $table->string('file_path')->nullable();
             }
         });
     }

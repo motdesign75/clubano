@@ -64,6 +64,11 @@ class Protocol extends Model
             ->withTimestamps();
     }
 
+    public function entries()
+    {
+        return $this->hasMany(ProtocolEntry::class)->orderBy('position')->orderBy('id');
+    }
+
     /**
      * 🔥 OPTIONAL (sehr sinnvoll):
      * Prüft ob Protokoll Anhänge hat

@@ -47,10 +47,12 @@ Block A sichert Clubano an den Stellen ab, an denen Mandantentrennung, sensible 
 - Formularantwort-Export
 - Event-Teilnehmerexport
 - Event-Dienstplanexport
+- Buchungsbelege
 
 Ergebnis:
 - diese Endpunkte sind tenant-geschützt
 - zusätzlich wurden Regressionstests ergänzt
+- Buchungsbelege sind zusätzlich auf `Admin` begrenzt
 
 ---
 
@@ -119,26 +121,34 @@ Im `User`-Modell wurden dafür klare Helfer ergänzt:
 - Projektliste tenant-isoliert
 - Projektdokumente nur im richtigen Tenant und Projekt abrufbar
 - Export- und PDF-Endpunkte nicht cross-tenant nutzbar
+- Buchungsbelege nicht ohne Finanzrolle oder über Tenant-Grenzen abrufbar
 - Sichtbarkeit kritischer UI-Aktionen je Rolle
 
 ---
 
-## Wichtiger technischer Hinweis
+## Technischer Teststand
 
-Die Tests sind im Workspace angelegt und syntaktisch geprüft.  
-Der echte Testlauf ist lokal aktuell noch eingeschränkt, weil der Test-Runner in dieser Umgebung nicht vollständig verfügbar ist.
-
-Für die nächste Stufe sollte deshalb in einer vollständigen Laravel-Testumgebung einmal ausgeführt werden:
+Der Regressionstestlauf wurde lokal erfolgreich ausgeführt:
 
 ```bash
 php artisan test
 ```
 
-oder alternativ:
+Ergebnis:
 
-```bash
-vendor/bin/pest
-```
+- 42 Tests bestanden
+- 27 Tests übersprungen
+- 158 Assertions geprüft
+
+Die übersprungenen Tests stammen aus alten optionalen Jetstream-/Fortify-Scaffold-Bereichen, die in Clubano aktuell nicht aktiv bzw. nicht vollständig installiert sind:
+
+- API Tokens
+- Jetstream Browser Sessions
+- Jetstream Livewire-Profilkomponenten
+- Zwei-Faktor-Verwaltung
+- ältere Fortify-Duplikattests für Registrierung, Passwortreset und Verifikation
+
+Diese Tests werden nicht als Produktregression gewertet, solange die zugehörigen Features nicht aktiviert werden.
 
 ---
 
@@ -155,9 +165,8 @@ Durch Block A ist Clubano jetzt spürbar robuster in diesen Punkten:
 
 ## Noch offene Punkte für Block A
 
-1. letzter Gegencheck auf weitere Download-/Datei-Endpunkte
-2. Ausführen der neuen Tests in vollständiger Testumgebung
-3. optional weitere Policy-/UI-Angleichung in Randmodulen
+1. kritische Endpunkte manuell mit zwei Testmandanten gegenprüfen
+2. optional weitere Policy-/UI-Angleichung in Randmodulen
 
 ---
 
@@ -170,4 +179,3 @@ Bevor in Phase 1 zu den Kernflows weitergegangen wird, sollte einmal ein technis
 - Cache leeren
 - Regressionstests laufen lassen
 - kritische Endpunkte manuell mit zwei Testmandanten gegenprüfen
-

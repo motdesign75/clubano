@@ -11,4 +11,4 @@ test('other browser sessions can be logged out', function () {
         ->set('password', 'password')
         ->call('logoutOtherBrowserSessions')
         ->assertSuccessful();
-});
+})->skip(fn () => ! class_exists(LogoutOtherBrowserSessionsForm::class), 'Jetstream browser sessions component is not installed.');

@@ -1,4 +1,3 @@
-cat > database/migrations/2025_08_13_051856_create_projects_table.php <<'PHP'
 <?php
 
 use Illuminate\Database\Migrations\Migration;

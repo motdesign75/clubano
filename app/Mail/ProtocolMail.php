@@ -44,6 +44,8 @@ class ProtocolMail extends Mailable
 
     public function build()
     {
+        $this->protocol->loadMissing(['entries', 'participants']);
+
         $pdf = Pdf::loadView('pdf.protocol', [
             'protocol' => $this->protocol
         ]);

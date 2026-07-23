@@ -7,6 +7,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
         DB::statement("
             ALTER TABLE public_form_fields
             MODIFY field_type VARCHAR(50) NOT NULL DEFAULT 'text'
@@ -20,6 +24,10 @@ return new class extends Migration
             SET field_type = 'checkbox'
             WHERE field_type IN ('radio', 'checkbox_group')
         ");
+
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
 
         DB::statement("
             ALTER TABLE public_form_fields

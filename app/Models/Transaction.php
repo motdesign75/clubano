@@ -51,7 +51,7 @@ class Transaction extends Model
         static::addGlobalScope(new CurrentTenantScope);
 
         static::creating(function ($transaction) {
-            if (Auth::check()) {
+            if (Auth::check() && blank($transaction->tenant_id)) {
                 $transaction->tenant_id = Auth::user()->tenant_id;
             }
         });

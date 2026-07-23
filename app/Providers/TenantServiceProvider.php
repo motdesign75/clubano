@@ -10,7 +10,7 @@ class TenantServiceProvider extends ServiceProvider
 {
     public function register()
     {
-        $this->app->singleton('currentTenant', function () {
+        $this->app->bind('currentTenant', function () {
             $user = auth()->user();
             return $user ? Tenant::find($user->tenant_id) : null;
         });
