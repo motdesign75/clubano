@@ -1,6 +1,8 @@
 @php
     $isPublic = (int) old('is_public', $event->is_public ?? 1);
     $bookingEnabled = (bool) old('booking_enabled', $event->booking_enabled ?? false);
+    $isEditingEvent = $event->exists;
+    $recurrenceEnabled = (bool) old('recurrence_enabled', false);
 @endphp
 
 <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr),320px]">
@@ -50,6 +52,48 @@
                               placeholder="Was sollen Mitglieder oder Besucher wissen?">{{ old('description', $event->description) }}</textarea>
                 </div>
             </div>
+
+            @unless($isEditingEvent)
+                <div class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <label class="flex items-start gap-3">
+                        <input type="checkbox" name="recurrence_enabled" value="1" class="mt-1 rounded border-slate-300" @checked($recurrenceEnabled)>
+                        <span>
+                            <span class="block text-sm font-semibold text-slate-950">Als Serie anlegen</span>
+                            <span class="mt-1 block text-sm leading-6 text-slate-500">Für Training, Stammtisch oder regelmäßige Vorstandsrunden erstellt Clubano mehrere echte Termine.</span>
+                        </span>
+                    </label>
+
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <label for="recurrence_frequency" class="text-sm font-semibold text-slate-900">Wiederholung</label>
+                            <select name="recurrence_frequency" id="recurrence_frequency" class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                                <option value="weekly" @selected(old('recurrence_frequency') === 'weekly')>Wöchentlich</option>
+                                <option value="biweekly" @selected(old('recurrence_frequency') === 'biweekly')>Alle zwei Wochen</option>
+                                <option value="monthly_same_date" @selected(in_array(old('recurrence_frequency'), ['monthly', 'monthly_same_date'], true))>Monatlich am gleichen Datum</option>
+                                <option value="monthly_nth_weekday" @selected(old('recurrence_frequency') === 'monthly_nth_weekday')>Monatlich am gleichen Wochentag</option>
+                            </select>
+                            <p class="mt-1 text-xs leading-5 text-slate-500">Beispiel: Start am ersten Freitag erzeugt jeden ersten Freitag.</p>
+                        </div>
+
+                        <div>
+                            <label for="recurrence_until" class="text-sm font-semibold text-slate-900">Serie bis</label>
+                            <input type="date" name="recurrence_until" id="recurrence_until" value="{{ old('recurrence_until') }}"
+                                   class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                        </div>
+                    </div>
+
+                    <p class="mt-3 text-xs leading-5 text-slate-500">Beim Speichern entstehen einzelne Termine im Kalender. Du kannst jeden Termin danach separat bearbeiten oder löschen.</p>
+                </div>
+            @else
+                @if($event->recurrence_group_id)
+                    <div class="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                        <div class="text-sm font-semibold text-slate-950">Teil einer Serie</div>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">
+                            Dieser Termin gehört zu einer Serie. Änderungen in diesem Editor betreffen nur diesen einzelnen Termin.
+                        </p>
+                    </div>
+                @endif
+            @endunless
         </div>
 
         <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

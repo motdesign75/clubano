@@ -27,6 +27,10 @@ class Event extends Model
         'responsible_user_id',
         'created_by',
         'updated_by',
+        'recurrence_group_id',
+        'recurrence_frequency',
+        'recurrence_interval',
+        'recurrence_until',
     ];
 
     protected $casts = [
@@ -36,6 +40,8 @@ class Event extends Model
         'booking_enabled' => 'boolean',
         'price_per_person' => 'decimal:2',
         'max_participants_per_booking' => 'integer',
+        'recurrence_interval' => 'integer',
+        'recurrence_until' => 'date',
     ];
 
     /**

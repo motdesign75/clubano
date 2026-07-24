@@ -79,7 +79,7 @@
                 @if($canManageEvents)
                     <a href="{{ route('events.create') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
                         <x-heroicon-o-plus class="h-5 w-5" />
-                        Termin planen
+                        Termin oder Serie planen
                     </a>
                 @endif
             </div>
@@ -90,6 +90,46 @@
         <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             {{ session('success') }}
         </div>
+    @endif
+
+    @if($canManageEvents)
+        <section class="grid gap-3 lg:grid-cols-3">
+            <a href="{{ route('events.create') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
+                <div class="flex items-start gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-white">
+                        <x-heroicon-o-calendar-days class="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-950">Einzeltermin</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Für Sommerfest, Sitzung oder einmalige Veranstaltung.</p>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ route('events.create') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
+                <div class="flex items-start gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                        <x-heroicon-o-arrow-path class="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-950">Serientermin</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Für Training, Stammtisch oder regelmäßige Vorstandsrunden.</p>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ route('event-categories.index') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
+                <div class="flex items-start gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                        <x-heroicon-o-swatch class="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-950">Kategorien</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Farben und Bereiche vorbereiten, damit der Kalender lesbar bleibt.</p>
+                    </div>
+                </div>
+            </a>
+        </section>
     @endif
 
     <details class="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm" {{ $hasActiveFilters ? 'open' : '' }}>

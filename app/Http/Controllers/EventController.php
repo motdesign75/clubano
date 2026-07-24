@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Carbon\Carbon;
 
 class EventController extends Controller
 {
@@ -273,7 +274,39 @@ class EventController extends Controller
     {
         $tenantId = auth()->user()->tenant_id;
 
-        $validated = $request->validate([
+        $validated = $request->validate($this->eventValidationRules($tenantId) + [
+            'recurrence_enabled' => 'nullable|boolean',
+            'recurrence_frequency' => 'required_if:recurrence_enabled,1|nullable|in:weekly,biweekly,monthly,monthly_same_date,monthly_nth_weekday',
+            'recurrence_until' => 'required_if:recurrence_enabled,1|nullable|date|after_or_equal:start',
+        ]);
+
+        if ($request->hasFile('image')) {
+            $validated['image_path'] = $request->file('image')->store('events', 'public');
+        }
+
+        $baseData = $this->eventDataFromRequest($validated, $request);
+        $baseData['tenant_id'] = Auth::user()->tenant_id;
+        $baseData['created_by'] = Auth::id();
+        $baseData['updated_by'] = Auth::id();
+
+        $events = $this->createEventsFromSeries($baseData, $request->boolean('recurrence_enabled'), $validated['recurrence_frequency'] ?? null, $validated['recurrence_until'] ?? null);
+        $event = $events->first();
+
+        $events->each(function (Event $seriesEvent) {
+            $this->syncBookingForm($seriesEvent);
+            $this->logEventChange($seriesEvent, 'created', null, $seriesEvent->fresh()->toArray(), 'Termin angelegt');
+        });
+
+        $message = $events->count() > 1
+            ? $events->count() . ' Serientermine wurden gespeichert.'
+            : 'Event wurde gespeichert.';
+
+        return redirect()->route('events.edit', $event)->with('success', $message);
+    }
+
+    private function eventValidationRules(int $tenantId): array
+    {
+        return [
             'title'       => 'required|string|max:255',
             'description' => 'nullable|string',
             'location'    => 'nullable|string|max:255',
@@ -287,14 +320,12 @@ class EventController extends Controller
             'currency' => 'nullable|string|size:3',
             'max_participants_per_booking' => 'nullable|integer|min:1|max:50',
             'image'       => 'nullable|image|max:5120',
-        ]);
+        ];
+    }
 
-        if ($request->hasFile('image')) {
-            $validated['image_path'] = $request->file('image')->store('events', 'public');
-        }
-
-        $event = Event::create([
-            'tenant_id'   => Auth::user()->tenant_id,
+    private function eventDataFromRequest(array $validated, Request $request, ?Event $event = null): array
+    {
+        return [
             'title'       => $validated['title'],
             'description' => $validated['description'] ?? null,
             'location'    => $validated['location'] ?? null,
@@ -303,19 +334,97 @@ class EventController extends Controller
             'start'       => $validated['start'],
             'end'         => $validated['end'],
             'is_public'   => (bool) $validated['is_public'],
-            'created_by'  => Auth::id(),
-            'updated_by'  => Auth::id(),
             'booking_enabled' => $request->boolean('booking_enabled'),
             'price_per_person' => $request->boolean('booking_enabled') ? ($validated['price_per_person'] ?? 0) : 0,
-            'currency' => strtoupper($validated['currency'] ?? 'EUR'),
-            'max_participants_per_booking' => $validated['max_participants_per_booking'] ?? 1,
-            'image_path'  => $validated['image_path'] ?? null,
-        ]);
+            'currency' => strtoupper($validated['currency'] ?? ($event?->currency ?: 'EUR')),
+            'max_participants_per_booking' => $validated['max_participants_per_booking'] ?? ($event?->max_participants_per_booking ?: 1),
+            'image_path'  => array_key_exists('image_path', $validated) ? $validated['image_path'] : $event?->image_path,
+        ];
+    }
 
-        $this->syncBookingForm($event);
-        $this->logEventChange($event, 'created', null, $event->fresh()->toArray(), 'Termin angelegt');
+    private function createEventsFromSeries(array $baseData, bool $recurrenceEnabled, ?string $frequency, ?string $until)
+    {
+        if (! $recurrenceEnabled) {
+            return collect([Event::create($baseData)]);
+        }
 
-        return redirect()->route('events.edit', $event)->with('success', 'Event wurde gespeichert.');
+        $start = Carbon::parse($baseData['start']);
+        $end = Carbon::parse($baseData['end']);
+        $untilDate = Carbon::parse($until)->endOfDay();
+        $groupId = (string) Str::uuid();
+        $durationInSeconds = $start->diffInSeconds($end);
+        $events = collect();
+
+        foreach ($this->recurringEventStarts($start, $untilDate, $frequency) as $occurrenceStart) {
+            $occurrenceEnd = $occurrenceStart->copy()->addSeconds($durationInSeconds);
+
+            $events->push(Event::create(array_merge($baseData, [
+                'start' => $occurrenceStart->toDateTimeString(),
+                'end' => $occurrenceEnd->toDateTimeString(),
+                'recurrence_group_id' => $groupId,
+                'recurrence_frequency' => $frequency,
+                'recurrence_interval' => $frequency === 'biweekly' ? 2 : 1,
+                'recurrence_until' => $untilDate->toDateString(),
+            ])));
+        }
+
+        return $events;
+    }
+
+    private function recurringEventStarts(Carbon $start, Carbon $untilDate, ?string $frequency)
+    {
+        $starts = collect();
+        $cursor = $start->copy();
+
+        while ($cursor->lte($untilDate) && $starts->count() < 80) {
+            $starts->push($cursor->copy());
+
+            $cursor = match ($frequency) {
+                'monthly', 'monthly_same_date' => $cursor->copy()->addMonthNoOverflow(),
+                'monthly_nth_weekday' => $this->nextMonthlyNthWeekday($start, $cursor),
+                'biweekly' => $cursor->copy()->addWeeks(2),
+                default => $cursor->copy()->addWeek(),
+            };
+        }
+
+        return $starts;
+    }
+
+    private function nextMonthlyNthWeekday(Carbon $seriesStart, Carbon $currentOccurrence): Carbon
+    {
+        $monthCursor = $currentOccurrence->copy()->firstOfMonth()->addMonth();
+        $weekday = $seriesStart->dayOfWeek;
+        $time = [
+            $seriesStart->hour,
+            $seriesStart->minute,
+            $seriesStart->second,
+        ];
+        $isLastWeekdayOfMonth = $seriesStart->copy()->addWeek()->month !== $seriesStart->month;
+        $nthWeekday = (int) ceil($seriesStart->day / 7);
+
+        if ($isLastWeekdayOfMonth) {
+            $candidate = $monthCursor->copy()->endOfMonth();
+
+            while ($candidate->dayOfWeek !== $weekday) {
+                $candidate->subDay();
+            }
+
+            return $candidate->setTime(...$time);
+        }
+
+        $candidate = $monthCursor->copy()->startOfMonth();
+
+        while ($candidate->dayOfWeek !== $weekday) {
+            $candidate->addDay();
+        }
+
+        $candidate->addWeeks($nthWeekday - 1)->setTime(...$time);
+
+        if ($candidate->month === $monthCursor->month) {
+            return $candidate;
+        }
+
+        return $this->nextMonthlyNthWeekday($seriesStart, $monthCursor);
     }
 
     /**
@@ -345,21 +454,7 @@ class EventController extends Controller
         $this->authorizeEvent($event);
         $tenantId = auth()->user()->tenant_id;
 
-        $validated = $request->validate([
-            'title'       => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'location'    => 'nullable|string|max:255',
-            'start'       => 'required|date',
-            'end'         => 'required|date|after_or_equal:start',
-            'category_id' => ['nullable', Rule::exists('event_categories', 'id')->where('tenant_id', $tenantId)],
-            'responsible_user_id' => ['nullable', Rule::exists('users', 'id')->where('tenant_id', $tenantId)],
-            'is_public'   => 'required|boolean',
-            'booking_enabled' => 'nullable|boolean',
-            'price_per_person' => 'nullable|numeric|min:0',
-            'currency' => 'nullable|string|size:3',
-            'max_participants_per_booking' => 'nullable|integer|min:1|max:50',
-            'image'       => 'nullable|image|max:5120',
-        ]);
+        $validated = $request->validate($this->eventValidationRules($tenantId));
 
         if ($request->hasFile('image')) {
             if ($event->image_path) {
@@ -376,21 +471,8 @@ class EventController extends Controller
 
         $before = $event->fresh()->toArray();
 
-        $event->update([
-            'title' => $validated['title'],
-            'description' => $validated['description'] ?? null,
-            'location' => $validated['location'] ?? null,
-            'category_id' => $validated['category_id'] ?? null,
-            'responsible_user_id' => $validated['responsible_user_id'] ?? null,
-            'start' => $validated['start'],
-            'end' => $validated['end'],
-            'is_public' => (bool) $validated['is_public'],
+        $event->update($this->eventDataFromRequest($validated, $request, $event) + [
             'updated_by' => Auth::id(),
-            'booking_enabled' => $request->boolean('booking_enabled'),
-            'price_per_person' => $request->boolean('booking_enabled') ? ($validated['price_per_person'] ?? 0) : 0,
-            'currency' => strtoupper($validated['currency'] ?? ($event->currency ?: 'EUR')),
-            'max_participants_per_booking' => $validated['max_participants_per_booking'] ?? ($event->max_participants_per_booking ?: 1),
-            'image_path' => $validated['image_path'] ?? $event->image_path,
         ]);
 
         $this->syncBookingForm($event);
@@ -1029,6 +1111,10 @@ class EventController extends Controller
 
     private function findConflictingEvents(Event $event)
     {
+        if (! $this->eventHasConflictResource($event)) {
+            return collect();
+        }
+
         return Event::query()
             ->with(['category', 'responsibleUser'])
             ->where('tenant_id', $event->tenant_id)
@@ -1036,7 +1122,32 @@ class EventController extends Controller
             ->where('start', '<', $event->end)
             ->where('end', '>', $event->start)
             ->orderBy('start')
-            ->get();
+            ->get()
+            ->filter(fn (Event $candidate) => $this->eventsShareConflictResource($event, $candidate))
+            ->values();
+    }
+
+    private function normalizedEventLocation(?string $location): string
+    {
+        return Str::lower(trim((string) $location));
+    }
+
+    private function eventHasConflictResource(Event $event): bool
+    {
+        return filled($event->responsible_user_id) || $this->normalizedEventLocation($event->location) !== '';
+    }
+
+    private function eventsShareConflictResource(Event $event, Event $candidate): bool
+    {
+        $sameResponsible = filled($event->responsible_user_id)
+            && filled($candidate->responsible_user_id)
+            && (int) $event->responsible_user_id === (int) $candidate->responsible_user_id;
+
+        $eventLocation = $this->normalizedEventLocation($event->location);
+        $candidateLocation = $this->normalizedEventLocation($candidate->location);
+        $sameLocation = $eventLocation !== '' && $eventLocation === $candidateLocation;
+
+        return $sameResponsible || $sameLocation;
     }
 
     private function logEventChange(Event $event, string $action, ?array $beforeState, ?array $afterState, ?string $summary): void

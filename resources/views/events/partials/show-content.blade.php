@@ -1,3 +1,7 @@
+@php
+    $canManageEvents = ! $isPublicPreview && (auth()->user()?->isStaff() ?? false);
+@endphp
+
 <div class="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
     <div class="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200">
         @if($event->image_url)
@@ -38,12 +42,21 @@
                     </div>
                 </div>
 
-                @if($event->booking_enabled && $event->activeBookingForm)
-                    <a href="{{ route('forms.public.show', $event->activeBookingForm->slug) }}"
-                       class="inline-flex rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-emerald-700">
-                        Jetzt anmelden
-                    </a>
-                @endif
+                <div class="flex flex-col gap-2 sm:items-end">
+                    @if($event->booking_enabled && $event->activeBookingForm)
+                        <a href="{{ route('forms.public.show', $event->activeBookingForm->slug) }}"
+                           class="inline-flex rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-emerald-700">
+                            Jetzt anmelden
+                        </a>
+                    @endif
+
+                    @if($canManageEvents)
+                        <a href="{{ route('events.edit', $event) }}"
+                           class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                            Bearbeiten
+                        </a>
+                    @endif
+                </div>
             </div>
 
             @if($event->description)
@@ -187,6 +200,26 @@
                     'participantCount' => $participantCount,
                     'bookingRevenue' => $bookingRevenue,
                 ])
+
+                @if($canManageEvents)
+                    <section class="mt-10 rounded-2xl border border-rose-200 bg-rose-50 p-6">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <h2 class="text-lg font-semibold text-rose-950">Veranstaltung entfernen</h2>
+                                <p class="mt-2 max-w-2xl text-sm leading-6 text-rose-800">
+                                    Löschen entfernt die Veranstaltung aus Kalender und öffentlicher Liste. Nutze das nur, wenn der Termin wirklich nicht mehr gebraucht wird.
+                                </p>
+                            </div>
+                            <form method="POST" action="{{ route('events.destroy', $event) }}" onsubmit="return confirm('Veranstaltung wirklich löschen? Dieser Schritt kann nicht rückgängig gemacht werden.');" class="shrink-0">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-rose-300 bg-white px-5 text-sm font-semibold text-rose-700 hover:bg-rose-100 sm:w-auto">
+                                    Veranstaltung löschen
+                                </button>
+                            </form>
+                        </div>
+                    </section>
+                @endif
             @endif
         </div>
     </div>

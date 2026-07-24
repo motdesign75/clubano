@@ -522,7 +522,8 @@ test('events index shows the calmer calendar cockpit', function () {
     $response->assertSee('Kalenderwerkzeuge');
     $response->assertSee('Agenda');
     $response->assertSee('Abendtraining');
-    $response->assertSee('Termin planen');
+    $response->assertSee('Termin oder Serie planen');
+    $response->assertSee('Serientermin');
 });
 
 test('event create shows the guided event editor', function () {
@@ -538,6 +539,7 @@ test('event create shows the guided event editor', function () {
     $response->assertSee('Wann und wo?');
     $response->assertSee('Veröffentlichen');
     $response->assertSee('Anmeldung aktivieren');
+    $response->assertSee('Als Serie anlegen');
     $response->assertSee('Termin speichern');
 });
 

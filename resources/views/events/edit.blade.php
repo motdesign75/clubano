@@ -61,6 +61,24 @@
         </div>
     </form>
 
+    <section class="rounded-xl border border-rose-200 bg-rose-50 p-5 shadow-sm sm:p-6">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+                <h2 class="text-xl font-semibold text-rose-950">Veranstaltung löschen</h2>
+                <p class="mt-2 max-w-2xl text-sm leading-6 text-rose-800">
+                    Entfernt den Termin aus Kalender, öffentlicher Veranstaltungsliste und zugehöriger Organisation. Bitte nur löschen, wenn diese Veranstaltung wirklich nicht mehr benötigt wird.
+                </p>
+            </div>
+            <form method="POST" action="{{ route('events.destroy', $event) }}" onsubmit="return confirm('Veranstaltung wirklich löschen? Dieser Schritt kann nicht rückgängig gemacht werden.');" class="shrink-0">
+                @csrf
+                @method('DELETE')
+                <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-rose-300 bg-white px-5 text-sm font-semibold text-rose-700 hover:bg-rose-100 sm:w-auto">
+                    Veranstaltung löschen
+                </button>
+            </form>
+        </div>
+    </section>
+
     <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
