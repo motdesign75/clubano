@@ -163,6 +163,7 @@
                         <x-ui.input type="date" name="entry_date" label="Eintritt" :value="old('entry_date', optional($member->entry_date)->format('Y-m-d'))" />
                         <x-ui.input type="date" name="termination_date" label="Kündigungsdatum" :value="old('termination_date', optional($member->termination_date)->format('Y-m-d'))" />
                         <x-ui.input type="date" name="exit_date" label="Austritt" :value="old('exit_date', optional($member->exit_date)->format('Y-m-d'))" />
+                        <x-ui.input type="number" step="0.25" min="0" name="required_service_hours" label="Pflichtstunden Soll" :value="old('required_service_hours', number_format((float) $member->required_service_hours, 2, '.', ''))" />
                 </div>
             </div>
         </section>

@@ -1,11 +1,17 @@
 <?php
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
+use App\Mail\EventInvitationMail;
 use App\Models\Event;
+use App\Models\EventAttendance;
 use App\Models\EventCategory;
 use App\Models\EventChangeLog;
+use App\Models\EventInvitation;
+use App\Models\Member;
+use App\Models\Tag;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Support\Facades\Mail;
 
 test('viewer can create calendar event and audit log is written', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
@@ -344,4 +350,483 @@ test('staff can create monthly events on the same weekday position', function ()
         '2026-10-02',
     ]);
     expect($events->pluck('recurrence_frequency')->unique()->all())->toBe(['monthly_nth_weekday']);
+});
+
+test('staff can choose events for a printable poster overview', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Aushangverein',
+        'slug' => 'aushangverein',
+        'email' => 'aushang@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+    ]);
+
+    $firstEvent = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Sommerfest',
+        'location' => 'Vereinsheim',
+        'start' => now()->addDays(10)->setTime(15, 0),
+        'end' => now()->addDays(10)->setTime(22, 0),
+        'is_public' => true,
+        'booking_enabled' => false,
+        'created_by' => $staff->id,
+        'updated_by' => $staff->id,
+    ]);
+
+    $secondEvent = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Internes Planungstreffen',
+        'location' => 'Geschäftsstelle',
+        'start' => now()->addDays(12)->setTime(19, 0),
+        'end' => now()->addDays(12)->setTime(20, 0),
+        'is_public' => false,
+        'booking_enabled' => false,
+        'created_by' => $staff->id,
+        'updated_by' => $staff->id,
+    ]);
+
+    $selectionResponse = $this->actingAs($staff)->get(route('events.poster'));
+
+    $selectionResponse->assertOk();
+    $selectionResponse->assertSee('Terminaushang');
+    $selectionResponse->assertSee('Sommerfest');
+    $selectionResponse->assertSee('Internes Planungstreffen');
+
+    $printResponse = $this->actingAs($staff)->post(route('events.poster.print'), [
+        'headline' => 'Termine im Vereinsheim',
+        'note' => 'Bitte vormerken.',
+        'event_ids' => [$firstEvent->id],
+    ]);
+
+    $printResponse->assertOk();
+    $printResponse->assertSee('Termine im Vereinsheim');
+    $printResponse->assertSee('Bitte vormerken.');
+    $printResponse->assertSee('Sommerfest');
+    $printResponse->assertDontSee('Internes Planungstreffen');
+    expect($secondEvent->exists)->toBeTrue();
+});
+
+test('staff can record attendance and count selected hours toward member duty hours', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Pflichtstundenverein',
+        'slug' => 'pflichtstundenverein',
+        'email' => 'pflicht@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+    ]);
+
+    $countedMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Anna',
+        'last_name' => 'Arbeit',
+        'email' => 'anna@example.test',
+        'entry_date' => now()->subYear()->toDateString(),
+        'required_service_hours' => 10,
+    ]);
+
+    $presentOnlyMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Ben',
+        'last_name' => 'Besuch',
+        'email' => 'ben@example.test',
+        'entry_date' => now()->subYear()->toDateString(),
+        'required_service_hours' => 8,
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Vereinsarbeit',
+        'location' => 'Vereinsheim',
+        'start' => now()->addDays(4)->setTime(10, 0),
+        'end' => now()->addDays(4)->setTime(13, 0),
+        'is_public' => false,
+        'booking_enabled' => false,
+        'created_by' => $staff->id,
+        'updated_by' => $staff->id,
+    ]);
+
+    $showResponse = $this->actingAs($staff)->get(route('events.show', $event));
+
+    $showResponse->assertOk();
+    $showResponse->assertSee('Wer war da?');
+    $showResponse->assertSee('Pflichtstunden');
+
+    $response = $this->actingAs($staff)->put(route('events.attendance.update', $event), [
+        'attendances' => [
+            [
+                'member_id' => $countedMember->id,
+                'attended' => 1,
+                'hours' => 3,
+                'counts_toward_required_hours' => 1,
+            ],
+            [
+                'member_id' => $presentOnlyMember->id,
+                'attended' => 1,
+                'hours' => 3,
+                'counts_toward_required_hours' => 0,
+            ],
+        ],
+    ]);
+
+    $response->assertRedirect(route('events.show', $event));
+
+    $countedAttendance = EventAttendance::query()
+        ->where('event_id', $event->id)
+        ->where('member_id', $countedMember->id)
+        ->first();
+    $presentOnlyAttendance = EventAttendance::query()
+        ->where('event_id', $event->id)
+        ->where('member_id', $presentOnlyMember->id)
+        ->first();
+
+    expect($countedAttendance)->not->toBeNull();
+    expect($countedAttendance->attended)->toBeTrue();
+    expect((float) $countedAttendance->hours)->toBe(3.0);
+    expect($countedAttendance->counts_toward_required_hours)->toBeTrue();
+    expect($presentOnlyAttendance->counts_toward_required_hours)->toBeFalse();
+
+    $memberResponse = $this->actingAs($staff)->get(route('members.show', $countedMember));
+
+    $memberResponse->assertOk();
+    $memberResponse->assertSee('10,00 h');
+    $memberResponse->assertSee('3,00 h');
+    $memberResponse->assertSee('7,00 h');
+});
+
+test('staff can evaluate attendances and open duty hours', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Auswertungsverein',
+        'slug' => 'auswertungsverein',
+        'email' => 'auswertung@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+    ]);
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Clara',
+        'last_name' => 'Dienst',
+        'email' => 'clara@example.test',
+        'entry_date' => now()->subYear()->toDateString(),
+        'required_service_hours' => 6,
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Arbeitsdienst',
+        'location' => 'Vereinsheim',
+        'start' => now()->setDate(now()->year, 5, 10)->setTime(9, 0),
+        'end' => now()->setDate(now()->year, 5, 10)->setTime(12, 0),
+        'is_public' => false,
+        'booking_enabled' => false,
+        'created_by' => $staff->id,
+        'updated_by' => $staff->id,
+    ]);
+
+    EventAttendance::query()->create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'member_id' => $member->id,
+        'attended' => true,
+        'hours' => 2.5,
+        'counts_toward_required_hours' => true,
+        'recorded_by' => $staff->id,
+    ]);
+
+    $response = $this->actingAs($staff)->get(route('events.attendance.report', [
+        'date_from' => now()->startOfYear()->toDateString(),
+        'date_to' => now()->endOfYear()->toDateString(),
+    ]));
+
+    $response->assertOk();
+    $response->assertSee('Anwesenheit auswerten');
+    $response->assertSee('Clara Dienst');
+    $response->assertSee('Arbeitsdienst');
+    $response->assertSee('6,00 h');
+    $response->assertSee('2,50 h');
+    $response->assertSee('3,50 h');
+});
+
+test('club can define activity profiles and use them on events', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Aktivitätsverein',
+        'slug' => 'aktivitaetsverein',
+        'email' => 'aktivitaet@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $targetGroup = Tag::create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Helferteam',
+        'color' => '#16A34A',
+    ]);
+
+    $categoryResponse = $this->actingAs($staff)->post(route('event-categories.store'), [
+        'name' => 'Arbeitseinsatz',
+        'slug' => 'arbeitseinsatz',
+        'color' => '#16A34A',
+        'icon' => 'wrench',
+        'default_target_tag_id' => $targetGroup->id,
+        'default_visibility' => 'internal',
+        'response_required_default' => 1,
+        'attendance_enabled_default' => 1,
+        'counts_toward_required_hours_default' => 1,
+        'reminders_enabled_default' => 1,
+    ]);
+
+    $categoryResponse->assertRedirect(route('event-categories.index'));
+
+    $category = EventCategory::withoutGlobalScopes()->where('slug', 'arbeitseinsatz')->firstOrFail();
+
+    expect($category->default_target_tag_id)->toBe($targetGroup->id);
+    expect($category->attendance_enabled_default)->toBeTrue();
+    expect($category->counts_toward_required_hours_default)->toBeTrue();
+
+    $eventResponse = $this->actingAs($staff)->post(route('events.store'), [
+        'title' => 'Vereinsheim vorbereiten',
+        'description' => 'Alles für das Sommerfest vorbereiten.',
+        'location' => 'Vereinsheim',
+        'start' => now()->addWeek()->setTime(9, 0)->toDateTimeString(),
+        'end' => now()->addWeek()->setTime(12, 0)->toDateTimeString(),
+        'category_id' => $category->id,
+        'target_tag_id' => $targetGroup->id,
+        'responsible_user_id' => $staff->id,
+        'is_public' => 0,
+        'booking_enabled' => 0,
+        'response_required' => 1,
+        'attendance_enabled' => 1,
+        'counts_toward_required_hours' => 1,
+        'reminders_enabled' => 1,
+    ]);
+
+    $event = Event::withoutGlobalScopes()->where('title', 'Vereinsheim vorbereiten')->firstOrFail();
+
+    $eventResponse->assertRedirect(route('events.edit', $event));
+    expect($event->target_tag_id)->toBe($targetGroup->id);
+    expect($event->response_required)->toBeTrue();
+    expect($event->attendance_enabled)->toBeTrue();
+    expect($event->counts_toward_required_hours)->toBeTrue();
+
+    $showResponse = $this->actingAs($staff)->get(route('events.show', $event));
+
+    $showResponse->assertOk();
+    $showResponse->assertSee('Aktivitätssteuerung');
+    $showResponse->assertSee('Helferteam');
+    $showResponse->assertSee('Wird vorgeschlagen');
+});
+
+test('staff can build invitation list from event target group and manage responses', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Einladungsverein',
+        'slug' => 'einladungsverein',
+        'email' => 'einladung@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+    ]);
+
+    $targetGroup = Tag::create([
+        'tenant_id' => $tenant->id,
+        'name' => '1. Mannschaft',
+        'color' => '#2563EB',
+    ]);
+
+    $firstMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Mara',
+        'last_name' => 'Mitte',
+        'email' => 'mara@example.test',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+    $secondMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Nils',
+        'last_name' => 'Netz',
+        'email' => 'nils@example.test',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+    $outsideMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Ole',
+        'last_name' => 'Ohne',
+        'email' => 'ole@example.test',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    $firstMember->tags()->attach($targetGroup->id);
+    $secondMember->tags()->attach($targetGroup->id);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Training Dienstag',
+        'location' => 'Sportplatz',
+        'start' => now()->addDays(3)->setTime(18, 0),
+        'end' => now()->addDays(3)->setTime(20, 0),
+        'target_tag_id' => $targetGroup->id,
+        'is_public' => false,
+        'booking_enabled' => false,
+        'response_required' => true,
+        'attendance_enabled' => true,
+        'created_by' => $staff->id,
+        'updated_by' => $staff->id,
+    ]);
+
+    $syncResponse = $this->actingAs($staff)->post(route('events.invitations.sync', $event));
+
+    $syncResponse->assertRedirect(route('events.show', $event));
+    expect(EventInvitation::query()->where('event_id', $event->id)->count())->toBe(2);
+    expect(EventInvitation::query()->where('event_id', $event->id)->where('member_id', $outsideMember->id)->exists())->toBeFalse();
+
+    $firstInvitation = EventInvitation::query()
+        ->where('event_id', $event->id)
+        ->where('member_id', $firstMember->id)
+        ->firstOrFail();
+    $secondInvitation = EventInvitation::query()
+        ->where('event_id', $event->id)
+        ->where('member_id', $secondMember->id)
+        ->firstOrFail();
+
+    $updateResponse = $this->actingAs($staff)->put(route('events.invitations.update', $event), [
+        'invitations' => [
+            [
+                'id' => $firstInvitation->id,
+                'status' => EventInvitation::STATUS_ACCEPTED,
+                'note' => 'Ist dabei.',
+            ],
+            [
+                'id' => $secondInvitation->id,
+                'status' => EventInvitation::STATUS_DECLINED,
+                'note' => 'Verletzt.',
+            ],
+        ],
+    ]);
+
+    $updateResponse->assertRedirect(route('events.show', $event));
+    expect($firstInvitation->fresh()->status)->toBe(EventInvitation::STATUS_ACCEPTED);
+    expect($firstInvitation->fresh()->note)->toBe('Ist dabei.');
+    expect($secondInvitation->fresh()->status)->toBe(EventInvitation::STATUS_DECLINED);
+
+    $showResponse = $this->actingAs($staff)->get(route('events.show', $event));
+
+    $showResponse->assertOk();
+    $showResponse->assertSee('Wer soll dabei sein?');
+    $showResponse->assertSee('Zu-/Absage-Link');
+    $showResponse->assertSee('1. Mannschaft');
+    $showResponse->assertSee('Mara Mitte');
+    $showResponse->assertSee('Nils Netz');
+    $showResponse->assertDontSee('Ole Ohne');
+
+    $publicResponse = $this->get(route('events.invitations.public.show', $firstInvitation->fresh()->response_token));
+
+    $publicResponse->assertOk();
+    $publicResponse->assertSee('Training Dienstag');
+    $publicResponse->assertSee('Mara Mitte');
+    $publicResponse->assertSee('Ich bin dabei');
+
+    $storePublicResponse = $this->post(route('events.invitations.public.store', $firstInvitation->fresh()->response_token), [
+        'status' => EventInvitation::STATUS_MAYBE,
+        'note' => 'Entscheide ich nach der Arbeit.',
+    ]);
+
+    $storePublicResponse->assertRedirect(route('events.invitations.public.show', $firstInvitation->fresh()->response_token));
+    expect($firstInvitation->fresh()->status)->toBe(EventInvitation::STATUS_MAYBE);
+    expect($firstInvitation->fresh()->note)->toBe('Entscheide ich nach der Arbeit.');
+    expect($firstInvitation->fresh()->responded_at)->not->toBeNull();
+});
+
+test('staff can send invitation mails with personal response links', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    $tenant = Tenant::create([
+        'name' => 'Mailverein',
+        'slug' => 'mailverein',
+        'email' => 'mailverein@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+    ]);
+
+    $targetGroup = Tag::create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Vorstand',
+        'color' => '#2563EB',
+    ]);
+
+    $memberWithMail = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Eva',
+        'last_name' => 'Email',
+        'email' => 'eva@example.test',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+    $memberWithoutMail = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Kai',
+        'last_name' => 'Keine',
+        'email' => null,
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    $memberWithMail->tags()->attach($targetGroup->id);
+    $memberWithoutMail->tags()->attach($targetGroup->id);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Vorstandsrunde',
+        'location' => 'Clubraum',
+        'start' => now()->addDays(8)->setTime(19, 0),
+        'end' => now()->addDays(8)->setTime(20, 30),
+        'target_tag_id' => $targetGroup->id,
+        'is_public' => false,
+        'booking_enabled' => false,
+        'response_required' => true,
+        'created_by' => $staff->id,
+        'updated_by' => $staff->id,
+    ]);
+
+    $response = $this->actingAs($staff)->post(route('events.invitations.mail', $event));
+
+    $response->assertRedirect(route('events.show', $event));
+    $response->assertSessionHas('success', '1 Einladung per Mail gesendet. 1 ohne E-Mail-Adresse übersprungen.');
+
+    expect(EventInvitation::query()->where('event_id', $event->id)->count())->toBe(2);
+    $invitation = EventInvitation::query()
+        ->where('event_id', $event->id)
+        ->where('member_id', $memberWithMail->id)
+        ->firstOrFail();
+    expect($invitation->response_token)->not->toBeNull();
+
+    Mail::assertSent(EventInvitationMail::class, function (EventInvitationMail $mail) use ($memberWithMail, $invitation) {
+        return $mail->hasTo($memberWithMail->email)
+            && $mail->invitation->is($invitation);
+    });
+    Mail::assertSentCount(1);
 });

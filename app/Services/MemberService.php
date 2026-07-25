@@ -30,6 +30,7 @@ class MemberService
         $data['consent_data_processing'] = $request->boolean('consent_data_processing');
         $data['consent_photo_internal'] = $request->boolean('consent_photo_internal');
         $data['consent_photo_public'] = $request->boolean('consent_photo_public');
+        $data['required_service_hours'] = $data['required_service_hours'] ?? 0;
         $data = $this->normalizePaymentData($data);
 
         // Foto speichern, falls vorhanden
@@ -55,6 +56,7 @@ class MemberService
         $data['consent_data_processing'] = $request->boolean('consent_data_processing');
         $data['consent_photo_internal'] = $request->boolean('consent_photo_internal');
         $data['consent_photo_public'] = $request->boolean('consent_photo_public');
+        $data['required_service_hours'] = $data['required_service_hours'] ?? 0;
         $data = $this->normalizePaymentData($data);
 
         // Mandant prüfen

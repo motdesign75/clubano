@@ -77,10 +77,20 @@
                 </div>
 
                 @if($canManageEvents)
-                    <a href="{{ route('events.create') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
-                        <x-heroicon-o-plus class="h-5 w-5" />
-                        Termin oder Serie planen
-                    </a>
+                    <div class="flex flex-col gap-2 sm:flex-row">
+                        <a href="{{ route('events.poster') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                            <x-heroicon-o-printer class="h-5 w-5" />
+                            Aushang erstellen
+                        </a>
+                        <a href="{{ route('events.attendance.report') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                            <x-heroicon-o-chart-bar class="h-5 w-5" />
+                            Anwesenheit auswerten
+                        </a>
+                        <a href="{{ route('events.create') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+                            <x-heroicon-o-plus class="h-5 w-5" />
+                            Termin oder Serie planen
+                        </a>
+                    </div>
                 @endif
             </div>
         </div>
@@ -93,7 +103,7 @@
     @endif
 
     @if($canManageEvents)
-        <section class="grid gap-3 lg:grid-cols-3">
+        <section class="grid gap-3 lg:grid-cols-5">
             <a href="{{ route('events.create') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
                 <div class="flex items-start gap-3">
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-white">
@@ -126,6 +136,30 @@
                     <div>
                         <h2 class="text-base font-semibold text-slate-950">Kategorien</h2>
                         <p class="mt-1 text-sm leading-6 text-slate-500">Farben und Bereiche vorbereiten, damit der Kalender lesbar bleibt.</p>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ route('events.poster') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
+                <div class="flex items-start gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+                        <x-heroicon-o-printer class="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-950">Aushang</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Termine auswählen und als ruhige Übersicht für das Vereinsheim drucken.</p>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ route('events.attendance.report') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
+                <div class="flex items-start gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                        <x-heroicon-o-chart-bar class="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h2 class="text-base font-semibold text-slate-950">Anwesenheit</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">Pflichtstunden, Teilnehmer und offene Stunden auswerten.</p>
                     </div>
                 </div>
             </a>

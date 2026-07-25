@@ -104,6 +104,34 @@
                         <div class="mt-1 text-xs text-slate-500">Optional gepflegte Zuständigkeit</div>
                     </div>
                 </div>
+
+                <div class="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Aktivitätssteuerung</div>
+                            <h2 class="mt-2 text-lg font-semibold text-slate-950">Für wen und wie?</h2>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">Diese Vorgaben steuern Rückmeldungen, Anwesenheit und spätere Auswertungen.</p>
+                        </div>
+                        <div class="grid gap-2 sm:grid-cols-2 lg:min-w-[460px]">
+                            <div class="rounded-xl bg-slate-50 px-4 py-3">
+                                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Zielgruppe</div>
+                                <div class="mt-1 text-sm font-semibold text-slate-950">{{ $event->targetTag?->name ?? 'Alle aktiven Mitglieder' }}</div>
+                            </div>
+                            <div class="rounded-xl bg-slate-50 px-4 py-3">
+                                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Rückmeldung</div>
+                                <div class="mt-1 text-sm font-semibold text-slate-950">{{ $event->response_required ? 'Erwartet' : 'Nicht erforderlich' }}</div>
+                            </div>
+                            <div class="rounded-xl bg-slate-50 px-4 py-3">
+                                <div class="text-xs font-semibold uppercase tracking-wide text-slate-500">Anwesenheit</div>
+                                <div class="mt-1 text-sm font-semibold text-slate-950">{{ $event->attendance_enabled ? 'Wird erfasst' : 'Optional' }}</div>
+                            </div>
+                            <div class="rounded-xl {{ $event->counts_toward_required_hours ? 'bg-emerald-50' : 'bg-slate-50' }} px-4 py-3">
+                                <div class="text-xs font-semibold uppercase tracking-wide {{ $event->counts_toward_required_hours ? 'text-emerald-700' : 'text-slate-500' }}">Pflichtstunden</div>
+                                <div class="mt-1 text-sm font-semibold {{ $event->counts_toward_required_hours ? 'text-emerald-950' : 'text-slate-950' }}">{{ $event->counts_toward_required_hours ? 'Wird vorgeschlagen' : 'Nein' }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             @endif
 
             @if(!$isPublicPreview && $event->changeLogs->isNotEmpty())
@@ -186,6 +214,22 @@
             @endif
 
             @if(!$isPublicPreview)
+                @if($canManageEvents)
+                    @include('events.partials.invitations', [
+                        'event' => $event,
+                        'eventInvitations' => $eventInvitations,
+                        'invitationStats' => $invitationStats,
+                        'invitationStatuses' => $invitationStatuses,
+                    ])
+
+                    @include('events.partials.attendance', [
+                        'event' => $event,
+                        'attendanceMembers' => $attendanceMembers,
+                        'attendancesByMember' => $attendancesByMember,
+                        'attendanceStats' => $attendanceStats,
+                    ])
+                @endif
+
                 @include('events.partials.schedule', [
                     'event' => $event,
                     'eventShifts' => $eventShifts,

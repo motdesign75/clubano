@@ -18,6 +18,10 @@ class Event extends Model
         'end',
         'is_public',
         'booking_enabled',
+        'attendance_enabled',
+        'response_required',
+        'counts_toward_required_hours',
+        'reminders_enabled',
         'price_per_person',
         'currency',
         'max_participants_per_booking',
@@ -25,6 +29,7 @@ class Event extends Model
         'tenant_id',
         'category_id',
         'responsible_user_id',
+        'target_tag_id',
         'created_by',
         'updated_by',
         'recurrence_group_id',
@@ -38,6 +43,10 @@ class Event extends Model
         'end' => 'datetime',
         'is_public' => 'boolean',
         'booking_enabled' => 'boolean',
+        'attendance_enabled' => 'boolean',
+        'response_required' => 'boolean',
+        'counts_toward_required_hours' => 'boolean',
+        'reminders_enabled' => 'boolean',
         'price_per_person' => 'decimal:2',
         'max_participants_per_booking' => 'integer',
         'recurrence_interval' => 'integer',
@@ -74,6 +83,11 @@ class Event extends Model
     public function responsibleUser()
     {
         return $this->belongsTo(User::class, 'responsible_user_id');
+    }
+
+    public function targetTag()
+    {
+        return $this->belongsTo(Tag::class, 'target_tag_id');
     }
 
     public function creator()
@@ -122,6 +136,16 @@ class Event extends Model
     public function shiftAssignments()
     {
         return $this->hasMany(EventShiftAssignment::class)->latest();
+    }
+
+    public function attendances()
+    {
+        return $this->hasMany(EventAttendance::class);
+    }
+
+    public function invitations()
+    {
+        return $this->hasMany(EventInvitation::class);
     }
 
     public function getImageUrlAttribute(): ?string

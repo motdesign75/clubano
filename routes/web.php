@@ -57,6 +57,10 @@ Route::get('/vereine/{tenantSlug}/veranstaltungen', [EventController::class, 'pu
     ->name('events.public.index');
 Route::get('/vereine/{tenantSlug}/veranstaltungen/embed', [EventController::class, 'publicEmbed'])
     ->name('events.public.embed');
+Route::get('/einladungen/{token}', [EventController::class, 'invitationResponse'])
+    ->name('events.invitations.public.show');
+Route::post('/einladungen/{token}', [EventController::class, 'storeInvitationResponse'])
+    ->name('events.invitations.public.store');
 Route::get('/dokumentation', [DocumentationController::class, 'index'])->name('docs.index');
 Route::get('/dokumentation/assets/{filename}', [DocumentationController::class, 'asset'])->name('docs.asset');
 Route::get('/dokumentation/{path}', [DocumentationController::class, 'show'])
@@ -266,6 +270,9 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
 
     // Veranstaltungen
     $when($C.'EventController', function($cls){
+        Route::get('/events/aushang', [$cls, 'poster'])->middleware('tenant.role:Mitarbeiter')->name('events.poster');
+        Route::post('/events/aushang/druck', [$cls, 'posterPrint'])->middleware('tenant.role:Mitarbeiter')->name('events.poster.print');
+        Route::get('/events/anwesenheit/auswertung', [$cls, 'attendanceReport'])->middleware('tenant.role:Mitarbeiter')->name('events.attendance.report');
         Route::resource('events', $cls)->except(['show'])->middleware('tenant.role:Lesen')->where(['event' => '[0-9]+']);
         Route::get('/events/{event}', [$cls, 'show'])->whereNumber('event')->name('events.show');
         Route::get('/events/{event}/teilnehmer/export', [$cls, 'participantsExport'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.export');
@@ -274,6 +281,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/events/{event}/dienstplan/pdf', [$cls, 'schedulePdf'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.pdf');
         Route::get('/events/{event}/dienstplan/mitglieder-pdf', [$cls, 'scheduleMemberPdf'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.member-pdf');
         Route::get('/events/{event}/dienstplan/export', [$cls, 'scheduleExport'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.export');
+        Route::post('/events/{event}/einladungen/synchronisieren', [$cls, 'syncInvitations'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.invitations.sync');
+        Route::post('/events/{event}/einladungen/mail', [$cls, 'sendInvitationMails'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.invitations.mail');
+        Route::put('/events/{event}/einladungen', [$cls, 'updateInvitations'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.invitations.update');
+        Route::put('/events/{event}/anwesenheit', [$cls, 'updateAttendance'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.attendance.update');
         Route::post('/events/{event}/shifts', [$cls, 'storeShift'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.shifts.store');
         Route::put('/events/{event}/shifts/{shift}', [$cls, 'updateShift'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.shifts.update');
         Route::delete('/events/{event}/shifts/{shift}', [$cls, 'destroyShift'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.shifts.destroy');

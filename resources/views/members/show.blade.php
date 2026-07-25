@@ -167,6 +167,7 @@
         <div class="mt-3 flex flex-wrap gap-2">
             <a href="#stammdaten" class="rounded-full bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white">Stammdaten</a>
             <a href="#mitgliedschaft" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Mitgliedschaft</a>
+            <a href="#pflichtstunden" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Pflichtstunden</a>
             <a href="#datenschutz" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Datenschutz</a>
             <a href="#finanzen" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Finanzen</a>
             <a href="#aktivitaet" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Aktivität</a>
@@ -286,6 +287,50 @@
                             <div class="mt-1">{{ $accountHolderAddress }}</div>
                         </div>
                     @endif
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="pflichtstunden" class="rounded-2xl border border-slate-200 bg-white p-6 scroll-mt-6">
+        <div class="grid gap-6 xl:grid-cols-4">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Pflichtstunden</div>
+                <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Soll, geleistet, offen</h2>
+                <p class="mt-2 text-sm leading-6 text-slate-500">Gezählt werden nur Anwesenheiten, die bei einer Veranstaltung ausdrücklich als Pflichtstunden markiert wurden.</p>
+            </div>
+
+            <div class="space-y-5 xl:col-span-3">
+                <div class="grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-2xl bg-slate-50 px-5 py-4">
+                        <div class="text-sm font-medium text-slate-500">Soll</div>
+                        <div class="mt-2 text-2xl font-semibold text-slate-950">{{ number_format($serviceHoursStats['required'], 2, ',', '.') }} h</div>
+                    </div>
+                    <div class="rounded-2xl bg-emerald-50 px-5 py-4">
+                        <div class="text-sm font-medium text-emerald-700">Geleistet</div>
+                        <div class="mt-2 text-2xl font-semibold text-emerald-950">{{ number_format($serviceHoursStats['completed'], 2, ',', '.') }} h</div>
+                    </div>
+                    <div class="rounded-2xl bg-amber-50 px-5 py-4">
+                        <div class="text-sm font-medium text-amber-700">Offen</div>
+                        <div class="mt-2 text-2xl font-semibold text-amber-950">{{ number_format($serviceHoursStats['remaining'], 2, ',', '.') }} h</div>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200">
+                    <div class="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-950">Gezählte Anwesenheiten</div>
+                    <div class="divide-y divide-slate-100">
+                        @forelse($serviceAttendances as $attendance)
+                            <a href="{{ $attendance->event ? route('events.show', $attendance->event) : '#' }}" class="grid gap-2 px-4 py-3 text-sm hover:bg-slate-50 sm:grid-cols-[minmax(0,1fr),120px] sm:items-center">
+                                <div class="min-w-0">
+                                    <div class="font-semibold text-slate-900">{{ $attendance->event?->title ?? 'Gelöschte Veranstaltung' }}</div>
+                                    <div class="mt-1 text-slate-500">{{ optional($attendance->event?->start)->format('d.m.Y H:i') ?: 'ohne Datum' }}</div>
+                                </div>
+                                <div class="font-semibold text-slate-950 sm:text-right">{{ number_format((float) $attendance->hours, 2, ',', '.') }} h</div>
+                            </a>
+                        @empty
+                            <div class="px-4 py-8 text-center text-sm text-slate-500">Noch keine gezählten Pflichtstunden vorhanden.</div>
+                        @endforelse
+                    </div>
                 </div>
             </div>
         </div>

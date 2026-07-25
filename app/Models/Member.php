@@ -33,6 +33,7 @@ class Member extends Model
         'membership_id',
         'membership_amount',
         'membership_interval',
+        'required_service_hours',
 
         // Block: Zahlung
         'payment_method',
@@ -91,6 +92,7 @@ class Member extends Model
         'last_contacted_at'=> 'datetime',
         'deletion_requested_at' => 'datetime',
         'archived_at' => 'datetime',
+        'required_service_hours' => 'decimal:2',
     ];
 
     protected $appends = [
@@ -160,6 +162,11 @@ class Member extends Model
     public function credits()
     {
         return $this->hasMany(MemberCredit::class)->latest('credited_at')->latest('id');
+    }
+
+    public function eventAttendances()
+    {
+        return $this->hasMany(EventAttendance::class);
     }
 
     public function availableCredits()

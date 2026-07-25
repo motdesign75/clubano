@@ -3,6 +3,16 @@
     $bookingEnabled = (bool) old('booking_enabled', $event->booking_enabled ?? false);
     $isEditingEvent = $event->exists;
     $recurrenceEnabled = (bool) old('recurrence_enabled', false);
+    $categoryProfiles = ($categories ?? collect())->mapWithKeys(fn ($category) => [
+        $category->id => [
+            'visibility' => $category->default_visibility ?: 'public',
+            'target_tag_id' => $category->default_target_tag_id,
+            'attendance_enabled' => (bool) $category->attendance_enabled_default,
+            'response_required' => (bool) $category->response_required_default,
+            'counts_toward_required_hours' => (bool) $category->counts_toward_required_hours_default,
+            'reminders_enabled' => (bool) $category->reminders_enabled_default,
+        ],
+    ]);
 @endphp
 
 <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr),320px]">
@@ -43,6 +53,30 @@
                        class="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                         Kategorien
                     </a>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div class="flex items-start gap-3">
+                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-slate-700 ring-1 ring-slate-200">
+                            <x-heroicon-o-user-group class="h-5 w-5" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <h3 class="text-sm font-semibold text-slate-950">Für wen ist diese Aktivität?</h3>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">Wähle eine Zielgruppe, damit Einladungen, Rückmeldungen und Auswertungen später eindeutig bleiben.</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <label for="target_tag_id" class="text-sm font-semibold text-slate-900">Zielgruppe</label>
+                        <select name="target_tag_id" id="target_tag_id" class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                            <option value="">Alle aktiven Mitglieder / keine feste Zielgruppe</option>
+                            @foreach(($targetTags ?? collect()) as $tag)
+                                <option value="{{ $tag->id }}" @selected((string) old('target_tag_id', $event->target_tag_id) === (string) $tag->id)>
+                                    {{ $tag->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
 
                 <div>
@@ -164,6 +198,45 @@
         </section>
 
         <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-950">Ablauf</h2>
+            <p class="mt-1 text-sm leading-6 text-slate-500">Clubano nutzt diese Optionen für Rückmeldungen, Anwesenheit und spätere Auswertungen.</p>
+
+            <div class="mt-4 grid gap-2">
+                <label class="flex items-start gap-3 rounded-lg border border-slate-200 px-4 py-3">
+                    <input type="checkbox" name="response_required" id="response_required" value="1" class="mt-1 rounded border-slate-300" @checked(old('response_required', $event->response_required ?? false))>
+                    <span>
+                        <span class="block text-sm font-semibold text-slate-950">Rückmeldung erwarten</span>
+                        <span class="mt-1 block text-sm text-slate-500">Später können Mitglieder zu- oder absagen.</span>
+                    </span>
+                </label>
+
+                <label class="flex items-start gap-3 rounded-lg border border-slate-200 px-4 py-3">
+                    <input type="checkbox" name="attendance_enabled" id="attendance_enabled" value="1" class="mt-1 rounded border-slate-300" @checked(old('attendance_enabled', $event->attendance_enabled ?? false))>
+                    <span>
+                        <span class="block text-sm font-semibold text-slate-950">Anwesenheit erfassen</span>
+                        <span class="mt-1 block text-sm text-slate-500">Trainer oder Vorstand dokumentieren die reale Teilnahme.</span>
+                    </span>
+                </label>
+
+                <label class="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <input type="checkbox" name="counts_toward_required_hours" id="counts_toward_required_hours" value="1" class="mt-1 rounded border-emerald-300 text-emerald-700" @checked(old('counts_toward_required_hours', $event->counts_toward_required_hours ?? false))>
+                    <span>
+                        <span class="block text-sm font-semibold text-emerald-950">Zählt zu Pflichtstunden</span>
+                        <span class="mt-1 block text-sm text-emerald-700">Beim Erfassen wird diese Aktivität als Arbeitszeit vorgeschlagen.</span>
+                    </span>
+                </label>
+
+                <label class="flex items-start gap-3 rounded-lg border border-slate-200 px-4 py-3">
+                    <input type="checkbox" name="reminders_enabled" id="reminders_enabled" value="1" class="mt-1 rounded border-slate-300" @checked(old('reminders_enabled', $event->reminders_enabled ?? false))>
+                    <span>
+                        <span class="block text-sm font-semibold text-slate-950">Erinnerungen vorbereiten</span>
+                        <span class="mt-1 block text-sm text-slate-500">Die eigentliche Automatik folgt im Benachrichtigungsmodul.</span>
+                    </span>
+                </label>
+            </div>
+        </section>
+
+        <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <label class="flex items-start gap-3">
                 <input type="checkbox" name="booking_enabled" value="1" class="mt-1 rounded border-slate-300" @checked($bookingEnabled)>
                 <span>
@@ -217,3 +290,47 @@
         </section>
     </aside>
 </div>
+
+@push('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const profiles = @json($categoryProfiles);
+        const categorySelect = document.getElementById('category_id');
+
+        if (!categorySelect) {
+            return;
+        }
+
+        categorySelect.addEventListener('change', () => {
+            const profile = profiles[categorySelect.value];
+
+            if (!profile) {
+                return;
+            }
+
+            const visibility = document.querySelector(`input[name="is_public"][value="${profile.visibility === 'internal' ? '0' : '1'}"]`);
+            const targetTag = document.getElementById('target_tag_id');
+            const checks = {
+                response_required: document.getElementById('response_required'),
+                attendance_enabled: document.getElementById('attendance_enabled'),
+                counts_toward_required_hours: document.getElementById('counts_toward_required_hours'),
+                reminders_enabled: document.getElementById('reminders_enabled'),
+            };
+
+            if (visibility) {
+                visibility.checked = true;
+            }
+
+            if (targetTag && profile.target_tag_id) {
+                targetTag.value = profile.target_tag_id;
+            }
+
+            Object.entries(checks).forEach(([key, input]) => {
+                if (input) {
+                    input.checked = Boolean(profile[key]);
+                }
+            });
+        });
+    });
+</script>
+@endpush

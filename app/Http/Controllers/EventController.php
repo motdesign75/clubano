@@ -5,15 +5,20 @@ namespace App\Http\Controllers;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\EventInvitationMail;
 use App\Models\Event;
+use App\Models\EventAttendance;
 use App\Models\EventBooking;
 use App\Models\EventChangeLog;
 use App\Models\EventCategory;
+use App\Models\EventInvitation;
 use App\Models\EventShift;
 use App\Models\EventShiftAssignment;
 use App\Models\Document;
 use App\Models\Member;
 use App\Models\PublicForm;
+use App\Models\Tag;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\OnboardingService;
@@ -252,6 +257,75 @@ class EventController extends Controller
         ]);
     }
 
+    public function poster(Request $request)
+    {
+        $tenantId = auth()->user()->tenant_id;
+        $filters = $request->validate([
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+            'category_id' => ['nullable', Rule::exists('event_categories', 'id')->where('tenant_id', $tenantId)],
+            'visibility' => 'nullable|in:all,public,internal',
+        ]);
+
+        $dateFrom = Carbon::parse($filters['date_from'] ?? now()->toDateString())->startOfDay();
+        $dateTo = Carbon::parse($filters['date_to'] ?? now()->addMonths(3)->toDateString())->endOfDay();
+        $visibility = $filters['visibility'] ?? 'all';
+
+        $events = Event::query()
+            ->with(['category', 'responsibleUser'])
+            ->where('tenant_id', $tenantId)
+            ->where('end', '>=', $dateFrom)
+            ->where('start', '<=', $dateTo)
+            ->when($filters['category_id'] ?? null, fn ($query, $categoryId) => $query->where('category_id', $categoryId))
+            ->when($visibility === 'public', fn ($query) => $query->where('is_public', true))
+            ->when($visibility === 'internal', fn ($query) => $query->where('is_public', false))
+            ->orderBy('start')
+            ->get();
+
+        return view('events.poster', [
+            'events' => $events,
+            'categories' => EventCategory::query()->orderBy('name')->get(),
+            'filters' => [
+                'date_from' => $dateFrom->toDateString(),
+                'date_to' => $dateTo->toDateString(),
+                'category_id' => $filters['category_id'] ?? '',
+                'visibility' => $visibility,
+            ],
+        ]);
+    }
+
+    public function posterPrint(Request $request)
+    {
+        $tenantId = auth()->user()->tenant_id;
+        $validated = $request->validate([
+            'event_ids' => 'required|array|min:1',
+            'event_ids.*' => ['integer', Rule::exists('events', 'id')->where('tenant_id', $tenantId)],
+            'headline' => 'nullable|string|max:120',
+            'note' => 'nullable|string|max:500',
+        ]);
+
+        $eventIds = collect($validated['event_ids'])->map(fn ($id) => (int) $id)->unique()->values();
+        $events = Event::query()
+            ->with(['category', 'responsibleUser', 'tenant'])
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $eventIds)
+            ->orderBy('start')
+            ->get();
+
+        if ($events->isEmpty()) {
+            return back()
+                ->withErrors(['event_ids' => 'Bitte wähle mindestens eine Veranstaltung für den Aushang aus.'])
+                ->withInput();
+        }
+
+        return view('events.poster-print', [
+            'events' => $events,
+            'tenant' => $events->first()->tenant,
+            'headline' => $validated['headline'] ?? 'Aktuelle Termine',
+            'note' => $validated['note'] ?? null,
+        ]);
+    }
+
     /**
      * Neues Event-Formular anzeigen
      */
@@ -261,8 +335,13 @@ class EventController extends Controller
             'event' => new Event([
                 'is_public' => true,
                 'booking_enabled' => false,
+                'attendance_enabled' => false,
+                'response_required' => false,
+                'counts_toward_required_hours' => false,
+                'reminders_enabled' => false,
             ]),
-            'categories' => EventCategory::query()->orderBy('name')->get(),
+            'categories' => EventCategory::query()->with('defaultTargetTag')->orderBy('name')->get(),
+            'targetTags' => Tag::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
             'users' => User::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
         ]);
     }
@@ -314,8 +393,13 @@ class EventController extends Controller
             'end'         => 'required|date|after_or_equal:start',
             'category_id' => ['nullable', Rule::exists('event_categories', 'id')->where('tenant_id', $tenantId)],
             'responsible_user_id' => ['nullable', Rule::exists('users', 'id')->where('tenant_id', $tenantId)],
+            'target_tag_id' => ['nullable', Rule::exists('tags', 'id')->where('tenant_id', $tenantId)],
             'is_public'   => 'required|boolean',
             'booking_enabled' => 'nullable|boolean',
+            'attendance_enabled' => 'nullable|boolean',
+            'response_required' => 'nullable|boolean',
+            'counts_toward_required_hours' => 'nullable|boolean',
+            'reminders_enabled' => 'nullable|boolean',
             'price_per_person' => 'nullable|numeric|min:0',
             'currency' => 'nullable|string|size:3',
             'max_participants_per_booking' => 'nullable|integer|min:1|max:50',
@@ -331,10 +415,15 @@ class EventController extends Controller
             'location'    => $validated['location'] ?? null,
             'category_id' => $validated['category_id'] ?? null,
             'responsible_user_id' => $validated['responsible_user_id'] ?? null,
+            'target_tag_id' => $validated['target_tag_id'] ?? null,
             'start'       => $validated['start'],
             'end'         => $validated['end'],
             'is_public'   => (bool) $validated['is_public'],
             'booking_enabled' => $request->boolean('booking_enabled'),
+            'attendance_enabled' => $request->boolean('attendance_enabled'),
+            'response_required' => $request->boolean('response_required'),
+            'counts_toward_required_hours' => $request->boolean('counts_toward_required_hours'),
+            'reminders_enabled' => $request->boolean('reminders_enabled'),
             'price_per_person' => $request->boolean('booking_enabled') ? ($validated['price_per_person'] ?? 0) : 0,
             'currency' => strtoupper($validated['currency'] ?? ($event?->currency ?: 'EUR')),
             'max_participants_per_booking' => $validated['max_participants_per_booking'] ?? ($event?->max_participants_per_booking ?: 1),
@@ -433,13 +522,14 @@ class EventController extends Controller
     public function edit(Event $event)
     {
         $this->authorizeEvent($event);
-        $event->load(['activeBookingForm.fields', 'shifts.assignments.member', 'category', 'tenant', 'responsibleUser', 'creator', 'updater', 'changeLogs.user']);
+        $event->load(['activeBookingForm.fields', 'shifts.assignments.member', 'category.defaultTargetTag', 'targetTag', 'tenant', 'responsibleUser', 'creator', 'updater', 'changeLogs.user']);
         $event->setAttribute('conflicting_events', $this->findConflictingEvents($event));
         $event->setAttribute('conflict_count', $event->conflicting_events->count());
 
         return view('events.edit', [
             'event' => $event,
-            'categories' => EventCategory::query()->orderBy('name')->get(),
+            'categories' => EventCategory::query()->with('defaultTargetTag')->orderBy('name')->get(),
+            'targetTags' => Tag::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
             'users' => User::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
             ...$this->participantViewData($event),
             ...$this->shiftViewData($event),
@@ -484,15 +574,270 @@ class EventController extends Controller
     public function show(Event $event)
     {
         $this->authorizeEvent($event);
-        $event->load(['tenant', 'activeBookingForm.fields', 'shifts.assignments.member', 'category', 'responsibleUser', 'creator', 'updater', 'changeLogs.user']);
+        $event->load(['tenant', 'activeBookingForm.fields', 'shifts.assignments.member', 'category', 'targetTag', 'responsibleUser', 'creator', 'updater', 'changeLogs.user', 'attendances.member', 'invitations.member.tags']);
         $event->setAttribute('conflicting_events', $this->findConflictingEvents($event));
         $event->setAttribute('conflict_count', $event->conflicting_events->count());
 
         return view('events.show', [
             'event' => $event,
             'isPublicPreview' => false,
+            ...$this->invitationViewData($event),
+            ...$this->attendanceViewData($event),
             ...$this->participantViewData($event),
             ...$this->shiftViewData($event),
+        ]);
+    }
+
+    public function syncInvitations(Event $event)
+    {
+        $this->authorizeEvent($event);
+
+        $members = $this->ensureInvitationsForEvent($event);
+
+        return redirect()->route('events.show', $event)->with('success', $members->count() . ' Mitglieder sind in der Einladungsliste.');
+    }
+
+    public function sendInvitationMails(Event $event)
+    {
+        $this->authorizeEvent($event);
+
+        $this->ensureInvitationsForEvent($event);
+        $event->load(['tenant', 'invitations.member']);
+
+        $tenant = $event->tenant;
+        $fromAddress = $tenant->mail_from_address ?: config('mail.from.address');
+        $fromName = $tenant->mail_from_name ?: ($tenant->name ?: config('mail.from.name'));
+        $replyToAddress = filled($tenant->email) && $tenant->email !== $fromAddress ? $tenant->email : null;
+        $sentCount = 0;
+        $skippedCount = 0;
+
+        foreach ($event->invitations as $invitation) {
+            $member = $invitation->member;
+
+            if (! $member || blank($member->email) || blank($invitation->response_token)) {
+                $skippedCount++;
+                continue;
+            }
+
+            $responseUrl = route('events.invitations.public.show', $invitation->response_token);
+            Mail::to($member->email, $member->full_name ?: null)->send(
+                new EventInvitationMail($invitation, $responseUrl, $fromAddress, $fromName, $replyToAddress)
+            );
+
+            $sentCount++;
+        }
+
+        $message = $sentCount . ' Einladung' . ($sentCount === 1 ? '' : 'en') . ' per Mail gesendet.';
+
+        if ($skippedCount > 0) {
+            $message .= ' ' . $skippedCount . ' ohne E-Mail-Adresse übersprungen.';
+        }
+
+        return redirect()->route('events.show', $event)->with('success', $message);
+    }
+
+    public function updateInvitations(Request $request, Event $event)
+    {
+        $this->authorizeEvent($event);
+
+        $validated = $request->validate([
+            'invitations' => 'nullable|array',
+            'invitations.*.id' => ['required', Rule::exists('event_invitations', 'id')->where('tenant_id', $event->tenant_id)],
+            'invitations.*.status' => ['required', Rule::in(EventInvitation::STATUSES)],
+            'invitations.*.note' => 'nullable|string|max:500',
+        ]);
+
+        foreach ($validated['invitations'] ?? [] as $invitationData) {
+            $invitation = EventInvitation::query()
+                ->where('tenant_id', $event->tenant_id)
+                ->where('event_id', $event->id)
+                ->findOrFail($invitationData['id']);
+
+            $statusChanged = $invitation->status !== $invitationData['status'];
+
+            $invitation->update([
+                'status' => $invitationData['status'],
+                'note' => $invitationData['note'] ?? null,
+                'responded_at' => $statusChanged ? now() : $invitation->responded_at,
+                'recorded_by' => auth()->id(),
+            ]);
+        }
+
+        return redirect()->route('events.show', $event)->with('success', 'Rückmeldungen wurden gespeichert.');
+    }
+
+    public function invitationResponse(string $token)
+    {
+        $invitation = EventInvitation::query()
+            ->with(['event.tenant', 'event.category', 'member'])
+            ->where('response_token', $token)
+            ->firstOrFail();
+
+        return view('events.invitation-response', [
+            'invitation' => $invitation,
+            'event' => $invitation->event,
+            'member' => $invitation->member,
+        ]);
+    }
+
+    public function storeInvitationResponse(Request $request, string $token)
+    {
+        $invitation = EventInvitation::query()
+            ->with(['event.tenant', 'member'])
+            ->where('response_token', $token)
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'status' => ['required', Rule::in([
+                EventInvitation::STATUS_ACCEPTED,
+                EventInvitation::STATUS_DECLINED,
+                EventInvitation::STATUS_MAYBE,
+            ])],
+            'note' => 'nullable|string|max:500',
+        ]);
+
+        $invitation->update([
+            'status' => $validated['status'],
+            'note' => $validated['note'] ?? null,
+            'responded_at' => now(),
+            'recorded_by' => null,
+        ]);
+
+        return redirect()->route('events.invitations.public.show', $invitation->response_token)
+            ->with('success', 'Danke, deine Rückmeldung wurde gespeichert.');
+    }
+
+    public function updateAttendance(Request $request, Event $event)
+    {
+        $this->authorizeEvent($event);
+        $tenantId = auth()->user()->tenant_id;
+
+        $validated = $request->validate([
+            'attendances' => 'nullable|array',
+            'attendances.*.member_id' => ['required', Rule::exists('members', 'id')->where('tenant_id', $tenantId)],
+            'attendances.*.attended' => 'nullable|boolean',
+            'attendances.*.hours' => 'nullable|numeric|min:0|max:999.99',
+            'attendances.*.counts_toward_required_hours' => 'nullable|boolean',
+            'attendances.*.note' => 'nullable|string|max:500',
+        ]);
+
+        foreach ($validated['attendances'] ?? [] as $attendanceData) {
+            $attended = (bool) ($attendanceData['attended'] ?? false);
+            $hours = $attended ? round((float) ($attendanceData['hours'] ?? 0), 2) : 0;
+
+            EventAttendance::query()->updateOrCreate(
+                [
+                    'event_id' => $event->id,
+                    'member_id' => $attendanceData['member_id'],
+                ],
+                [
+                    'tenant_id' => $tenantId,
+                    'attended' => $attended,
+                    'hours' => $hours,
+                    'counts_toward_required_hours' => $attended && (bool) ($attendanceData['counts_toward_required_hours'] ?? false),
+                    'note' => $attendanceData['note'] ?? null,
+                    'recorded_by' => auth()->id(),
+                ]
+            );
+        }
+
+        return redirect()->route('events.show', $event)->with('success', 'Anwesenheit wurde gespeichert.');
+    }
+
+    public function attendanceReport(Request $request)
+    {
+        $tenantId = auth()->user()->tenant_id;
+        $today = now();
+
+        $validated = $request->validate([
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+            'member_id' => ['nullable', Rule::exists('members', 'id')->where('tenant_id', $tenantId)],
+            'only_open' => 'nullable|boolean',
+        ]);
+
+        $dateFrom = filled($validated['date_from'] ?? null)
+            ? Carbon::parse($validated['date_from'])->startOfDay()
+            : $today->copy()->startOfYear();
+        $dateTo = filled($validated['date_to'] ?? null)
+            ? Carbon::parse($validated['date_to'])->endOfDay()
+            : $today->copy()->endOfYear();
+        $memberId = $validated['member_id'] ?? null;
+        $onlyOpen = $request->boolean('only_open');
+
+        $members = Member::query()
+            ->where('tenant_id', $tenantId)
+            ->whereNull('archived_at')
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
+
+        $attendances = EventAttendance::query()
+            ->with(['event.category', 'member'])
+            ->where('tenant_id', $tenantId)
+            ->where('attended', true)
+            ->whereHas('event', function ($query) use ($dateFrom, $dateTo) {
+                $query->whereBetween('start', [$dateFrom, $dateTo]);
+            })
+            ->when($memberId, fn ($query) => $query->where('member_id', $memberId))
+            ->get();
+
+        $attendancesByMember = $attendances->groupBy('member_id');
+        $memberSummaries = $members
+            ->when($memberId, fn ($collection) => $collection->where('id', (int) $memberId))
+            ->map(function (Member $member) use ($attendancesByMember) {
+                $memberAttendances = $attendancesByMember->get($member->id, collect());
+                $countedHours = round((float) $memberAttendances->where('counts_toward_required_hours', true)->sum('hours'), 2);
+                $totalHours = round((float) $memberAttendances->sum('hours'), 2);
+                $requiredHours = round((float) $member->required_service_hours, 2);
+                $remainingHours = max(0, round($requiredHours - $countedHours, 2));
+
+                return [
+                    'member' => $member,
+                    'attendances_count' => $memberAttendances->count(),
+                    'total_hours' => $totalHours,
+                    'counted_hours' => $countedHours,
+                    'required_hours' => $requiredHours,
+                    'remaining_hours' => $remainingHours,
+                    'completion_percent' => $requiredHours > 0 ? min(100, round(($countedHours / $requiredHours) * 100)) : 100,
+                ];
+            })
+            ->filter(fn ($summary) => ! $onlyOpen || $summary['remaining_hours'] > 0)
+            ->sortByDesc('remaining_hours')
+            ->values();
+
+        $eventSummaries = $attendances
+            ->groupBy('event_id')
+            ->map(function ($eventAttendances) {
+                $event = $eventAttendances->first()->event;
+
+                return [
+                    'event' => $event,
+                    'present' => $eventAttendances->count(),
+                    'total_hours' => round((float) $eventAttendances->sum('hours'), 2),
+                    'counted_hours' => round((float) $eventAttendances->where('counts_toward_required_hours', true)->sum('hours'), 2),
+                ];
+            })
+            ->sortBy(fn ($summary) => $summary['event']?->start)
+            ->values();
+
+        return view('events.attendance-report', [
+            'members' => $members,
+            'memberSummaries' => $memberSummaries,
+            'eventSummaries' => $eventSummaries,
+            'filters' => [
+                'date_from' => $dateFrom->toDateString(),
+                'date_to' => $dateTo->toDateString(),
+                'member_id' => $memberId,
+                'only_open' => $onlyOpen,
+            ],
+            'reportStats' => [
+                'present_records' => $attendances->count(),
+                'members_with_attendance' => $attendances->pluck('member_id')->unique()->count(),
+                'total_hours' => round((float) $attendances->sum('hours'), 2),
+                'counted_hours' => round((float) $attendances->where('counts_toward_required_hours', true)->sum('hours'), 2),
+                'open_members' => $memberSummaries->where('remaining_hours', '>', 0)->count(),
+            ],
         ]);
     }
 
@@ -1078,6 +1423,104 @@ class EventController extends Controller
                 'coverage_status' => $openSlots > 0 ? 'understaffed' : ($totalConfirmed > $totalRequired ? 'overstaffed' : 'full'),
             ],
         ];
+    }
+
+    private function attendanceViewData(Event $event): array
+    {
+        $event->loadMissing(['attendances.member']);
+
+        $members = $this->invitableMembersForEvent($event);
+
+        $attendancesByMember = $event->attendances->keyBy('member_id');
+
+        return [
+            'attendanceMembers' => $members,
+            'attendancesByMember' => $attendancesByMember,
+            'attendanceStats' => [
+                'present' => $event->attendances->where('attended', true)->count(),
+                'total_hours' => round((float) $event->attendances->where('attended', true)->sum('hours'), 2),
+                'counted_hours' => round((float) $event->attendances
+                    ->where('attended', true)
+                    ->where('counts_toward_required_hours', true)
+                    ->sum('hours'), 2),
+            ],
+        ];
+    }
+
+    private function invitationViewData(Event $event): array
+    {
+        $event->loadMissing(['invitations.member']);
+
+        $event->invitations
+            ->whereNull('response_token')
+            ->each(fn (EventInvitation $invitation) => $invitation->update(['response_token' => EventInvitation::newResponseToken()]));
+
+        $event->load('invitations.member');
+
+        $invitations = $event->invitations
+            ->filter(fn (EventInvitation $invitation) => $invitation->member !== null)
+            ->sortBy(fn (EventInvitation $invitation) => $invitation->member->last_name . ' ' . $invitation->member->first_name)
+            ->values();
+
+        $statusCounts = $invitations->countBy('status');
+        $targetMemberCount = $this->invitableMembersForEvent($event)->count();
+
+        return [
+            'eventInvitations' => $invitations,
+            'invitationStats' => [
+                'target_members' => $targetMemberCount,
+                'total' => $invitations->count(),
+                'accepted' => (int) ($statusCounts[EventInvitation::STATUS_ACCEPTED] ?? 0),
+                'declined' => (int) ($statusCounts[EventInvitation::STATUS_DECLINED] ?? 0),
+                'maybe' => (int) ($statusCounts[EventInvitation::STATUS_MAYBE] ?? 0),
+                'open' => $invitations->whereIn('status', [EventInvitation::STATUS_INVITED, EventInvitation::STATUS_NO_RESPONSE])->count(),
+            ],
+            'invitationStatuses' => [
+                EventInvitation::STATUS_INVITED => 'Eingeladen',
+                EventInvitation::STATUS_ACCEPTED => 'Zusage',
+                EventInvitation::STATUS_DECLINED => 'Absage',
+                EventInvitation::STATUS_MAYBE => 'Vielleicht',
+                EventInvitation::STATUS_NO_RESPONSE => 'Keine Rückmeldung',
+                EventInvitation::STATUS_EXCUSED => 'Entschuldigt',
+            ],
+        ];
+    }
+
+    private function invitableMembersForEvent(Event $event)
+    {
+        return Member::query()
+            ->where('tenant_id', $event->tenant_id)
+            ->whereNull('archived_at')
+            ->when($event->target_tag_id, fn ($query) => $query->whereHas('tags', fn ($tagQuery) => $tagQuery->where('tags.id', $event->target_tag_id)))
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
+    }
+
+    private function ensureInvitationsForEvent(Event $event)
+    {
+        $members = $this->invitableMembersForEvent($event);
+
+        foreach ($members as $member) {
+            EventInvitation::query()->firstOrCreate(
+                [
+                    'event_id' => $event->id,
+                    'member_id' => $member->id,
+                ],
+                [
+                    'tenant_id' => $event->tenant_id,
+                    'status' => EventInvitation::STATUS_INVITED,
+                    'recorded_by' => auth()->id(),
+                ]
+            );
+        }
+
+        $event->invitations()
+            ->whereNull('response_token')
+            ->get()
+            ->each(fn (EventInvitation $invitation) => $invitation->update(['response_token' => EventInvitation::newResponseToken()]));
+
+        return $members;
     }
 
     private function eventBookingDescription(Event $event): string

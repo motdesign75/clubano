@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MemberCredit;
 use App\Models\Member;
 use App\Models\MemberCommunicationLog;
+use App\Models\EventAttendance;
 use App\Models\CustomMemberField;
 use App\Models\Invoice;
 use App\Models\PublicFormSubmission;
@@ -270,6 +271,30 @@ class MemberController extends Controller
             ->take(12)
             ->get();
 
+        $serviceAttendances = EventAttendance::query()
+            ->where('tenant_id', $member->tenant_id)
+            ->where('member_id', $member->id)
+            ->where('attended', true)
+            ->where('counts_toward_required_hours', true)
+            ->with('event')
+            ->latest()
+            ->take(8)
+            ->get();
+
+        $completedServiceHours = (float) EventAttendance::query()
+            ->where('tenant_id', $member->tenant_id)
+            ->where('member_id', $member->id)
+            ->where('attended', true)
+            ->where('counts_toward_required_hours', true)
+            ->sum('hours');
+
+        $requiredServiceHours = (float) $member->required_service_hours;
+        $serviceHoursStats = [
+            'required' => round($requiredServiceHours, 2),
+            'completed' => round($completedServiceHours, 2),
+            'remaining' => round(max(0, $requiredServiceHours - $completedServiceHours), 2),
+        ];
+
         $activity = collect()
             ->merge($communicationLogs->map(fn ($log) => [
                 'type' => 'communication',
@@ -307,6 +332,8 @@ class MemberController extends Controller
             'communication_logs' => $communicationLogs->count(),
             'credit_balance' => round((float) $credits->sum('remaining_amount'), 2),
             'credit_total' => round((float) $credits->sum('amount'), 2),
+            'service_hours_completed' => $serviceHoursStats['completed'],
+            'service_hours_remaining' => $serviceHoursStats['remaining'],
             'is_archived' => $member->is_archived,
         ];
 
@@ -318,7 +345,9 @@ class MemberController extends Controller
             'activity',
             'memberStats',
             'communicationLogs',
-            'credits'
+            'credits',
+            'serviceAttendances',
+            'serviceHoursStats'
         ));
     }
 

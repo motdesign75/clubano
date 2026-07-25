@@ -139,6 +139,49 @@
         ],
     ];
 
+    $calendarNav = [
+        [
+            'label' => 'Kalenderübersicht',
+            'hint' => 'Termine sehen und den Monat planen',
+            'route' => route('events.index'),
+            'active' => request()->routeIs('events.index'),
+            'icon' => 'calendar',
+            'minRole' => 'Lesen',
+        ],
+        [
+            'label' => 'Aktivität planen',
+            'hint' => 'Training, Spiel, Sitzung oder Einsatz anlegen',
+            'route' => route('events.create'),
+            'active' => request()->routeIs('events.create'),
+            'icon' => 'plus',
+            'minRole' => 'Mitarbeiter',
+        ],
+        [
+            'label' => 'Aktivitätsarten',
+            'hint' => 'Kategorien, Zielgruppen und Standards steuern',
+            'route' => route('event-categories.index'),
+            'active' => request()->routeIs('event-categories.*'),
+            'icon' => 'swatch',
+            'minRole' => 'Admin',
+        ],
+        [
+            'label' => 'Anwesenheit',
+            'hint' => 'Teilnahme und Pflichtstunden auswerten',
+            'route' => route('events.attendance.report'),
+            'active' => request()->routeIs('events.attendance.report'),
+            'icon' => 'chart-bar',
+            'minRole' => 'Mitarbeiter',
+        ],
+        [
+            'label' => 'Aushang',
+            'hint' => 'Termine für Vereinsheim oder Infofläche drucken',
+            'route' => route('events.poster'),
+            'active' => request()->routeIs('events.poster') || request()->routeIs('events.poster.print'),
+            'icon' => 'printer',
+            'minRole' => 'Mitarbeiter',
+        ],
+    ];
+
     $organizationNav = [
         [
             'label' => 'Verein',
@@ -235,6 +278,11 @@
         ->filter(fn ($items) => !empty($items))
         ->all();
 
+    $calendarNav = collect($calendarNav)
+        ->filter(fn ($item) => ($user?->hasRoleAtLeast($item['minRole'] ?? 'Lesen')) ?? false)
+        ->values()
+        ->all();
+
     $personalNav = collect($personalNav)
         ->filter(fn ($item) => ($user?->hasRoleAtLeast($item['minRole'] ?? 'Lesen')) ?? false)
         ->values()
@@ -315,6 +363,15 @@
                                         @break
                                     @case('calendar')
                                         <x-heroicon-o-calendar class="h-5 w-5 {{ $iconColor }}" />
+                                        @break
+                                    @case('plus')
+                                        <x-heroicon-o-plus class="h-5 w-5 {{ $iconColor }}" />
+                                        @break
+                                    @case('swatch')
+                                        <x-heroicon-o-swatch class="h-5 w-5 {{ $iconColor }}" />
+                                        @break
+                                    @case('printer')
+                                        <x-heroicon-o-printer class="h-5 w-5 {{ $iconColor }}" />
                                         @break
                                     @case('link')
                                         <x-heroicon-o-link class="h-5 w-5 {{ $iconColor }}" />
@@ -401,6 +458,28 @@
                                             @if(!empty($financeItem['hint']))
                                                 <span class="mt-0.5 block text-xs leading-5 {{ $financeItem['active'] ? 'text-slate-600' : 'text-slate-400' }}">
                                                     {{ $financeItem['hint'] }}
+                                                </span>
+                                            @endif
+                                        </span>
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+
+                        @if(($item['label'] ?? null) === 'Kalender' && $item['active'])
+                            <div x-show="!collapsed" class="mt-2 ml-4 space-y-1 border-l border-slate-200 pl-4">
+                                <div class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                    Was möchtest du tun?
+                                </div>
+                                @foreach($calendarNav as $calendarItem)
+                                    <a href="{{ $calendarItem['route'] }}"
+                                       @if($calendarItem['active']) aria-current="page" @endif
+                                       class="flex items-start justify-between rounded-xl px-3 py-2.5 text-sm transition {{ $calendarItem['active'] ? 'bg-slate-100 text-slate-950' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
+                                        <span class="min-w-0">
+                                            <span class="block truncate font-medium {{ $calendarItem['active'] ? 'font-semibold text-slate-950' : '' }}">{{ $calendarItem['label'] }}</span>
+                                            @if(!empty($calendarItem['hint']))
+                                                <span class="mt-0.5 block text-xs leading-5 {{ $calendarItem['active'] ? 'text-slate-600' : 'text-slate-400' }}">
+                                                    {{ $calendarItem['hint'] }}
                                                 </span>
                                             @endif
                                         </span>
