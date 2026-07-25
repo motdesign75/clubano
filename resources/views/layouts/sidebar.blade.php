@@ -248,25 +248,35 @@
 
     if ($user?->isSuperAdmin()) {
         $systemNav[] = [
-            'label' => 'Rollen',
-            'route' => route('roles.edit'),
-            'active' => request()->routeIs('roles.*'),
-            'icon' => 'lock-closed',
-        ];
-        $systemNav[] = [
-            'label' => 'Admin',
+            'label' => 'Admin-Cockpit',
             'route' => route('admin.dashboard'),
-            'active' => request()->routeIs('admin.*'),
+            'active' => request()->routeIs('admin.dashboard') || request()->routeIs('admin.tenants.*'),
             'icon' => 'shield-check',
         ];
+        $systemNav[] = [
+            'label' => 'Betreiberkonto',
+            'route' => route('admin.account'),
+            'active' => request()->routeIs('admin.account'),
+            'icon' => 'user',
+        ];
+        if (filled($user->tenant_id)) {
+            $systemNav[] = [
+                'label' => 'Rollen',
+                'route' => route('roles.edit'),
+                'active' => request()->routeIs('roles.*'),
+                'icon' => 'lock-closed',
+            ];
+        }
     }
 
-    $navGroups = [
-        'Start' => $primaryNav,
-        'Arbeit' => $workNav,
-        'Verwaltung' => $organizationNav,
-        'System' => $systemNav,
-    ];
+    $navGroups = $user?->isSuperAdmin() && blank($user->tenant_id)
+        ? ['System' => $systemNav]
+        : [
+            'Start' => $primaryNav,
+            'Arbeit' => $workNav,
+            'Verwaltung' => $organizationNav,
+            'System' => $systemNav,
+        ];
 
     $navGroups = collect($navGroups)
         ->map(function ($items) use ($user) {

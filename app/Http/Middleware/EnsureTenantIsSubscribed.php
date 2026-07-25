@@ -12,6 +12,16 @@ class EnsureTenantIsSubscribed
     {
         $user = auth()->user();
 
+        if ($user?->isSuperAdmin() && blank($user->tenant_id)) {
+            return redirect()
+                ->route('admin.dashboard')
+                ->with('error', 'Betreiberkonten arbeiten im Admin-Cockpit, nicht in einem Verein.');
+        }
+
+        if ($user?->isSuperAdmin()) {
+            return $next($request);
+        }
+
         if (! $user || ! $user->tenant) {
             return redirect()->route('login');
         }

@@ -653,3 +653,72 @@ test('task quick action starts the next task', function () {
     expect($task->percent_done)->toBe(10);
     expect($task->assignee_id)->toBe($staff->id);
 });
+
+test('superadmin can use the platform cockpit without opening a club dashboard', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [, $superadmin] = createTenantWithUser(User::ROLE_SUPERADMIN, 'platform-admin');
+    [$clubTenant, $clubAdmin] = createTenantWithUser(User::ROLE_ADMIN, 'new-club');
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $clubTenant->id,
+        'first_name' => 'Neues',
+        'last_name' => 'Mitglied',
+        'email' => 'mitglied@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    Event::withoutGlobalScopes()->create([
+        'tenant_id' => $clubTenant->id,
+        'title' => 'Probetraining',
+        'start' => now()->addWeek(),
+        'end' => now()->addWeek()->addHour(),
+    ]);
+
+    $this->actingAs($superadmin)
+        ->get('/')
+        ->assertRedirect(route('admin.dashboard'));
+
+    $dashboard = $this->actingAs($superadmin)->get(route('admin.dashboard'));
+
+    $dashboard->assertOk();
+    $dashboard->assertSee('Admin-Cockpit');
+    $dashboard->assertSee($clubTenant->name);
+    $dashboard->assertSee('360-Grad-Sicht');
+    $dashboard->assertSee('Alle Vereine');
+
+    $detail = $this->actingAs($superadmin)->get(route('admin.tenants.show', $clubTenant));
+
+    $detail->assertOk();
+    $detail->assertSee($clubTenant->name);
+    $detail->assertSee('Mitglieder aktiv');
+    $detail->assertSee('Probetraining');
+    $detail->assertSee($clubAdmin->email);
+});
+
+test('operator superadmin is not tied to a club account', function () {
+    $operator = User::factory()->create([
+        'tenant_id' => null,
+        'role' => User::ROLE_SUPERADMIN,
+        'email_verified_at' => now(),
+    ]);
+
+    $this->actingAs($operator)
+        ->get('/')
+        ->assertRedirect(route('admin.dashboard'));
+
+    $this->actingAs($operator)
+        ->get(route('admin.dashboard'))
+        ->assertOk()
+        ->assertSee('Admin-Cockpit');
+
+    $this->actingAs($operator)
+        ->get(route('dashboard'))
+        ->assertRedirect(route('admin.dashboard'));
+
+    $this->actingAs($operator)
+        ->get(route('admin.account'))
+        ->assertOk()
+        ->assertSee('Betreiberkonto')
+        ->assertSee('Kennwort ändern');
+});

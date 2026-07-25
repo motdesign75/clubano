@@ -33,6 +33,10 @@ class AuthenticatedSessionController extends Controller
             'last_login_ip' => $request->ip(),
         ])->save();
 
+        if ($request->user()?->isSuperAdmin() && blank($request->user()->tenant_id)) {
+            return redirect()->intended(route('admin.dashboard', absolute: false));
+        }
+
         if ($request->user() && ! $request->user()->hasVerifiedEmail()) {
             return redirect()->route('verification.notice');
         }

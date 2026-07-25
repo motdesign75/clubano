@@ -42,8 +42,14 @@ $when = function (string $class, callable $cb) {
 Route::post('/stripe/webhook', [StripeWebhookController::class, 'handle'])
     ->name('stripe.webhook');
 
-// Startseite → Weiterleitung zum Dashboard
-Route::get('/', fn () => redirect()->route('dashboard'));
+// Startseite → Betreiber direkt ins Cockpit, Vereinsnutzer ins Dashboard
+Route::get('/', function () {
+    if (auth()->check() && auth()->user()->isSuperAdmin()) {
+        return redirect()->route('admin.dashboard');
+    }
+
+    return redirect()->route('dashboard');
+});
 
 // Öffentlich sichtbare Seiten
 Route::view('/impressum', 'impressum')->name('impressum');
@@ -544,6 +550,9 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () {
 // Admin-Dashboard bleibt unabhängig von der Paywall
 Route::middleware(['auth', 'superadmin'])->prefix('admin')->group(function () {
     Route::get('/', [AdminDashboardController::class, 'index'])->name('admin.dashboard');
+    Route::get('/konto', [AdminDashboardController::class, 'account'])->name('admin.account');
+    Route::patch('/konto', [AdminDashboardController::class, 'updateAccount'])->name('admin.account.update');
+    Route::get('/tenants/{tenant}', [AdminDashboardController::class, 'showTenant'])->name('admin.tenants.show');
     Route::patch('/tenants/{tenant}/license', [AdminDashboardController::class, 'updateLicense'])->name('admin.tenants.license');
     Route::delete('/tenants/{tenant}', [AdminDashboardController::class, 'destroyTenant'])->name('admin.tenants.destroy');
 });

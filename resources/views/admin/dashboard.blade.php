@@ -1,175 +1,237 @@
 @extends('layouts.app')
 
-@section('title', 'Admin Dashboard')
+@section('title', 'Clubano Cockpit')
 
 @section('content')
-<div class="max-w-6xl mx-auto py-10 space-y-8">
+<div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <div class="flex flex-col gap-4 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.24em] text-blue-600">Clubano Betrieb</p>
+            <h1 class="mt-2 text-3xl font-semibold tracking-normal text-slate-950">Admin-Cockpit</h1>
+            <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                Eine 360-Grad-Sicht auf alle Vereine: Wachstum, Aktivität, Lizenzen, Nutzungstiefe und die Vereine, die deine Aufmerksamkeit brauchen.
+            </p>
+        </div>
 
-    {{-- HEADER --}}
-    <div>
-        <h1 class="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-        <p class="text-gray-600">Übersicht über alle Registrierungen</p>
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ route('admin.account') }}" class="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
+                Betreiberkonto
+            </a>
+        </div>
     </div>
 
     @if(session('success'))
-        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            {{ session('success') }}
-        </div>
+        <div class="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ session('success') }}</div>
     @endif
 
     @if(session('error'))
-        <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-            {{ session('error') }}
-        </div>
+        <div class="mt-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{{ session('error') }}</div>
     @endif
 
-    {{-- KPI CARDS --}}
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <section class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        @foreach([
+            ['label' => 'Vereine', 'value' => $platformStats['tenants'], 'hint' => $lifecycleStats['new_30_days'].' neu in 30 Tagen'],
+            ['label' => 'Aktiv', 'value' => $lifecycleStats['active_30_days'], 'hint' => 'Aktivität in 30 Tagen'],
+            ['label' => 'Still', 'value' => $lifecycleStats['silent_30_days'], 'hint' => 'ohne aktuelle Nutzung'],
+            ['label' => 'Mitglieder', 'value' => $platformStats['members'], 'hint' => 'plattformweit'],
+            ['label' => 'Termine', 'value' => $platformStats['events'], 'hint' => 'alle Aktivitäten'],
+            ['label' => 'Dokumente', 'value' => $platformStats['documents'], 'hint' => 'zentral abgelegt'],
+        ] as $stat)
+            <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="text-sm font-medium text-slate-500">{{ $stat['label'] }}</div>
+                <div class="mt-3 text-3xl font-semibold text-slate-950">{{ number_format($stat['value'], 0, ',', '.') }}</div>
+                <div class="mt-2 text-xs font-medium text-slate-400">{{ $stat['hint'] }}</div>
+            </div>
+        @endforeach
+    </section>
 
-        <div class="bg-white p-6 rounded-2xl shadow">
-            <p class="text-sm text-gray-500">Vereine gesamt</p>
-            <p class="text-3xl font-bold mt-2">{{ $totalTenants }}</p>
-        </div>
+    <section class="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-950">Plattform-Radar</h2>
+                    <p class="mt-1 text-sm text-slate-500">Der Zustand der Plattform in sechs klaren Signalen.</p>
+                </div>
+                <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">360 Grad</span>
+            </div>
 
-        <div class="bg-white p-6 rounded-2xl shadow">
-            <p class="text-sm text-gray-500">Benutzer gesamt</p>
-            <p class="text-3xl font-bold mt-2">{{ $totalUsers }}</p>
-        </div>
-
-    </div>
-
-    {{-- NEUE VEREINE --}}
-    <div class="bg-white rounded-2xl shadow">
-        <div class="p-6 border-b">
-            <h2 class="text-xl font-semibold">Neueste Vereine</h2>
-        </div>
-
-        <table class="w-full text-sm">
-    <thead class="bg-gray-50 text-left">
-        <tr>
-            <th class="p-3">Name</th>
-            <th class="p-3">E-Mail</th>
-            <th class="p-3">Lizenz</th>
-            <th class="p-3">Erstellt am</th>
-            <th class="p-3">Aktion</th>
-        </tr>
-    </thead>
-    <tbody>
-        @forelse($latestTenants as $tenant)
-            <tr class="border-t">
-                <td class="p-3 font-medium">{{ $tenant->name ?? '-' }}</td>
-
-                <td class="p-3">
-                    {{ $tenant->email ?? '-' }}
-                </td>
-
-                <td class="p-3">
-                    <form method="POST" action="{{ route('admin.tenants.license', $tenant) }}" class="space-y-2 min-w-[260px]">
-                        @csrf
-                        @method('PATCH')
-
-                        <select name="license_mode" class="w-full rounded-lg border-gray-300 text-sm">
-                            <option value="standard" @selected(($tenant->license_mode ?? 'standard') === 'standard')>Standard</option>
-                            <option value="beta" @selected(($tenant->license_mode ?? 'standard') === 'beta')>Pilotlizenz</option>
-                            <option value="gifted" @selected(($tenant->license_mode ?? 'standard') === 'gifted')>Freilizenz</option>
-                        </select>
-
-                        <input
-                            type="date"
-                            name="license_expires_at"
-                            value="{{ optional($tenant->license_expires_at)->format('Y-m-d') }}"
-                            class="w-full rounded-lg border-gray-300 text-sm"
-                        >
-
-                        <div class="text-xs text-gray-500">
-                            Aktuell: {{ $tenant->license_mode_label }}
-                            @if($tenant->hasComplimentaryAccess() && $tenant->license_expires_at)
-                                bis {{ $tenant->license_expires_at->format('d.m.Y') }}
-                            @elseif($tenant->hasComplimentaryAccess())
-                                ohne Enddatum
-                            @endif
-                        </div>
-
-                        <button type="submit"
-                                class="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700">
-                            Lizenz speichern
-                        </button>
-                    </form>
-                </td>
-
-                <td class="p-3">
-                    {{ optional($tenant->created_at)->format('d.m.Y H:i') }}
-                </td>
-
-                <td class="p-3">
-                    <div class="flex flex-col gap-2">
-                        @if($tenant->email)
-                            <a href="mailto:{{ $tenant->email }}?subject=Willkommen bei Clubano&body=Hallo {{ urlencode($tenant->name) }},%0D%0A%0D%0Avielen Dank für Ihre Registrierung bei Clubano.%0D%0A%0D%0AWenn Sie Fragen haben oder Unterstützung beim Einrichten benötigen, stehe ich Ihnen gerne persönlich zur Verfügung.%0D%0A%0D%0AViele Grüße%0D%0AMaik-Oliver Towet"
-                               class="inline-block bg-blue-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-blue-700">
-                                Kontakt aufnehmen
-                            </a>
-                        @else
-                            <span class="text-gray-400 text-xs">keine E-Mail</span>
-                        @endif
-
-                        <form method="POST"
-                              action="{{ route('admin.tenants.destroy', $tenant) }}"
-                              onsubmit="const confirmation = prompt('Zum Loeschen bitte DELETE eingeben.'); if (confirmation !== 'DELETE') { return false; } this.querySelector('input[name=confirmation]').value = confirmation; return confirm('Verein wirklich endgueltig loeschen?');">
-                            @csrf
-                            @method('DELETE')
-                            <input type="hidden" name="confirmation" value="">
-                            <button type="submit"
-                                    class="inline-flex items-center rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700">
-                                Verein loeschen
-                            </button>
-                        </form>
+            <div class="mt-6 grid gap-3 md:grid-cols-3">
+                @foreach([
+                    ['label' => 'Wachstum', 'value' => $lifecycleStats['new_7_days'], 'hint' => 'neue Vereine in 7 Tagen'],
+                    ['label' => 'Onboarding', 'value' => $lifecycleStats['with_members'], 'hint' => 'Vereine mit Mitgliedern'],
+                    ['label' => 'Kalendernutzung', 'value' => $lifecycleStats['with_events'], 'hint' => 'Vereine mit Terminen'],
+                    ['label' => 'Lizenzen', 'value' => $platformStats['licensed'], 'hint' => 'Pilot- und Freilizenzen'],
+                    ['label' => 'Trials prüfen', 'value' => $platformStats['expired_trials'], 'hint' => 'abgelaufene Tests'],
+                    ['label' => 'Benutzer', 'value' => $platformStats['users'], 'hint' => 'alle Betreiber und Vereine'],
+                ] as $signal)
+                    <div class="rounded-xl bg-slate-50 px-4 py-4">
+                        <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{{ $signal['label'] }}</div>
+                        <div class="mt-2 text-2xl font-semibold text-slate-950">{{ number_format($signal['value'], 0, ',', '.') }}</div>
+                        <div class="mt-1 text-sm text-slate-500">{{ $signal['hint'] }}</div>
                     </div>
-                </td>
-            </tr>
-        @empty
-            <tr>
-                <td colspan="5" class="p-4 text-gray-500 text-center">
-                    Noch keine Registrierungen vorhanden
-                </td>
-            </tr>
-        @endforelse
-    </tbody>
-</table>
-    </div>
-
-    {{-- NEUE USER --}}
-    <div class="bg-white rounded-2xl shadow">
-        <div class="p-6 border-b">
-            <h2 class="text-xl font-semibold">Neueste Benutzer</h2>
+                @endforeach
+            </div>
         </div>
 
-        <table class="w-full text-sm">
-            <thead class="bg-gray-50 text-left">
-                <tr>
-                    <th class="p-3">Name</th>
-                    <th class="p-3">E-Mail</th>
-                    <th class="p-3">Erstellt am</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse($latestUsers as $user)
-                    <tr class="border-t">
-                        <td class="p-3 font-medium">{{ $user->name ?? '-' }}</td>
-                        <td class="p-3">{{ $user->email ?? '-' }}</td>
-                        <td class="p-3">
-                            {{ optional($user->created_at)->format('d.m.Y H:i') }}
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="3" class="p-4 text-gray-500 text-center">
-                            Noch keine Benutzer vorhanden
-                        </td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
-    </div>
+        <aside class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-950">Handlungsbedarf</h2>
+                    <p class="mt-1 text-sm text-slate-500">Was du als Betreiber zuerst ansehen solltest.</p>
+                </div>
+                <span class="text-2xl font-semibold text-slate-950">{{ $attentionTenants->count() }}</span>
+            </div>
 
+            <div class="mt-5 space-y-4">
+                @forelse($attentionTenants as $tenant)
+                    @php
+                        $health = $tenant->admin_health;
+                    @endphp
+                    <a href="{{ route('admin.tenants.show', $tenant) }}" class="block rounded-xl border border-slate-200 px-4 py-3 transition hover:border-blue-200 hover:bg-blue-50/40">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="truncate font-semibold text-slate-950">{{ $tenant->name ?: 'Unbenannter Verein' }}</div>
+                                <div class="mt-1 text-sm text-slate-500">{{ $health['reason'] }}</div>
+                            </div>
+                            <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold {{ $health['level'] === 'risk' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700' }}">
+                                {{ $health['label'] }}
+                            </span>
+                        </div>
+                    </a>
+                @empty
+                    <div class="rounded-xl bg-emerald-50 px-4 py-4 text-sm text-emerald-800">
+                        Kein akuter Handlungsbedarf sichtbar.
+                    </div>
+                @endforelse
+            </div>
+        </aside>
+    </section>
+
+    <section class="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-lg font-semibold text-slate-950">Alle Vereine</h2>
+                <p class="mt-1 text-sm text-slate-500">Vollständiger Bestand mit Status, Nutzung und schnellem Zugriff.</p>
+            </div>
+            <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{{ $allTenants->count() }} Vereine</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100 text-sm">
+                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    <tr>
+                        <th class="px-5 py-3">Verein</th>
+                        <th class="px-5 py-3">Status</th>
+                        <th class="px-5 py-3">Nutzung</th>
+                        <th class="px-5 py-3">Letzte Aktivität</th>
+                        <th class="px-5 py-3">Lizenz</th>
+                        <th class="px-5 py-3 text-right">Aktion</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    @forelse($allTenants as $tenant)
+                        @php
+                            $metrics = $tenant->admin_metrics ?? [];
+                            $health = $tenant->admin_health;
+                        @endphp
+                        <tr class="align-top">
+                            <td class="px-5 py-4">
+                                <a href="{{ route('admin.tenants.show', $tenant) }}" class="font-semibold text-slate-950 hover:text-blue-700">{{ $tenant->name ?: 'Unbenannter Verein' }}</a>
+                                <div class="mt-1 break-all text-sm text-slate-500">{{ $tenant->email ?: 'keine E-Mail' }}</div>
+                                <div class="mt-1 text-xs text-slate-400">seit {{ optional($tenant->created_at)->format('d.m.Y') }}</div>
+                            </td>
+                            <td class="px-5 py-4">
+                                <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $health['level'] === 'ok' ? 'bg-emerald-50 text-emerald-700' : ($health['level'] === 'risk' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700') }}">
+                                    {{ $health['label'] }}
+                                </span>
+                                <div class="mt-2 max-w-xs text-xs leading-5 text-slate-500">{{ $health['reason'] }}</div>
+                            </td>
+                            <td class="px-5 py-4">
+                                <div class="grid min-w-[260px] grid-cols-3 gap-2">
+                                    @foreach([
+                                        'Mitglieder' => $metrics['members'] ?? 0,
+                                        'Benutzer' => $metrics['users'] ?? 0,
+                                        'Termine' => $metrics['events'] ?? 0,
+                                        'Dokumente' => $metrics['documents'] ?? 0,
+                                        'Formulare' => $metrics['forms'] ?? 0,
+                                        'Einladungen' => $metrics['invitations'] ?? 0,
+                                    ] as $label => $value)
+                                        <div>
+                                            <div class="font-semibold text-slate-950">{{ number_format($value, 0, ',', '.') }}</div>
+                                            <div class="text-[11px] text-slate-400">{{ $label }}</div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </td>
+                            <td class="px-5 py-4 text-slate-600">
+                                {{ $tenant->admin_last_activity_at ? $tenant->admin_last_activity_at->diffForHumans() : 'keine Aktivität' }}
+                            </td>
+                            <td class="px-5 py-4">
+                                <form method="POST" action="{{ route('admin.tenants.license', $tenant) }}" class="flex min-w-[260px] flex-col gap-2">
+                                    @csrf
+                                    @method('PATCH')
+                                    <select name="license_mode" class="rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                        <option value="standard" @selected(($tenant->license_mode ?? 'standard') === 'standard')>Standard</option>
+                                        <option value="beta" @selected(($tenant->license_mode ?? 'standard') === 'beta')>Pilotlizenz</option>
+                                        <option value="gifted" @selected(($tenant->license_mode ?? 'standard') === 'gifted')>Freilizenz</option>
+                                    </select>
+                                    <div class="flex gap-2">
+                                        <input type="date" name="license_expires_at" value="{{ optional($tenant->license_expires_at)->format('Y-m-d') }}" class="min-w-0 flex-1 rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                        <button type="submit" class="rounded-xl bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800">OK</button>
+                                    </div>
+                                </form>
+                            </td>
+                            <td class="px-5 py-4 text-right">
+                                <div class="flex justify-end gap-2">
+                                    <a href="{{ route('admin.tenants.show', $tenant) }}" class="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">Details</a>
+                                    @if($tenant->email)
+                                        <a href="mailto:{{ $tenant->email }}?subject=Willkommen bei Clubano" class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100">Mail</a>
+                                    @endif
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6" class="px-5 py-12 text-center text-sm text-slate-500">Noch keine Vereine vorhanden.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="mt-8 grid gap-6 lg:grid-cols-2">
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-950">Neueste Registrierungen</h2>
+            <div class="mt-5 space-y-4">
+                @forelse($latestTenants as $tenant)
+                    <a href="{{ route('admin.tenants.show', $tenant) }}" class="flex items-center justify-between gap-4 rounded-xl bg-slate-50 px-4 py-3 transition hover:bg-blue-50">
+                        <div class="min-w-0">
+                            <div class="truncate font-semibold text-slate-950">{{ $tenant->name ?: 'Unbenannter Verein' }}</div>
+                            <div class="mt-1 text-sm text-slate-500">{{ optional($tenant->created_at)->format('d.m.Y H:i') }}</div>
+                        </div>
+                        <span class="text-sm font-semibold text-slate-500">{{ ($tenant->admin_metrics['members'] ?? 0) }} Mitglieder</span>
+                    </a>
+                @empty
+                    <div class="text-sm text-slate-500">Noch keine Registrierungen vorhanden.</div>
+                @endforelse
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-950">Neueste Benutzer</h2>
+            <div class="mt-5 space-y-4">
+                @forelse($latestUsers as $user)
+                    <div>
+                        <div class="font-semibold text-slate-900">{{ $user->name ?: 'Ohne Namen' }}</div>
+                        <div class="mt-0.5 break-all text-sm text-slate-500">{{ $user->email }}</div>
+                        <div class="mt-1 text-xs text-slate-400">{{ $user->tenant?->name ?: 'Betreiberkonto' }} · {{ optional($user->created_at)->format('d.m.Y H:i') }}</div>
+                    </div>
+                @empty
+                    <div class="text-sm text-slate-500">Noch keine Benutzer vorhanden.</div>
+                @endforelse
+            </div>
+        </div>
+    </section>
 </div>
 @endsection

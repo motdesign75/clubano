@@ -1,8 +1,11 @@
 <?php
 
+use App\Models\User;
 use App\Services\TenantDemoDataGenerator;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -27,3 +30,29 @@ Artisan::command('clubano:seed-tenant-demo {tenantId=2}', function (int $tenantI
     $this->newLine();
     $this->components->warn('Es wurden nur Datensätze mit tenant_id = ' . $tenantId . ' angelegt oder ergänzt.');
 })->purpose('Erzeugt tenant-sichere Demo- und Testdaten für einen einzelnen Verein');
+
+Artisan::command('clubano:make-superadmin {email} {--name=Clubano Admin} {--password=}', function (string $email) {
+    $password = (string) ($this->option('password') ?: Str::random(24));
+
+    $user = User::withoutGlobalScopes()->updateOrCreate(
+        ['email' => mb_strtolower($email)],
+        [
+            'name' => (string) $this->option('name'),
+            'tenant_id' => null,
+            'role' => User::ROLE_SUPERADMIN,
+            'password' => Hash::make($password),
+            'email_verified_at' => now(),
+        ]
+    );
+
+    $this->components->info('Betreiberkonto ist bereit.');
+    $this->line('E-Mail: ' . $user->email);
+    $this->line('Rolle: ' . $user->role);
+    $this->line('Tenant: ' . ($user->tenant_id ?? 'kein Verein'));
+
+    if (! $this->option('password')) {
+        $this->newLine();
+        $this->components->warn('Ein neues Passwort wurde erzeugt. Bitte jetzt sichern:');
+        $this->line($password);
+    }
+})->purpose('Erzeugt oder aktualisiert ein Clubano-Betreiberkonto ohne Vereinszuordnung');

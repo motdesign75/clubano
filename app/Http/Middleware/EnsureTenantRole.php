@@ -16,6 +16,12 @@ class EnsureTenantRole
             return redirect()->route('login');
         }
 
+        if ($user->isSuperAdmin() && blank($user->tenant_id)) {
+            return redirect()
+                ->route('admin.dashboard')
+                ->with('error', 'Betreiberkonten arbeiten nicht in einem Vereinsbereich.');
+        }
+
         if (! $user->hasRoleAtLeast($requiredRole)) {
             abort(403, 'Deine Rolle reicht fuer diesen Bereich nicht aus.');
         }
