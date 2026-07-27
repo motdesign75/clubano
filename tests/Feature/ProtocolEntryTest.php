@@ -29,12 +29,14 @@ test('protocols can be created from structured entries and create tasks', functi
         'entries' => [
             [
                 'type' => ProtocolEntry::TYPE_RESOLUTION,
+                'agenda_title' => 'TOP 3 Kartoffelmarkt',
                 'title' => 'Kartoffelmarkt',
                 'content' => 'Der Vorstand beschließt die Teilnahme am Kartoffelmarkt.',
                 'visible_in_protocol' => '1',
             ],
             [
                 'type' => ProtocolEntry::TYPE_TASK,
+                'agenda_title' => 'TOP 3 Kartoffelmarkt',
                 'title' => 'Getränkeeinkauf organisieren',
                 'content' => 'Dirk Radecker organisiert den Getränkeeinkauf.',
                 'responsible_name' => 'Dirk Radecker',
@@ -49,6 +51,7 @@ test('protocols can be created from structured entries and create tasks', functi
     $response->assertRedirect(route('protocols.index'));
     expect($protocol)->not->toBeNull();
     expect($protocol->entries)->toHaveCount(2);
+    expect($protocol->entries->pluck('agenda_title')->unique()->values()->all())->toBe(['TOP 3 Kartoffelmarkt']);
     expect($protocol->content)->toContain('Kartoffelmarkt');
     expect($protocol->content)->toContain('Getränkeeinkauf organisieren');
 

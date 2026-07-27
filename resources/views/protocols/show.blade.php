@@ -99,7 +99,16 @@
                     </div>
 
                     <div class="mt-6 space-y-4">
+                        @php($currentAgendaTitle = null)
                         @foreach($visibleEntries as $entry)
+                            @if($entry->agenda_title && $entry->agenda_title !== $currentAgendaTitle)
+                                @php($currentAgendaTitle = $entry->agenda_title)
+                                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Tagesordnungspunkt</div>
+                                    <h3 class="mt-1 text-lg font-semibold text-slate-950">{{ $entry->agenda_title }}</h3>
+                                </div>
+                            @endif
+
                             <section class="rounded-2xl border p-4 {{ \App\Models\ProtocolEntry::typeToneFor($entry->type) }}">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div class="min-w-0">

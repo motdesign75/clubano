@@ -51,6 +51,7 @@ class ProtocolController extends Controller
 
         return [
             'entries' => 'nullable|array',
+            'entries.*.agenda_title' => 'nullable|string|max:255',
             'entries.*.type' => 'nullable|in:' . $types,
             'entries.*.title' => 'nullable|string|max:255',
             'entries.*.content' => 'nullable|string',
@@ -67,6 +68,7 @@ class ProtocolController extends Controller
             ->map(function (array $entry) {
                 return [
                     'type' => $entry['type'] ?? ProtocolEntry::TYPE_INFORMATION,
+                    'agenda_title' => trim((string) ($entry['agenda_title'] ?? '')),
                     'title' => trim((string) ($entry['title'] ?? '')),
                     'content' => trim((string) ($entry['content'] ?? '')),
                     'responsible_name' => trim((string) ($entry['responsible_name'] ?? '')),
@@ -105,6 +107,7 @@ class ProtocolController extends Controller
 
                 return [
                     'type' => $type,
+                    'agenda_title' => '',
                     'title' => Str::limit($line, 70, ''),
                     'content' => $line,
                     'responsible_name' => '',
@@ -205,6 +208,7 @@ class ProtocolController extends Controller
     {
         return $this->entriesFromRawNotes($line)[0] ?? [
             'type' => ProtocolEntry::TYPE_INFORMATION,
+            'agenda_title' => '',
             'title' => Str::limit($line, 70, ''),
             'content' => $line,
             'responsible_name' => '',
@@ -259,6 +263,7 @@ class ProtocolController extends Controller
             ->filter()
             ->map(fn (string $line) => [
                 'type' => ProtocolEntry::TYPE_INFORMATION,
+                'agenda_title' => Str::limit($line, 90, ''),
                 'title' => Str::limit($line, 90, ''),
                 'content' => '',
                 'responsible_name' => '',
@@ -280,6 +285,7 @@ class ProtocolController extends Controller
             ->filter(fn (array $entry) => $entry['visible_in_protocol'])
             ->map(function (array $entry) {
                 $label = ProtocolEntry::typeLabelFor($entry['type']);
+                $agendaTitle = trim((string) ($entry['agenda_title'] ?? ''));
                 $title = $entry['title'] !== '' ? e($entry['title']) : $label;
                 $content = nl2br(e($entry['content']));
                 $meta = collect([
@@ -288,7 +294,8 @@ class ProtocolController extends Controller
                     $entry['scheduled_date'] ? 'Termin: ' . e($entry['scheduled_date']) : null,
                 ])->filter()->implode(' · ');
 
-                return '<h3>' . $title . '</h3><p><strong>' . e($label) . '</strong></p><p>' . $content . '</p>'
+                return ($agendaTitle !== '' ? '<h2>' . e($agendaTitle) . '</h2>' : '')
+                    . '<h3>' . $title . '</h3><p><strong>' . e($label) . '</strong></p><p>' . $content . '</p>'
                     . ($meta !== '' ? '<p><em>' . $meta . '</em></p>' : '');
             })
             ->implode("\n");
@@ -311,6 +318,7 @@ class ProtocolController extends Controller
         foreach ($entries as $position => $entry) {
             $protocol->entries()->create([
                 'tenant_id' => $protocol->tenant_id,
+                'agenda_title' => ($entry['agenda_title'] ?? '') !== '' ? $entry['agenda_title'] : null,
                 'type' => $entry['type'],
                 'title' => $entry['title'] !== '' ? $entry['title'] : null,
                 'content' => $entry['content'] !== '' ? $entry['content'] : ($entry['title'] ?: ProtocolEntry::typeLabelFor($entry['type'])),

@@ -369,6 +369,7 @@ test('staff can choose events for a printable poster overview', function () {
     $firstEvent = Event::withoutGlobalScopes()->create([
         'tenant_id' => $tenant->id,
         'title' => 'Sommerfest',
+        'description' => 'In gem&uuml;tlicher Atmosph&auml;re feiern wir gemeinsam.',
         'location' => 'Vereinsheim',
         'start' => now()->addDays(10)->setTime(15, 0),
         'end' => now()->addDays(10)->setTime(22, 0),
@@ -407,6 +408,8 @@ test('staff can choose events for a printable poster overview', function () {
     $printResponse->assertSee('Termine im Vereinsheim');
     $printResponse->assertSee('Bitte vormerken.');
     $printResponse->assertSee('Sommerfest');
+    $printResponse->assertSee('gemütlicher Atmosphäre');
+    $printResponse->assertDontSee('gem&uuml;tlicher', false);
     $printResponse->assertDontSee('Internes Planungstreffen');
 
     $pdfResponse = $this->actingAs($staff)->post(route('events.poster.pdf'), [

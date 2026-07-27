@@ -157,8 +157,15 @@
                                     @endif
                                 </div>
 
-                                @if($event->description)
-                                    <div class="description">{{ \Illuminate\Support\Str::limit(strip_tags($event->description), 220) }}</div>
+                                @php
+                                    $description = \Illuminate\Support\Str::limit(
+                                        html_entity_decode(trim(strip_tags($event->description ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                                        220
+                                    );
+                                @endphp
+
+                                @if($description !== '')
+                                    <div class="description">{{ $description }}</div>
                                 @endif
                             </td>
                         </tr>

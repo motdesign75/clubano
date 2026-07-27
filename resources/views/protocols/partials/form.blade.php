@@ -44,6 +44,7 @@
     $entryValues = collect(old('entries', $protocol->entries ?? []))
         ->map(fn ($entry) => [
             'type' => data_get($entry, 'type', 'information'),
+            'agenda_title' => data_get($entry, 'agenda_title', ''),
             'title' => data_get($entry, 'title', ''),
             'content' => data_get($entry, 'content', ''),
             'responsible_name' => data_get($entry, 'responsible_name', ''),
@@ -58,6 +59,7 @@
     if (empty($entryValues)) {
         $entryValues = [[
             'type' => 'information',
+            'agenda_title' => '',
             'title' => '',
             'content' => '',
             'responsible_name' => '',
@@ -312,27 +314,130 @@
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                             <div>
                                 <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Sitzungsmodus</div>
-                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Schreib einfach mit</h3>
-                                <p class="mt-2 text-sm leading-6 text-slate-600">Kein Nachdenken über Felder. Jede neue Zeile ist ein Gedanke.</p>
+                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Live durch die Sitzung</h3>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">Wähle den TOP, klicke auf die Art des Beitrags und schreibe nur das Ergebnis auf.</p>
                             </div>
                             <div class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                                <span x-text="noteLineCount()"></span> Stichpunkte
+                                <span x-text="entries.length"></span> Einträge
                             </div>
                         </div>
 
-                        <textarea id="raw_notes"
-                                  name="raw_notes"
-                                  x-model="rawNotes"
-                                  rows="11"
-                                  class="mt-4 w-full rounded-2xl border-slate-200 bg-white text-base leading-7 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300"
-                                  placeholder="- Vorsitzender berichtet über Renovierung&#10;- Diskussion Kartoffelmarkt&#10;- Beschluss: Teilnahme am Kartoffelmarkt&#10;- Dirk organisiert Getränke bis 15.08.2026&#10;- Braukurs am 15.08.2026&#10;- Getränkepreise nächste Sitzung">{{ $rawNotesValue }}</textarea>
-                        @error('raw_notes')
-                            <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
-                        @enderror
+                        <div class="mt-5 grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+                            <aside class="rounded-2xl border border-slate-200 bg-white p-3">
+                                <div class="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Tagesordnung</div>
+                                <div class="mt-3 space-y-2">
+                                    <template x-for="(topic, index) in agendaTopics()" :key="`${topic}-${index}`">
+                                        <button type="button"
+                                                class="w-full rounded-xl border px-3 py-3 text-left text-sm transition"
+                                                :class="activeAgendaIndex === index ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                                                @click="setActiveAgenda(index)">
+                                            <span class="block text-xs font-semibold uppercase tracking-[0.16em] opacity-70" x-text="`TOP ${index + 1}`"></span>
+                                            <span class="mt-1 block font-semibold leading-5" x-text="topic"></span>
+                                            <span class="mt-1 block text-xs opacity-70" x-text="`${countByAgenda(topic)} Einträge`"></span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </aside>
+
+                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                                    <div>
+                                        <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500" x-text="`TOP ${activeAgendaIndex + 1}`"></div>
+                                        <h4 class="mt-1 text-2xl font-semibold tracking-tight text-slate-950" x-text="activeAgendaTitle()"></h4>
+                                    </div>
+                                    <div class="flex flex-wrap gap-2">
+                                        @foreach($entryTypes as $entryType => $entryLabel)
+                                            <button type="button"
+                                                    class="inline-flex min-h-10 items-center justify-center rounded-full border px-3.5 text-sm font-semibold transition {{ $entryTypeTone[$entryType] ?? $entryTypeTone['information'] }}"
+                                                    @click="addLiveEntry('{{ $entryType }}')">
+                                                {{ $entryLabel }}
+                                            </button>
+                                        @endforeach
+                                    </div>
+                                </div>
+
+                                <div class="mt-4 space-y-3">
+                                    <template x-for="item in activeEntryItems()" :key="entries[item.index].key">
+                                        <article class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                <div class="shrink-0 rounded-full border px-3 py-1 text-xs font-semibold"
+                                                     :class="toneFor(entries[item.index].type)"
+                                                     x-text="labelFor(entries[item.index].type)">
+                                                </div>
+                                                <button type="button"
+                                                        class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-rose-200 bg-white text-rose-600 transition hover:bg-rose-50"
+                                                        title="Eintrag entfernen"
+                                                        @click="remove(item.index)">
+                                                    ×
+                                                </button>
+                                            </div>
+
+                                            <div class="mt-3 grid gap-3 md:grid-cols-2">
+                                                <div>
+                                                    <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Titel</label>
+                                                    <input type="text"
+                                                           x-model="entries[item.index].title"
+                                                           class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
+                                                           :placeholder="labelFor(entries[item.index].type)">
+                                                </div>
+
+                                                <div x-show="entries[item.index].type === 'task' || entries[item.index].type === 'follow_up'">
+                                                    <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Verantwortlich</label>
+                                                    <input type="text"
+                                                           x-model="entries[item.index].responsible_name"
+                                                           class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
+                                                           placeholder="Name oder Gremium">
+                                                </div>
+
+                                                <div x-show="entries[item.index].type === 'task' || entries[item.index].type === 'follow_up'">
+                                                    <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fällig am</label>
+                                                    <input type="date"
+                                                           x-model="entries[item.index].due_date"
+                                                           class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300">
+                                                </div>
+
+                                                <div x-show="entries[item.index].type === 'date'">
+                                                    <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Termin am</label>
+                                                    <input type="date"
+                                                           x-model="entries[item.index].scheduled_date"
+                                                           class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300">
+                                                </div>
+                                            </div>
+
+                                            <div class="mt-3">
+                                                <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Mitschrift</label>
+                                                <textarea x-model="entries[item.index].content"
+                                                          rows="3"
+                                                          class="mt-2 w-full rounded-2xl border-slate-200 text-sm leading-6 focus:border-slate-400 focus:ring-slate-300"
+                                                          :placeholder="placeholderFor(entries[item.index].type)"></textarea>
+                                            </div>
+                                        </article>
+                                    </template>
+
+                                    <div x-show="activeEntryItems().length === 0" class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
+                                        <div class="text-sm font-semibold text-slate-900">Noch keine Mitschrift zu diesem TOP.</div>
+                                        <p class="mt-1 text-sm text-slate-500">Klicke oben auf Information, Diskussion, Beschluss, Aufgabe, Termin oder Wiedervorlage.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <details class="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+                            <summary class="cursor-pointer text-sm font-semibold text-slate-800">Freie Stichpunkte als Notizblock nutzen</summary>
+                            <textarea id="raw_notes"
+                                      name="raw_notes"
+                                      x-model="rawNotes"
+                                      rows="8"
+                                      class="mt-4 w-full rounded-2xl border-slate-200 bg-white text-base leading-7 text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:ring-slate-300"
+                                      placeholder="- Vorsitzender berichtet über Renovierung&#10;- Diskussion Kartoffelmarkt&#10;- Beschluss: Teilnahme am Kartoffelmarkt&#10;- Dirk organisiert Getränke bis 15.08.2026&#10;- Braukurs am 15.08.2026&#10;- Getränkepreise nächste Sitzung">{{ $rawNotesValue }}</textarea>
+                            @error('raw_notes')
+                                <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
+                        </details>
 
                         <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div class="text-sm leading-6 text-slate-600">
-                                Eine Zeile ist ein Gedanke. Wörter wie Beschluss, diskutiert, bis oder nächste Sitzung helfen beim Einordnen.
+                                Du kannst jederzeit den TOP wechseln. Die Prüfung zeigt anschließend alle Einträge in Reihenfolge.
                             </div>
                             <div class="flex flex-col gap-2 sm:flex-row">
                                 <button type="button"
@@ -370,6 +475,8 @@
 
                         <template x-for="(entry, index) in entries" :key="entry.key">
                             <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <input type="hidden" :name="`entries[${index}][agenda_title]`" x-model="entry.agenda_title">
+
                                 <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                                     <div class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start">
                                         <div class="shrink-0 rounded-full border px-3 py-1 text-xs font-semibold"
@@ -613,6 +720,7 @@
     function protocolEntryEditor(initialEntries, initialRawAgenda, initialRawNotes) {
         return {
             step: initialRawAgenda ? 'agenda' : (initialRawNotes ? 'notes' : (initialEntries.some((entry) => (entry.title || entry.content)) ? 'structure' : 'agenda')),
+            activeAgendaIndex: 0,
             rawAgenda: initialRawAgenda || '',
             rawNotes: initialRawNotes || '',
             entries: initialEntries.map((entry, index) => ({ key: Date.now() + index, ...entry })),
@@ -623,6 +731,7 @@
                 this.entries.push({
                     key: Date.now() + Math.random(),
                     type: 'information',
+                    agenda_title: this.activeAgendaTitle(),
                     title: '',
                     content: '',
                     responsible_name: '',
@@ -655,6 +764,60 @@
             },
             countByType(type) {
                 return this.entries.filter((entry) => entry.visible_in_protocol && entry.type === type).length;
+            },
+            countByAgenda(topic) {
+                return this.entries.filter((entry) => this.entryAgendaTitle(entry) === topic).length;
+            },
+            agendaTopics() {
+                const topics = this.agendaLines();
+
+                if (topics.length > 0) {
+                    return topics;
+                }
+
+                const entryTopics = this.entries
+                    .map((entry) => this.entryAgendaTitle(entry))
+                    .filter(Boolean)
+                    .filter((topic, index, topics) => topics.indexOf(topic) === index);
+
+                return entryTopics.length > 0 ? entryTopics : ['Allgemeine Mitschrift'];
+            },
+            activeAgendaTitle() {
+                const topics = this.agendaTopics();
+
+                if (this.activeAgendaIndex >= topics.length) {
+                    this.activeAgendaIndex = Math.max(0, topics.length - 1);
+                }
+
+                return topics[this.activeAgendaIndex] || 'Allgemeine Mitschrift';
+            },
+            setActiveAgenda(index) {
+                this.activeAgendaIndex = index;
+            },
+            entryAgendaTitle(entry) {
+                return entry.agenda_title || entry.title || 'Allgemeine Mitschrift';
+            },
+            activeEntryItems() {
+                const activeTitle = this.activeAgendaTitle();
+
+                return this.entries
+                    .map((entry, index) => ({ entry, index }))
+                    .filter((item) => this.entryAgendaTitle(item.entry) === activeTitle);
+            },
+            addLiveEntry(type) {
+                const activeTitle = this.activeAgendaTitle();
+
+                this.entries.push({
+                    key: Date.now() + Math.random(),
+                    type,
+                    agenda_title: activeTitle,
+                    title: '',
+                    content: '',
+                    responsible_name: '',
+                    due_date: '',
+                    scheduled_date: '',
+                    visible_in_protocol: true,
+                });
             },
             placeholderFor(type) {
                 const placeholders = {
@@ -691,6 +854,7 @@
                     this.entries = [{
                         key: Date.now(),
                         type: 'information',
+                        agenda_title: '',
                         title: '',
                         content: '',
                         responsible_name: '',
@@ -705,6 +869,7 @@
                 this.entries = lines.map((line, index) => ({
                     key: Date.now() + index,
                     type: 'information',
+                    agenda_title: line.slice(0, 90),
                     title: line.slice(0, 90),
                     content: '',
                     responsible_name: '',
@@ -721,9 +886,10 @@
                 if (noteItems.length === 0) {
                     if (!append) {
                         this.entries = [{
-                            key: Date.now(),
-                            type: 'information',
-                            title: '',
+                        key: Date.now(),
+                        type: 'information',
+                        agenda_title: this.activeAgendaTitle(),
+                        title: '',
                             content: '',
                             responsible_name: '',
                             due_date: '',
@@ -780,6 +946,7 @@
                 return {
                     key: Date.now() + index + Math.random(),
                     type,
+                    agenda_title: '',
                     title: this.titleFromLine(line),
                     content: line,
                     responsible_name: type === 'task' || type === 'follow_up' ? this.detectResponsible(line) : '',

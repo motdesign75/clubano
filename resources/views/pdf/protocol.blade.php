@@ -84,7 +84,13 @@
 @if($visibleEntries->isNotEmpty())
 <div class="section">
     <h2>Protokollpunkte</h2>
+    @php($currentAgendaTitle = null)
     @foreach($visibleEntries as $entry)
+        @if($entry->agenda_title && $entry->agenda_title !== $currentAgendaTitle)
+            @php($currentAgendaTitle = $entry->agenda_title)
+            <h2>{{ $entry->agenda_title }}</h2>
+        @endif
+
         <div class="entry">
             <div class="entry-type">{{ $entryTypes[$entry->type] ?? 'Protokollpunkt' }}</div>
             @if($entry->title)

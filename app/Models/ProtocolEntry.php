@@ -16,6 +16,7 @@ class ProtocolEntry extends Model
     protected $fillable = [
         'tenant_id',
         'protocol_id',
+        'agenda_title',
         'type',
         'title',
         'content',
