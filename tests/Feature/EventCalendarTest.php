@@ -408,6 +408,17 @@ test('staff can choose events for a printable poster overview', function () {
     $printResponse->assertSee('Bitte vormerken.');
     $printResponse->assertSee('Sommerfest');
     $printResponse->assertDontSee('Internes Planungstreffen');
+
+    $pdfResponse = $this->actingAs($staff)->post(route('events.poster.pdf'), [
+        'headline' => 'Termine im Vereinsheim',
+        'note' => 'Bitte vormerken.',
+        'event_ids' => [$firstEvent->id],
+    ]);
+
+    $pdfResponse->assertOk();
+    expect($pdfResponse->headers->get('content-type'))->toContain('application/pdf');
+    expect($pdfResponse->getContent())->toStartWith('%PDF');
+
     expect($secondEvent->exists)->toBeTrue();
 });
 

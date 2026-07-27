@@ -278,6 +278,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     $when($C.'EventController', function($cls){
         Route::get('/events/aushang', [$cls, 'poster'])->middleware('tenant.role:Mitarbeiter')->name('events.poster');
         Route::post('/events/aushang/druck', [$cls, 'posterPrint'])->middleware('tenant.role:Mitarbeiter')->name('events.poster.print');
+        Route::post('/events/aushang/pdf', [$cls, 'posterPdf'])->middleware('tenant.role:Mitarbeiter')->name('events.poster.pdf');
         Route::get('/events/anwesenheit/auswertung', [$cls, 'attendanceReport'])->middleware('tenant.role:Mitarbeiter')->name('events.attendance.report');
         Route::resource('events', $cls)->except(['show'])->middleware('tenant.role:Lesen')->where(['event' => '[0-9]+']);
         Route::get('/events/{event}', [$cls, 'show'])->whereNumber('event')->name('events.show');

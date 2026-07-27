@@ -296,6 +296,24 @@ class EventController extends Controller
 
     public function posterPrint(Request $request)
     {
+        $data = $this->posterPrintData($request);
+
+        return view('events.poster-print', [
+            ...$data,
+        ]);
+    }
+
+    public function posterPdf(Request $request)
+    {
+        $data = $this->posterPrintData($request);
+
+        $pdf = Pdf::loadView('pdf.event-poster', $data)->setPaper('a4', 'portrait');
+
+        return $pdf->stream('terminaushang-' . Str::slug($data['headline'] ?: 'termine') . '.pdf');
+    }
+
+    private function posterPrintData(Request $request): array
+    {
         $tenantId = auth()->user()->tenant_id;
         $validated = $request->validate([
             'event_ids' => 'required|array|min:1',
@@ -313,17 +331,18 @@ class EventController extends Controller
             ->get();
 
         if ($events->isEmpty()) {
-            return back()
+            back()
                 ->withErrors(['event_ids' => 'Bitte wähle mindestens eine Veranstaltung für den Aushang aus.'])
-                ->withInput();
+                ->withInput()
+                ->throwResponse();
         }
 
-        return view('events.poster-print', [
+        return [
             'events' => $events,
             'tenant' => $events->first()->tenant,
             'headline' => $validated['headline'] ?? 'Aktuelle Termine',
             'note' => $validated['note'] ?? null,
-        ]);
+        ];
     }
 
     /**

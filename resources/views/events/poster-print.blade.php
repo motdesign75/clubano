@@ -141,8 +141,14 @@
         }
 
         @media print {
+            @page {
+                margin: 14mm;
+            }
+
+            html,
             body {
                 background: white;
+                min-height: auto;
             }
 
             .actions {
@@ -150,7 +156,7 @@
             }
 
             .page {
-                width: auto;
+                width: 100%;
                 margin: 0;
                 padding: 0;
                 box-shadow: none;

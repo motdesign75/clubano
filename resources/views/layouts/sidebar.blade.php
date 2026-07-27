@@ -176,7 +176,7 @@
             'label' => 'Aushang',
             'hint' => 'Termine für Vereinsheim oder Infofläche drucken',
             'route' => route('events.poster'),
-            'active' => request()->routeIs('events.poster') || request()->routeIs('events.poster.print'),
+            'active' => request()->routeIs('events.poster') || request()->routeIs('events.poster.print') || request()->routeIs('events.poster.pdf'),
             'icon' => 'printer',
             'minRole' => 'Mitarbeiter',
         ],

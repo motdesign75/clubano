@@ -84,10 +84,18 @@
                     <h2 class="text-lg font-semibold text-slate-950">Veranstaltungen auswählen</h2>
                     <p class="mt-1 text-sm text-slate-500">{{ $events->count() }} Termine im gefilterten Zeitraum.</p>
                 </div>
-                <button type="submit" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800">
-                    <x-heroicon-o-printer class="h-5 w-5" />
-                    Aushang erstellen
-                </button>
+                <div class="flex flex-wrap gap-2">
+                    <button type="submit" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                        <x-heroicon-o-printer class="h-5 w-5" />
+                        Druckansicht
+                    </button>
+                    <button type="submit"
+                            formaction="{{ route('events.poster.pdf') }}"
+                            class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800">
+                        <x-heroicon-o-document-arrow-down class="h-5 w-5" />
+                        PDF öffnen
+                    </button>
+                </div>
             </div>
 
             <div class="divide-y divide-slate-100">
