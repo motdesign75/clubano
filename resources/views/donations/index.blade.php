@@ -97,6 +97,41 @@
         </div>
     </form>
 
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="max-w-2xl">
+                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Jahresbestätigung</div>
+                <h2 class="mt-2 text-xl font-semibold text-slate-950">Sammelbestätigung erstellen</h2>
+                <p class="mt-2 text-sm leading-6 text-slate-500">
+                    Wenn ein Spender im Jahr mehrfach gespendet hat, erstellt Clubano eine Jahresbestätigung mit Einzelauflistung.
+                    Bereits bescheinigte oder stornierte Spenden werden nicht erneut vorgeschlagen.
+                </p>
+            </div>
+
+            @if($collectiveDonors->isNotEmpty())
+                <form method="POST" action="{{ route('donations.collective-pdf') }}" class="w-full space-y-3 lg:max-w-lg">
+                    @csrf
+                    <input type="hidden" name="year" value="{{ $year }}">
+                    <label for="donor_key" class="block text-sm font-medium text-slate-600">Spender auswählen</label>
+                    <select id="donor_key" name="donor_key" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-900 focus:ring-slate-900">
+                        @foreach($collectiveDonors as $donor)
+                            <option value="{{ $donor['key'] }}">
+                                {{ $donor['name'] }} · {{ $donor['count'] }} Spenden · {{ number_format($donor['total'], 2, ',', '.') }} €
+                            </option>
+                        @endforeach
+                    </select>
+                    <button type="submit" @disabled(! $readiness['can_issue']) class="inline-flex w-full justify-center rounded-xl px-4 py-2.5 text-sm font-medium {{ $readiness['can_issue'] ? 'bg-slate-900 text-white hover:bg-slate-800' : 'cursor-not-allowed bg-slate-100 text-slate-400' }}">
+                        Sammel-PDF erstellen
+                    </button>
+                </form>
+            @else
+                <div class="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500 lg:max-w-sm">
+                    Für {{ $year }} gibt es aktuell keinen Spender mit mehreren offenen Spenden.
+                </div>
+            @endif
+        </div>
+    </section>
+
     <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div class="hidden grid-cols-[minmax(0,1.5fr)_130px_140px_140px_140px] border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid">
             <div>Spender</div>

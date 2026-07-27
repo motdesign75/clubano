@@ -358,6 +358,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/spenden', [DonationController::class, 'index'])->name('donations.index');
         Route::get('/spenden/neu', [DonationController::class, 'create'])->name('donations.create');
         Route::post('/spenden', [DonationController::class, 'store'])->name('donations.store');
+        Route::post('/spenden/sammelbestaetigung', [DonationController::class, 'collectivePdf'])->name('donations.collective-pdf');
         Route::get('/spenden/{donation}', [DonationController::class, 'show'])->name('donations.show');
         Route::get('/spenden/{donation}/pdf', [DonationController::class, 'pdf'])->name('donations.pdf');
         Route::patch('/spenden/{donation}/versendet', [DonationController::class, 'markSent'])->name('donations.mark-sent');

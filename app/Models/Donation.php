@@ -114,15 +114,21 @@ class Donation extends Model
         $this->save();
     }
 
-    private function buildNextCertificateNumber(): string
+    public static function nextCertificateNumberForTenant(int|string $tenantId, int|string $year, string $prefix = 'SP'): string
     {
-        $year = $this->donated_at?->format('Y') ?: now()->format('Y');
         $count = static::withoutGlobalScopes()
-            ->where('tenant_id', $this->tenant_id)
+            ->where('tenant_id', $tenantId)
             ->whereYear('donated_at', $year)
             ->whereNotNull('certificate_number')
             ->count() + 1;
 
-        return 'SP-' . $year . '-' . str_pad((string) $count, 4, '0', STR_PAD_LEFT);
+        return $prefix . '-' . $year . '-' . str_pad((string) $count, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function buildNextCertificateNumber(): string
+    {
+        $year = $this->donated_at?->format('Y') ?: now()->format('Y');
+
+        return self::nextCertificateNumberForTenant($this->tenant_id, $year);
     }
 }

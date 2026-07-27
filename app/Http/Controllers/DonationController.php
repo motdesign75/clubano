@@ -50,6 +50,7 @@ class DonationController extends Controller
 
         return view('donations.index', compact('donations', 'summary', 'year', 'status', 'search') + [
             'readiness' => auth()->user()->tenant->loadMissing('donationFreistellungDocument')->donationCertificateReadiness(),
+            'collectiveDonors' => $this->collectiveDonors($year),
         ]);
     }
 
@@ -116,6 +117,60 @@ class DonationController extends Controller
         ])->setPaper('a4');
 
         return $pdf->download('zuwendungsbestaetigung-' . $donation->certificate_number . '.pdf');
+    }
+
+    public function collectivePdf(Request $request)
+    {
+        $tenant = auth()->user()->tenant->loadMissing('donationFreistellungDocument');
+        if (! $tenant->canIssueDonationCertificates()) {
+            return redirect()->route('donations.index')
+                ->with('error', 'Bitte hinterlege zuerst einen gültigen Freistellungsbescheid und die Pflichtangaben zur Gemeinnützigkeit.');
+        }
+
+        $validated = $request->validate([
+            'year' => ['required', 'integer', 'min:2000', 'max:' . (now()->year + 1)],
+            'donor_key' => ['required', 'string', 'max:500'],
+        ]);
+
+        $donations = $this->collectiveDonationsQuery((int) $validated['year'], $validated['donor_key'])
+            ->orderBy('donated_at')
+            ->orderBy('id')
+            ->get();
+
+        if ($donations->isEmpty()) {
+            return redirect()->route('donations.index', ['year' => $validated['year']])
+                ->with('error', 'Für diesen Spender wurden im gewählten Jahr keine offenen Spenden gefunden.');
+        }
+
+        $firstDonation = $donations->first();
+        $certificateNumber = Donation::nextCertificateNumberForTenant($tenant->id, $validated['year'], 'SSP');
+        $issuedAt = now();
+
+        Donation::withoutGlobalScopes()
+            ->whereIn('id', $donations->pluck('id'))
+            ->update([
+                'certificate_number' => $certificateNumber,
+                'certificate_issued_at' => $issuedAt,
+                'status' => Donation::STATUS_ISSUED,
+                'updated_at' => now(),
+            ]);
+
+        $donations = Donation::withoutGlobalScopes()
+            ->whereIn('id', $donations->pluck('id'))
+            ->orderBy('donated_at')
+            ->orderBy('id')
+            ->get();
+
+        $pdf = Pdf::loadView('donations.collective-pdf', [
+            'donations' => $donations,
+            'donor' => $firstDonation,
+            'tenant' => $tenant,
+            'year' => (int) $validated['year'],
+            'certificateNumber' => $certificateNumber,
+            'totalAmount' => $donations->sum('amount'),
+        ])->setPaper('a4');
+
+        return $pdf->download('sammelbestaetigung-' . $certificateNumber . '.pdf');
     }
 
     public function markSent(Donation $donation)
@@ -230,6 +285,53 @@ class DonationController extends Controller
                 ->orderBy('number')
                 ->get(),
         ];
+    }
+
+    private function collectiveDonors(int $year)
+    {
+        return Donation::forCurrentTenant()
+            ->whereYear('donated_at', $year)
+            ->where('status', '!=', Donation::STATUS_CANCELLED)
+            ->whereNull('certificate_number')
+            ->orderBy('donor_name')
+            ->get()
+            ->groupBy(fn (Donation $donation) => $this->donorKey($donation))
+            ->map(function ($items, string $key) {
+                $first = $items->first();
+
+                return [
+                    'key' => $key,
+                    'name' => $first->donor_name,
+                    'email' => $first->donor_email,
+                    'count' => $items->count(),
+                    'total' => $items->sum('amount'),
+                ];
+            })
+            ->filter(fn (array $group) => $group['count'] >= 2)
+            ->sortBy('name')
+            ->values();
+    }
+
+    private function collectiveDonationsQuery(int $year, string $donorKey)
+    {
+        $donationIds = Donation::forCurrentTenant()
+            ->whereYear('donated_at', $year)
+            ->where('status', '!=', Donation::STATUS_CANCELLED)
+            ->whereNull('certificate_number')
+            ->get()
+            ->filter(fn (Donation $donation) => $this->donorKey($donation) === $donorKey)
+            ->pluck('id');
+
+        return Donation::forCurrentTenant()->whereIn('id', $donationIds);
+    }
+
+    private function donorKey(Donation $donation): string
+    {
+        if ($donation->member_id) {
+            return 'member:' . $donation->member_id;
+        }
+
+        return 'external:' . md5(mb_strtolower(trim($donation->donor_name . '|' . $donation->donor_email . '|' . $donation->donor_zip . '|' . $donation->donor_city)));
     }
 
     private function validateDonation(Request $request): array

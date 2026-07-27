@@ -416,8 +416,7 @@ class DemoVereinSeeder extends Seeder
         Donation::withoutGlobalScopes()->create([
             'tenant_id' => $tenant->id,
             'member_id' => $member?->id,
-            'certificate_number' => 'SP-' . now()->year . '-0001',
-            'status' => Donation::STATUS_ISSUED,
+            'status' => Donation::STATUS_DRAFT,
             'kind' => 'money',
             'donated_at' => now()->subDays(18)->toDateString(),
             'amount' => 250.00,
@@ -428,8 +427,24 @@ class DemoVereinSeeder extends Seeder
             'donor_zip' => $member?->zip ?: '12345',
             'donor_city' => $member?->city ?: 'Demostadt',
             'payment_method' => 'ueberweisung',
-            'certificate_issued_at' => now()->subDays(17),
             'notes' => 'Demo-Spende für die Vorschau der Zuwendungsbestätigung.',
+        ]);
+
+        Donation::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id,
+            'member_id' => $member?->id,
+            'status' => Donation::STATUS_DRAFT,
+            'kind' => 'money',
+            'donated_at' => now()->subDays(7)->toDateString(),
+            'amount' => 150.00,
+            'purpose' => 'Ausstattung',
+            'donor_name' => $member?->full_name ?: 'Max Mustermann',
+            'donor_email' => $member?->email ?: 'spender@clubano.demo',
+            'donor_street' => $member?->street ?: 'Demoweg 12',
+            'donor_zip' => $member?->zip ?: '12345',
+            'donor_city' => $member?->city ?: 'Demostadt',
+            'payment_method' => 'ueberweisung',
+            'notes' => 'Zweite Demo-Spende für die Sammelbestätigung.',
         ]);
     }
 }

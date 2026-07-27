@@ -189,3 +189,50 @@ test('settings upload stores freistellungsbescheid as club document', function (
     expect($tenant->load('donationFreistellungDocument')->canIssueDonationCertificates())->toBeTrue();
     expect($tenant->donationFreistellungDocument->category)->toBe(Document::CATEGORY_CLUB);
 });
+
+test('collective certificate groups multiple open donations of one donor', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    [$tenant, $user] = createDonationUser();
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Max',
+        'last_name' => 'Demo',
+        'email' => 'max@example.test',
+        'street' => 'Demoweg 7',
+        'zip' => '12345',
+        'city' => 'Demostadt',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    foreach ([25, 75] as $amount) {
+        Donation::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id,
+            'member_id' => $member->id,
+            'status' => Donation::STATUS_DRAFT,
+            'kind' => 'money',
+            'donated_at' => now()->toDateString(),
+            'amount' => $amount,
+            'purpose' => 'Vereinsarbeit',
+            'donor_name' => $member->full_name,
+            'donor_email' => $member->email,
+            'donor_street' => $member->street,
+            'donor_zip' => $member->zip,
+            'donor_city' => $member->city,
+        ]);
+    }
+
+    $response = $this->actingAs($user)->post(route('donations.collective-pdf'), [
+        'year' => now()->year,
+        'donor_key' => 'member:' . $member->id,
+    ]);
+
+    $response->assertOk();
+    $response->assertHeader('content-type', 'application/pdf');
+
+    $donations = Donation::withoutGlobalScopes()->where('member_id', $member->id)->get();
+    expect($donations)->toHaveCount(2);
+    expect($donations->pluck('certificate_number')->unique())->toHaveCount(1);
+    expect($donations->first()->certificate_number)->toStartWith('SSP-' . now()->year . '-');
+    expect($donations->every(fn (Donation $donation) => $donation->status === Donation::STATUS_ISSUED))->toBeTrue();
+});
