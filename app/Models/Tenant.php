@@ -49,6 +49,16 @@ class Tenant extends Model
         'member_exit_mail_enabled',
         'member_exit_mail_subject',
         'member_exit_mail_body',
+        'donation_certificates_enabled',
+        'donation_certificates_send_enabled',
+        'donation_tax_office',
+        'donation_tax_number',
+        'donation_notice_authority',
+        'donation_notice_date',
+        'donation_notice_valid_until',
+        'donation_purposes',
+        'donation_freistellung_document_id',
+        'donation_email_body',
 
         // ➕ Stripe / Cashier
         'stripe_id',
@@ -69,6 +79,10 @@ class Tenant extends Model
         'is_demo' => 'boolean',
         'use_letterhead'  => 'boolean',
         'member_exit_mail_enabled' => 'boolean',
+        'donation_certificates_enabled' => 'boolean',
+        'donation_certificates_send_enabled' => 'boolean',
+        'donation_notice_date' => 'date',
+        'donation_notice_valid_until' => 'date',
     ];
 
     protected static function booted(): void
@@ -104,6 +118,82 @@ class Tenant extends Model
     public function users()
     {
         return $this->hasMany(User::class);
+    }
+
+    public function donationFreistellungDocument()
+    {
+        return $this->belongsTo(Document::class, 'donation_freistellung_document_id');
+    }
+
+    public function canIssueDonationCertificates(): bool
+    {
+        return $this->donationCertificateReadiness()['can_issue'];
+    }
+
+    public function donationCertificateReadiness(): array
+    {
+        $missing = [];
+        $document = $this->donationFreistellungDocument;
+
+        if (! $this->donation_certificates_enabled) {
+            $missing[] = 'Spendenbescheinigungen sind nicht aktiviert.';
+        }
+
+        if (! $document || $document->archived_at || $document->status !== Document::STATUS_ACTIVE) {
+            $missing[] = 'Gültiger Freistellungsbescheid fehlt.';
+        }
+
+        foreach ([
+            'donation_tax_office' => 'Finanzamt',
+            'donation_tax_number' => 'Steuernummer',
+            'donation_notice_authority' => 'Bescheid von',
+            'donation_notice_date' => 'Bescheiddatum',
+            'donation_purposes' => 'begünstigte Zwecke',
+        ] as $field => $label) {
+            if (blank($this->{$field})) {
+                $missing[] = $label . ' fehlt.';
+            }
+        }
+
+        if ($this->donation_notice_date && $this->donation_notice_date->lt(now()->subYears(5))) {
+            $missing[] = 'Der Freistellungsbescheid ist älter als fünf Jahre.';
+        }
+
+        if ($this->donation_notice_valid_until && $this->donation_notice_valid_until->isPast()) {
+            $missing[] = 'Der hinterlegte Bescheid ist abgelaufen.';
+        }
+
+        if ($document?->expires_at && $document->expires_at->isPast()) {
+            $missing[] = 'Das hinterlegte Dokument ist abgelaufen.';
+        }
+
+        if (! empty($missing)) {
+            return [
+                'status' => $this->donation_certificates_enabled ? 'incomplete' : 'not_configured',
+                'label' => $this->donation_certificates_enabled ? 'Unvollständig' : 'Nicht eingerichtet',
+                'message' => 'Zuwendungsbestätigungen sind noch gesperrt.',
+                'missing' => $missing,
+                'can_issue' => false,
+            ];
+        }
+
+        if ($this->donation_notice_date?->lte(now()->subYears(4)->addMonths(3)) || $this->donation_notice_valid_until?->lte(now()->addDays(90))) {
+            return [
+                'status' => 'expiring',
+                'label' => 'Läuft bald ab',
+                'message' => 'Zuwendungsbestätigungen sind möglich, aber der Nachweis sollte bald erneuert werden.',
+                'missing' => [],
+                'can_issue' => true,
+            ];
+        }
+
+        return [
+            'status' => 'active',
+            'label' => 'Aktiv',
+            'message' => 'Zuwendungsbestätigungen können erstellt werden.',
+            'missing' => [],
+            'can_issue' => true,
+        ];
     }
 
     public function invitationCode()

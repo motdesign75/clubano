@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Document;
+use App\Models\Donation;
 use App\Models\Event;
 use App\Models\EventCategory;
 use App\Models\Account;
@@ -44,6 +45,15 @@ class DemoVereinSeeder extends Seeder
                     'license_mode' => 'gifted',
                     'license_expires_at' => null,
                     'is_demo' => true,
+                    'donation_certificates_enabled' => true,
+                    'donation_certificates_send_enabled' => false,
+                    'donation_tax_office' => 'Finanzamt Demostadt',
+                    'donation_tax_number' => '12/345/67890',
+                    'donation_notice_authority' => 'Finanzamt Demostadt',
+                    'donation_notice_date' => now()->subMonths(8)->toDateString(),
+                    'donation_notice_valid_until' => now()->addYears(4)->toDateString(),
+                    'donation_purposes' => 'Förderung des Sports, der Jugendhilfe und des bürgerschaftlichen Engagements.',
+                    'donation_email_body' => "Sehr geehrte Damen und Herren,\n\nvielen Dank für Ihre Spende. Die Zuwendungsbestätigung finden Sie im Anhang.\n\nMit freundlichen Grüßen\nDemo-Sportverein Clubano e.V.",
                 ]
             );
         });
@@ -208,8 +218,11 @@ class DemoVereinSeeder extends Seeder
         $this->createDemoDocument($tenant, $user, 'Satzung Demo-Sportverein', Document::CATEGORY_CLUB, 'satzung-demo.pdf');
         $this->createDemoDocument($tenant, $user, 'Protokoll Vorstandssitzung', Document::CATEGORY_PROTOCOLS, 'protokoll-demo.pdf', protocolId: $protocol->id);
         $this->createDemoDocument($tenant, $user, 'Sommerfest Ablaufplan', Document::CATEGORY_EVENTS, 'sommerfest-ablauf.pdf', eventId: $events[2]->id);
+        $freistellung = $this->createDemoFreistellungDocument($tenant, $user);
+        $tenant->forceFill(['donation_freistellung_document_id' => $freistellung->id])->save();
 
         $this->createFinanceSample($tenant, $user);
+        $this->createDonationSample($tenant, $members->all());
 
         $this->command?->info('Demo-Zugang ist bereit.');
         $this->command?->line('E-Mail: ' . self::USER_EMAIL);
@@ -231,6 +244,7 @@ class DemoVereinSeeder extends Seeder
 
         foreach ([
             Document::class,
+            Donation::class,
             Template::class,
             ProtocolEntry::class,
             Protocol::class,
@@ -273,6 +287,29 @@ class DemoVereinSeeder extends Seeder
             'size' => strlen(Storage::disk('local')->get($path)),
             'event_id' => $eventId,
             'protocol_id' => $protocolId,
+        ]);
+    }
+
+    private function createDemoFreistellungDocument(Tenant $tenant, User $user): Document
+    {
+        $path = 'documents/' . $tenant->id . '/demo/freistellungsbescheid-demo.pdf';
+        Storage::disk('local')->put($path, "Clubano Demo-Dokument\n\nFreistellungsbescheid Demo\n");
+
+        return Document::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id,
+            'uploaded_by' => $user->id,
+            'title' => 'Freistellungsbescheid Demo',
+            'category' => Document::CATEGORY_CLUB,
+            'status' => Document::STATUS_ACTIVE,
+            'description' => 'Demo-Nachweis der Gemeinnützigkeit für Zuwendungsbestätigungen.',
+            'tags' => ['Gemeinnützigkeit', 'Freistellungsbescheid', 'Spenden'],
+            'document_date' => now()->subMonths(8)->toDateString(),
+            'expires_at' => now()->addYears(4)->toDateString(),
+            'disk' => 'local',
+            'path' => $path,
+            'original_name' => 'freistellungsbescheid-demo.pdf',
+            'mime_type' => 'application/pdf',
+            'size' => strlen(Storage::disk('local')->get($path)),
         ]);
     }
 
@@ -370,5 +407,29 @@ class DemoVereinSeeder extends Seeder
         }
 
         $accounts->each(fn (Account $account) => $account->updateBalance());
+    }
+
+    private function createDonationSample(Tenant $tenant, array $members): void
+    {
+        $member = $members[24] ?? null;
+
+        Donation::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id,
+            'member_id' => $member?->id,
+            'certificate_number' => 'SP-' . now()->year . '-0001',
+            'status' => Donation::STATUS_ISSUED,
+            'kind' => 'money',
+            'donated_at' => now()->subDays(18)->toDateString(),
+            'amount' => 250.00,
+            'purpose' => 'Jugendarbeit',
+            'donor_name' => $member?->full_name ?: 'Max Mustermann',
+            'donor_email' => $member?->email ?: 'spender@clubano.demo',
+            'donor_street' => $member?->street ?: 'Demoweg 12',
+            'donor_zip' => $member?->zip ?: '12345',
+            'donor_city' => $member?->city ?: 'Demostadt',
+            'payment_method' => 'ueberweisung',
+            'certificate_issued_at' => now()->subDays(17),
+            'notes' => 'Demo-Spende für die Vorschau der Zuwendungsbestätigung.',
+        ]);
     }
 }

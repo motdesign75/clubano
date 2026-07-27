@@ -29,6 +29,7 @@
             'route' => route('transactions.index'),
             'active' => request()->routeIs('accounts.*')
                 || request()->routeIs('transactions.*')
+                || request()->routeIs('donations.*')
                 || request()->routeIs('invoices.*')
                 || request()->routeIs('payments.*'),
             'icon' => 'banknotes',
@@ -119,6 +120,14 @@
             'route' => route('transactions.corporation-tax'),
             'active' => request()->routeIs('transactions.summary') || request()->routeIs('transactions.eur') || request()->routeIs('transactions.journal*') || request()->routeIs('transactions.corporation-tax'),
             'icon' => 'chart-bar',
+            'minRole' => 'Admin',
+        ],
+        [
+            'label' => 'Spenden',
+            'hint' => 'Spenden erfassen und Bestätigungen erstellen',
+            'route' => route('donations.index'),
+            'active' => request()->routeIs('donations.*'),
+            'icon' => 'gift',
             'minRole' => 'Admin',
         ],
         [
@@ -418,6 +427,9 @@
                                         @break
                                     @case('receipt-percent')
                                         <x-heroicon-o-receipt-percent class="h-5 w-5 {{ $iconColor }}" />
+                                        @break
+                                    @case('gift')
+                                        <x-heroicon-o-gift class="h-5 w-5 {{ $iconColor }}" />
                                         @break
                                     @case('building-office')
                                         <x-heroicon-o-building-office class="h-5 w-5 {{ $iconColor }}" />

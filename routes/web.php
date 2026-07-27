@@ -10,6 +10,7 @@ use App\Http\Controllers\MailController;
 use App\Http\Controllers\MailTrackingController;
 use App\Http\Controllers\LetterController;
 use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\DonationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\EventCategoryController;
@@ -349,6 +350,18 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             Route::get('/transactions/{transaction}/cancel', [$cls, 'cancel'])->name('transactions.cancel');
             Route::post('/transactions/{transaction}/cancel', [$cls, 'cancelStore'])->name('transactions.cancel.store');
         });
+    });
+
+    Route::middleware('tenant.role:Admin')->group(function () {
+        Route::get('/spenden/einstellungen', [DonationController::class, 'settings'])->name('donations.settings');
+        Route::put('/spenden/einstellungen', [DonationController::class, 'updateSettings'])->name('donations.settings.update');
+        Route::get('/spenden', [DonationController::class, 'index'])->name('donations.index');
+        Route::get('/spenden/neu', [DonationController::class, 'create'])->name('donations.create');
+        Route::post('/spenden', [DonationController::class, 'store'])->name('donations.store');
+        Route::get('/spenden/{donation}', [DonationController::class, 'show'])->name('donations.show');
+        Route::get('/spenden/{donation}/pdf', [DonationController::class, 'pdf'])->name('donations.pdf');
+        Route::patch('/spenden/{donation}/versendet', [DonationController::class, 'markSent'])->name('donations.mark-sent');
+        Route::patch('/spenden/{donation}/stornieren', [DonationController::class, 'cancel'])->name('donations.cancel');
     });
 
     // Belege

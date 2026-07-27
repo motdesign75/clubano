@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Account;
+use App\Models\Donation;
 use App\Models\Member;
 use App\Models\Tenant;
 use App\Models\Transaction;
@@ -77,4 +78,8 @@ test('demo reset command creates the public demo account', function () {
     expect(Account::withoutGlobalScopes()->where('tenant_id', $tenant->id)->whereIn('type', ['bank', 'kasse'])->count())->toBe(2);
     expect(Account::withoutGlobalScopes()->where('tenant_id', $tenant->id)->whereIn('type', ['einnahme', 'ausgabe'])->count())->toBe(5);
     expect(Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(8);
+    expect(Donation::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(1);
+    expect($tenant->donation_tax_office)->toBe('Finanzamt Demostadt');
+    expect($tenant->donation_freistellung_document_id)->not->toBeNull();
+    expect($tenant->load('donationFreistellungDocument')->canIssueDonationCertificates())->toBeTrue();
 });
