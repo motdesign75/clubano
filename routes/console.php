@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use Database\Seeders\DemoVereinSeeder;
 use App\Services\TenantDemoDataGenerator;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -56,3 +57,17 @@ Artisan::command('clubano:make-superadmin {email} {--name=Clubano Admin} {--pass
         $this->line($password);
     }
 })->purpose('Erzeugt oder aktualisiert ein Clubano-Betreiberkonto ohne Vereinszuordnung');
+
+Artisan::command('clubano:demo-reset', function () {
+    $this->components->info('Setze den öffentlichen Clubano-Demozugang zurück ...');
+
+    $this->call('db:seed', [
+        '--class' => DemoVereinSeeder::class,
+        '--force' => true,
+    ]);
+
+    $this->newLine();
+    $this->components->info('Demo ist bereit.');
+    $this->line('E-Mail: ' . DemoVereinSeeder::USER_EMAIL);
+    $this->line('Passwort: ' . DemoVereinSeeder::USER_PASSWORD);
+})->purpose('Setzt den öffentlichen Demo-Verein mit geschützten Beispieldaten zurück');

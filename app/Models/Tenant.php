@@ -57,6 +57,7 @@ class Tenant extends Model
         'trial_ends_at',
         'license_mode',
         'license_expires_at',
+        'is_demo',
 
         // (Optional / Legacy)
         'stripe_subscription_id',
@@ -65,6 +66,7 @@ class Tenant extends Model
     protected $casts = [
         'trial_ends_at'   => 'datetime',
         'license_expires_at' => 'datetime',
+        'is_demo' => 'boolean',
         'use_letterhead'  => 'boolean',
         'member_exit_mail_enabled' => 'boolean',
     ];
@@ -152,6 +154,11 @@ class Tenant extends Model
         return ! $this->subscribed('default')
             && ! $this->hasComplimentaryAccess()
             && $this->trial_ends_at === null;
+    }
+
+    public function isDemo(): bool
+    {
+        return (bool) $this->is_demo;
     }
 
     public function startSelfServeTrialIfEligible(?int $days = null): bool

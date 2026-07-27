@@ -28,6 +28,11 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.subscribed' => \App\Http\Middleware\EnsureTenantIsSubscribed::class,
             'superadmin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'tenant.role' => \App\Http\Middleware\EnsureTenantRole::class,
+            'demo.protect' => \App\Http\Middleware\ProtectDemoMode::class,
+        ]);
+
+        $middleware->web(append: [
+            \App\Http\Middleware\ProtectDemoMode::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

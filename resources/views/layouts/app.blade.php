@@ -2,6 +2,8 @@
     $currentHelpKey = trim($__env->yieldContent('help-key'));
     $pageHelp = $currentHelpKey !== '' ? config('clubano_help.pages.' . $currentHelpKey) : null;
     $hasPageHelp = is_array($pageHelp) && !empty($pageHelp);
+    $currentTenant = auth()->user()?->tenant;
+    $isDemoTenant = (bool) ($currentTenant?->is_demo ?? false);
 @endphp
 
 <!DOCTYPE html>
@@ -214,6 +216,25 @@
 
     <!-- Content -->
     <main class="flex-1 w-full overflow-y-auto px-4 pt-[56px] sm:pt-6 transition-all duration-200">
+        @if(session('warning'))
+            <div class="mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:px-8">
+                <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-950">
+                    {{ session('warning') }}
+                </div>
+            </div>
+        @endif
+
+        @if($isDemoTenant)
+            <div class="mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:px-8">
+                <div class="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-950">
+                    <div class="font-semibold">Demo-Modus</div>
+                    <div class="mt-1 leading-6">
+                        Du testest Clubano mit Beispieldaten. Anlegen und Bearbeiten ist möglich; Mailversand, SEPA, Rechnungsversand, Benutzerverwaltung, Vereinsdaten und Löschaktionen sind geschützt.
+                    </div>
+                </div>
+            </div>
+        @endif
+
         @if($hasPageHelp)
             <div class="mx-auto hidden max-w-7xl justify-end px-4 pb-2 sm:flex sm:px-6 lg:px-8">
                 <button type="button"
