@@ -52,7 +52,7 @@
                     </button>
 
                     <button type="submit" formaction="{{ route('events.participants.pdf', $event) }}" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
-                        PDF öffnen
+                        PDF herunterladen
                     </button>
                 </div>
             </div>

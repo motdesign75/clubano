@@ -992,7 +992,7 @@ class EventController extends Controller
 
         $filename = 'teilnehmerliste-' . Str::slug($event->title ?: 'termin') . '.pdf';
 
-        return $pdf->stream($filename);
+        return $pdf->download($filename);
     }
 
     private function participantsDocumentData(Event $event, ?Request $request = null): array

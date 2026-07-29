@@ -388,7 +388,7 @@ test('staff can manually add event participants from members contacts and guests
         ->assertSee('Sponsor GmbH - Clara Kontakt')
         ->assertSee('Teilnehmer bearbeiten')
         ->assertSee('Ausgewählte kostenfrei setzen')
-        ->assertSee('PDF öffnen')
+        ->assertSee('PDF herunterladen')
         ->assertSee('Firma / Organisation')
         ->assertSee('Nachträglich kostenfrei gestellt');
 
@@ -409,6 +409,7 @@ test('staff can manually add event participants from members contacts and guests
     $pdfResponse = $this->actingAs($staff)->get(route('events.participants.pdf', [$event, 'display' => 'organization']));
     $pdfResponse->assertOk();
     expect($pdfResponse->headers->get('content-type'))->toContain('application/pdf');
+    expect($pdfResponse->headers->get('content-disposition'))->toContain('attachment;');
     expect($pdfResponse->getContent())->toStartWith('%PDF');
 });
 
