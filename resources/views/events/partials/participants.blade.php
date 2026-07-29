@@ -323,6 +323,94 @@
                                                     @endif
                                                 </div>
                                             @endif
+                                            <details class="group mt-2 rounded-lg border border-slate-200 bg-white">
+                                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
+                                                    Teilnehmer bearbeiten
+                                                    <x-heroicon-o-chevron-down class="h-4 w-4 text-slate-400 transition group-open:rotate-180" />
+                                                </summary>
+                                                <form method="POST" action="{{ route('events.participants.update', [$event, $booking, $participant]) }}" class="space-y-3 border-t border-slate-100 p-3">
+                                                    @csrf
+                                                    @method('PATCH')
+
+                                                    <div class="grid gap-2 sm:grid-cols-2">
+                                                        <div>
+                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Vorname</label>
+                                                            <input type="text" name="first_name" value="{{ old('first_name', $participant->first_name) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                        </div>
+                                                        <div>
+                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Nachname</label>
+                                                            <input type="text" name="last_name" value="{{ old('last_name', $participant->last_name) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Firma / Organisation</label>
+                                                        <input type="text" name="organization_name" value="{{ old('organization_name', $participant->organization_name) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                    </div>
+
+                                                    <div class="grid gap-2 sm:grid-cols-2">
+                                                        <div>
+                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">E-Mail</label>
+                                                            <input type="email" name="email" value="{{ old('email', $participant->email) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                        </div>
+                                                        <div>
+                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Telefon</label>
+                                                            <input type="text" name="phone" value="{{ old('phone', $participant->phone) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                        </div>
+                                                    </div>
+
+                                                    <label class="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                                        <input type="checkbox" name="payment_required" value="1" class="mt-0.5 rounded border-slate-300 text-slate-950 focus:ring-slate-400" @checked(old('payment_required', $participant->payment_required))>
+                                                        <span>
+                                                            <span class="block font-semibold text-slate-900">Teilnehmer muss zahlen</span>
+                                                            <span class="block text-slate-500">Wenn aus, wird Betrag und Status auf kostenfrei gesetzt.</span>
+                                                        </span>
+                                                    </label>
+
+                                                    <div class="grid gap-2 sm:grid-cols-2">
+                                                        <div>
+                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Betrag</label>
+                                                            <input type="number" step="0.01" min="0" name="price_amount" value="{{ old('price_amount', number_format((float) $participant->price_amount, 2, '.', '')) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                        </div>
+                                                        <div>
+                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Zahlstatus</label>
+                                                            <select name="payment_status" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                                <option value="not_required" @selected(old('payment_status', $participant->payment_status) === 'not_required')>Keine Zahlung nötig</option>
+                                                                <option value="open" @selected(old('payment_status', $participant->payment_status) === 'open')>Offen</option>
+                                                                <option value="paid" @selected(old('payment_status', $participant->payment_status) === 'paid')>Bezahlt</option>
+                                                                <option value="cancelled" @selected(old('payment_status', $participant->payment_status) === 'cancelled')>Storniert</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="grid gap-2 sm:grid-cols-2">
+                                                        <div>
+                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Grund / Hinweis</label>
+                                                            <input type="text" name="payment_reason" value="{{ old('payment_reason', $participant->payment_reason) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300" placeholder="z. B. Sponsor, Ehrengast">
+                                                        </div>
+                                                        <div>
+                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Herkunft</label>
+                                                            <select name="source" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                                <option value="manual" @selected(old('source', $participant->source) === 'manual')>Manuell</option>
+                                                                <option value="phone" @selected(old('source', $participant->source) === 'phone')>Telefon</option>
+                                                                <option value="email" @selected(old('source', $participant->source) === 'email')>E-Mail</option>
+                                                                <option value="abendkasse" @selected(old('source', $participant->source) === 'abendkasse')>Abendkasse</option>
+                                                                <option value="imported" @selected(old('source', $participant->source) === 'imported')>Importiert</option>
+                                                                <option value="online" @selected(old('source', $participant->source) === 'online')>Online</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Notiz</label>
+                                                        <textarea name="note" rows="2" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">{{ old('note', $participant->note) }}</textarea>
+                                                    </div>
+
+                                                    <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                                                        Teilnehmer speichern
+                                                    </button>
+                                                </form>
+                                            </details>
                                         </div>
                                     @endforeach
                                 </div>

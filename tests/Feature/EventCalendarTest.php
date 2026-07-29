@@ -332,10 +332,34 @@ test('staff can manually add event participants from members contacts and guests
     expect($bookings->flatMap->participants->firstWhere('email', 'gunnar@example.test')->payment_status)->toBe('paid');
     expect($bookings->flatMap->participants->firstWhere('organization_name', 'Gastverein Demostadt')->display_name)->toBe('Gastverein Demostadt');
 
+    $guestParticipant = $bookings->flatMap->participants->firstWhere('email', 'gunnar@example.test');
+    $this->actingAs($staff)->patch(route('events.participants.update', [$event, $guestParticipant->booking, $guestParticipant]), [
+        'first_name' => 'Gunnar',
+        'last_name' => 'Gast',
+        'organization_name' => null,
+        'email' => 'gunnar@example.test',
+        'phone' => null,
+        'payment_status' => 'paid',
+        'payment_reason' => 'Ehrengast',
+        'source' => 'abendkasse',
+        'note' => 'Nachträglich kostenfrei gestellt',
+    ])->assertRedirect(route('events.edit', $event));
+
+    $guestParticipant->refresh();
+    expect($guestParticipant->payment_required)->toBeFalse();
+    expect((float) $guestParticipant->price_amount)->toBe(0.0);
+    expect($guestParticipant->payment_status)->toBe('not_required');
+    expect($guestParticipant->payment_reason)->toBe('Ehrengast');
+    expect($guestParticipant->note)->toBe('Nachträglich kostenfrei gestellt');
+    expect((float) $guestParticipant->booking->fresh()->total_amount)->toBe(0.0);
+    expect((float) EventBooking::query()->where('event_id', $event->id)->sum('total_amount'))->toBe(50.0);
+
     $this->actingAs($staff)->get(route('events.edit', $event))
         ->assertOk()
         ->assertSee('Teilnehmer nachtragen')
-        ->assertSee('Sponsor GmbH - Clara Kontakt');
+        ->assertSee('Sponsor GmbH - Clara Kontakt')
+        ->assertSee('Teilnehmer bearbeiten')
+        ->assertSee('Nachträglich kostenfrei gestellt');
 
     $this->actingAs($staff)->get(route('events.participants.print', $event))
         ->assertOk()

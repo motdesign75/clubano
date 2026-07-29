@@ -10,6 +10,7 @@ use App\Mail\EventInvitationMail;
 use App\Models\Event;
 use App\Models\EventAttendance;
 use App\Models\EventBooking;
+use App\Models\EventBookingParticipant;
 use App\Models\EventChangeLog;
 use App\Models\EventCategory;
 use App\Models\EventInvitation;
@@ -1024,6 +1025,65 @@ class EventController extends Controller
         return redirect()
             ->route('events.edit', $event)
             ->with('success', 'Buchungs- und Zahlungsstatus wurden aktualisiert.');
+    }
+
+    public function updateParticipant(Request $request, Event $event, EventBooking $booking, EventBookingParticipant $participant)
+    {
+        $this->authorizeEvent($event);
+        $this->authorizeBooking($event, $booking);
+
+        abort_unless((int) $participant->event_booking_id === (int) $booking->id, 404);
+
+        $validated = $request->validate([
+            'first_name' => ['nullable', 'string', 'max:255'],
+            'last_name' => ['nullable', 'string', 'max:255'],
+            'organization_name' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:255'],
+            'payment_required' => ['nullable', 'boolean'],
+            'price_amount' => ['nullable', 'numeric', 'min:0', 'max:999999.99'],
+            'payment_status' => ['required', Rule::in(['not_required', 'open', 'paid', 'cancelled'])],
+            'payment_reason' => ['nullable', 'string', 'max:255'],
+            'source' => ['required', Rule::in(['manual', 'phone', 'email', 'abendkasse', 'imported', 'online'])],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $paymentRequired = $request->boolean('payment_required');
+        $priceAmount = $paymentRequired ? round((float) ($validated['price_amount'] ?? 0), 2) : 0;
+        $paymentStatus = $paymentRequired ? $validated['payment_status'] : 'not_required';
+
+        if ($priceAmount <= 0 && $paymentStatus === 'open') {
+            $paymentStatus = 'not_required';
+        }
+
+        $participant->update([
+            'first_name' => $validated['first_name'] ?? null,
+            'last_name' => $validated['last_name'] ?? null,
+            'organization_name' => $validated['organization_name'] ?? null,
+            'email' => $validated['email'] ?? null,
+            'phone' => $validated['phone'] ?? null,
+            'payment_required' => $paymentRequired,
+            'price_amount' => $priceAmount,
+            'payment_status' => $paymentStatus,
+            'payment_reason' => $validated['payment_reason'] ?? null,
+            'source' => $validated['source'],
+            'note' => $validated['note'] ?? null,
+        ]);
+
+        $booking->recalculateTotalsFromParticipants();
+
+        if ($booking->participants()->count() === 1) {
+            $participant->refresh();
+            $booking->forceFill([
+                'booker_name' => $participant->display_name ?: $participant->full_name ?: $booking->booker_name,
+                'booker_email' => $participant->email,
+                'booker_phone' => $participant->phone,
+            ])->save();
+        }
+
+        return redirect()
+            ->route('events.edit', $event)
+            ->with('success', 'Teilnehmer wurde aktualisiert.');
     }
 
     public function storeManualParticipant(Request $request, Event $event)
