@@ -158,7 +158,7 @@
     <header class="header">
         <div class="eyebrow">Clubano Teilnehmerdokument</div>
         <h1>Teilnehmerliste</h1>
-        <div class="event-title">{{ $event->title }}</div>
+        <div class="event-title">{{ $event->title }} · Anzeige: {{ $displayMode === 'organization' ? 'Firma / Organisation' : 'Vor- und Nachname' }}</div>
 
         <table class="meta">
             <tr>
@@ -196,8 +196,8 @@
                 @php($participant = $row['participant'])
                 <tr>
                     <td>
-                        <span class="name">{{ $participant->display_name ?: 'Ohne Namen' }}</span>
-                        <span class="subline">{{ $participant->note ?: ($participant->source ?: 'manual') }}</span>
+                        <span class="name">{{ $row['display_name'] }}</span>
+                        <span class="subline">{{ $row['display_subline'] }}</span>
                     </td>
                     <td><span class="pill">{{ $participant->type_label }}</span></td>
                     <td>

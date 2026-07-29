@@ -26,21 +26,38 @@
                    class="inline-flex rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
                     Teilnehmer exportieren
                 </a>
-
-                <a href="{{ route('events.participants.print', $event) }}"
-                   target="_blank"
-                   class="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
-                    Teilnehmerliste drucken
-                </a>
-
-                <a href="{{ route('events.participants.pdf', $event) }}"
-                   target="_blank"
-                   class="inline-flex rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
-                    PDF öffnen
-                </a>
             </div>
         @endif
     </div>
+
+    @if($event->activeBookingForm || $bookingSubmissionCount > 0)
+        <form method="GET" action="{{ route('events.participants.print', $event) }}" target="_blank" class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-950">Ausgabe vorbereiten</h3>
+                    <p class="mt-1 text-sm text-slate-500">Lege fest, ob Firmen/Organisationen oder Personen im Ausdruck im Vordergrund stehen.</p>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-[minmax(0,16rem),auto,auto] sm:items-end">
+                    <div>
+                        <label for="participant_display_mode" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Anzeige</label>
+                        <select id="participant_display_mode" name="display" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                            <option value="person">Vor- und Nachname</option>
+                            <option value="organization">Firma / Organisation</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+                        Drucken
+                    </button>
+
+                    <button type="submit" formaction="{{ route('events.participants.pdf', $event) }}" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+                        PDF öffnen
+                    </button>
+                </div>
+            </div>
+        </form>
+    @endif
 
     @if($canManageManualParticipants ?? false)
     <div id="teilnehmer-nachtragen" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5" x-data="{ type: 'member', listDisplay: 'person', guestMode: 'person', paymentRequired: {{ (float) $event->price_per_person > 0 ? 'true' : 'false' }} }">

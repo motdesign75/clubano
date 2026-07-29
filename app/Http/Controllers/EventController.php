@@ -976,18 +976,18 @@ class EventController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 
-    public function participantsPrint(Event $event)
+    public function participantsPrint(Request $request, Event $event)
     {
         $this->authorizeEvent($event);
 
-        return view('events.participants-print', $this->participantsDocumentData($event));
+        return view('events.participants-print', $this->participantsDocumentData($event, $request));
     }
 
-    public function participantsPdf(Event $event)
+    public function participantsPdf(Request $request, Event $event)
     {
         $this->authorizeEvent($event);
 
-        $pdf = Pdf::loadView('pdf.event-participants', $this->participantsDocumentData($event))
+        $pdf = Pdf::loadView('pdf.event-participants', $this->participantsDocumentData($event, $request))
             ->setPaper('a4', 'portrait');
 
         $filename = 'teilnehmerliste-' . Str::slug($event->title ?: 'termin') . '.pdf';
@@ -995,21 +995,26 @@ class EventController extends Controller
         return $pdf->stream($filename);
     }
 
-    private function participantsDocumentData(Event $event): array
+    private function participantsDocumentData(Event $event, ?Request $request = null): array
     {
+        $displayMode = $request?->query('display') === 'organization' ? 'organization' : 'person';
+
         $event->load(['tenant', 'bookings.participants.member', 'bookings.participants.contact']);
         $participants = $event->bookings
             ->flatMap(fn (EventBooking $booking) => $booking->participants->map(fn ($participant) => [
                 'booking' => $booking,
                 'participant' => $participant,
+                'display_name' => $this->participantDocumentDisplayName($participant, $displayMode),
+                'display_subline' => $this->participantDocumentSubline($participant, $displayMode),
             ]))
-            ->sortBy(fn (array $row) => mb_strtolower($row['participant']->display_name))
+            ->sortBy(fn (array $row) => mb_strtolower($row['display_name']))
             ->values();
 
         return [
             'event' => $event,
             'tenant' => $event->tenant,
             'participants' => $participants,
+            'displayMode' => $displayMode,
             'stats' => [
                 'count' => $participants->count(),
                 'open' => $participants->filter(fn (array $row) => $row['participant']->payment_status === 'open')->count(),
@@ -1018,6 +1023,40 @@ class EventController extends Controller
                 'total' => $participants->sum(fn (array $row) => (float) $row['participant']->price_amount),
             ],
         ];
+    }
+
+    private function participantDocumentDisplayName(EventBookingParticipant $participant, string $displayMode): string
+    {
+        $personName = trim($participant->full_name);
+        $organization = trim((string) ($participant->organization_name
+            ?: $participant->member?->organization
+            ?: $participant->contact?->organization
+            ?: $participant->contact?->company));
+
+        if ($displayMode === 'organization') {
+            return $organization ?: ($personName ?: $participant->display_name ?: 'Ohne Namen');
+        }
+
+        return $personName ?: ($organization ?: $participant->display_name ?: 'Ohne Namen');
+    }
+
+    private function participantDocumentSubline(EventBookingParticipant $participant, string $displayMode): string
+    {
+        $personName = trim($participant->full_name);
+        $organization = trim((string) ($participant->organization_name
+            ?: $participant->member?->organization
+            ?: $participant->contact?->organization
+            ?: $participant->contact?->company));
+
+        if ($displayMode === 'organization' && $organization && $personName) {
+            return $personName;
+        }
+
+        if ($displayMode === 'person' && $organization) {
+            return $organization;
+        }
+
+        return $participant->note ?: ($participant->source ?: 'manual');
     }
 
     public function updateBooking(Request $request, Event $event, EventBooking $booking)

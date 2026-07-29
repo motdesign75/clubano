@@ -360,16 +360,24 @@ test('staff can manually add event participants from members contacts and guests
         ->assertSee('Sponsor GmbH - Clara Kontakt')
         ->assertSee('Teilnehmer bearbeiten')
         ->assertSee('PDF öffnen')
+        ->assertSee('Firma / Organisation')
         ->assertSee('Nachträglich kostenfrei gestellt');
 
     $this->actingAs($staff)->get(route('events.participants.print', $event))
         ->assertOk()
         ->assertSee('Teilnehmerliste')
         ->assertSee('Ben Mitglied')
-        ->assertSee('Presse Demo - Petra Kontakt')
+        ->assertSee('Petra Kontakt')
+        ->assertSee('Presse Demo')
         ->assertSee('Gastverein Demostadt');
 
-    $pdfResponse = $this->actingAs($staff)->get(route('events.participants.pdf', $event));
+    $this->actingAs($staff)->get(route('events.participants.print', [$event, 'display' => 'organization']))
+        ->assertOk()
+        ->assertSee('Anzeige: Firma / Organisation')
+        ->assertSee('Presse Demo')
+        ->assertSee('Petra Kontakt');
+
+    $pdfResponse = $this->actingAs($staff)->get(route('events.participants.pdf', [$event, 'display' => 'organization']));
     $pdfResponse->assertOk();
     expect($pdfResponse->headers->get('content-type'))->toContain('application/pdf');
     expect($pdfResponse->getContent())->toStartWith('%PDF');
