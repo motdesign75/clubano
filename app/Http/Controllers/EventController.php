@@ -980,6 +980,23 @@ class EventController extends Controller
     {
         $this->authorizeEvent($event);
 
+        return view('events.participants-print', $this->participantsDocumentData($event));
+    }
+
+    public function participantsPdf(Event $event)
+    {
+        $this->authorizeEvent($event);
+
+        $pdf = Pdf::loadView('pdf.event-participants', $this->participantsDocumentData($event))
+            ->setPaper('a4', 'portrait');
+
+        $filename = 'teilnehmerliste-' . Str::slug($event->title ?: 'termin') . '.pdf';
+
+        return $pdf->stream($filename);
+    }
+
+    private function participantsDocumentData(Event $event): array
+    {
         $event->load(['tenant', 'bookings.participants.member', 'bookings.participants.contact']);
         $participants = $event->bookings
             ->flatMap(fn (EventBooking $booking) => $booking->participants->map(fn ($participant) => [
@@ -989,7 +1006,7 @@ class EventController extends Controller
             ->sortBy(fn (array $row) => mb_strtolower($row['participant']->display_name))
             ->values();
 
-        return view('events.participants-print', [
+        return [
             'event' => $event,
             'tenant' => $event->tenant,
             'participants' => $participants,
@@ -1000,7 +1017,7 @@ class EventController extends Controller
                 'free' => $participants->filter(fn (array $row) => $row['participant']->payment_status === 'not_required')->count(),
                 'total' => $participants->sum(fn (array $row) => (float) $row['participant']->price_amount),
             ],
-        ]);
+        ];
     }
 
     public function updateBooking(Request $request, Event $event, EventBooking $booking)

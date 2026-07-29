@@ -359,6 +359,7 @@ test('staff can manually add event participants from members contacts and guests
         ->assertSee('Teilnehmer nachtragen')
         ->assertSee('Sponsor GmbH - Clara Kontakt')
         ->assertSee('Teilnehmer bearbeiten')
+        ->assertSee('PDF öffnen')
         ->assertSee('Nachträglich kostenfrei gestellt');
 
     $this->actingAs($staff)->get(route('events.participants.print', $event))
@@ -367,6 +368,11 @@ test('staff can manually add event participants from members contacts and guests
         ->assertSee('Ben Mitglied')
         ->assertSee('Presse Demo - Petra Kontakt')
         ->assertSee('Gastverein Demostadt');
+
+    $pdfResponse = $this->actingAs($staff)->get(route('events.participants.pdf', $event));
+    $pdfResponse->assertOk();
+    expect($pdfResponse->headers->get('content-type'))->toContain('application/pdf');
+    expect($pdfResponse->getContent())->toStartWith('%PDF');
 });
 
 test('staff can see and delete calendar events', function () {
