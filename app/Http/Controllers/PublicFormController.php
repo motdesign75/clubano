@@ -431,17 +431,18 @@ class PublicFormController extends Controller
             if ($isEventBooking && $form->event) {
                 $useBookerAsParticipant = (bool) ($answers['use_booker_as_participant'] ?? false);
                 $participantTarget = (int) ($answers['participant_count'] ?? 1);
+                $additionalParticipantTarget = max(0, $participantTarget - ($useBookerAsParticipant ? 1 : 0));
                 $participantRows = collect($validated['participants'] ?? [])
-                    ->take($participantTarget)
+                    ->take($additionalParticipantTarget)
                     ->values();
 
-                if ($useBookerAsParticipant && $participantTarget === 1) {
+                if ($useBookerAsParticipant) {
                     $participantRows = collect([[
                         'first_name' => trim((string) ($answers['first_name'] ?? '')),
                         'last_name' => trim((string) ($answers['last_name'] ?? '')),
                         'email' => $answers['email'] ?? null,
                         'phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
-                    ]]);
+                    ]])->concat($participantRows)->values();
                 }
 
                 $participantRows = $participantRows

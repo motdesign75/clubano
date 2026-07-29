@@ -6,9 +6,10 @@
         $participantCountOld = max(1, min((int) old('participant_count', 1), max(1, (int) ($event?->max_participants_per_booking ?: 1))));
         $participantRowsOld = old('participants', []);
         $participantTemplate = [];
-        $useBookerAsParticipantOld = old('use_booker_as_participant', $participantCountOld === 1 ? 1 : 0);
+        $useBookerAsParticipantOld = (bool) old('use_booker_as_participant', 1);
+        $additionalParticipantCountOld = max(0, $participantCountOld - ($useBookerAsParticipantOld ? 1 : 0));
 
-        for ($i = 0; $i < $participantCountOld; $i++) {
+        for ($i = 0; $i < $additionalParticipantCountOld; $i++) {
             $participantTemplate[] = [
                 'first_name' => $participantRowsOld[$i]['first_name'] ?? '',
                 'last_name' => $participantRowsOld[$i]['last_name'] ?? '',
@@ -100,41 +101,28 @@
                       email: {{ json_encode(old('fields.email', '')) }},
                       phone: {{ json_encode(old('fields.mobile', old('fields.phone', ''))) }},
                   },
+                  additionalParticipantCount() {
+                      return Math.max(0, this.participantCount - (this.useBookerAsParticipant ? 1 : 0));
+                  },
                   syncParticipants() {
                       const target = Math.max(1, Math.min(this.maxParticipants, Number(this.participantCount) || 1));
                       this.participantCount = target;
+                      const additionalTarget = this.additionalParticipantCount();
 
-                      if (target !== 1) {
-                          this.useBookerAsParticipant = false;
-                      } else if (this.participants.length <= 1 && !this.useBookerAsParticipant) {
+                      if (target === 1 && this.participants.length === 0 && !this.useBookerAsParticipant) {
                           this.useBookerAsParticipant = true;
                       }
 
-                      while (this.participants.length < target) {
+                      while (this.participants.length < additionalTarget) {
                           this.participants.push({ first_name: '', last_name: '', email: '', phone: '' });
                       }
 
-                      while (this.participants.length > target) {
+                      while (this.participants.length > additionalTarget) {
                           this.participants.pop();
                       }
-
-                      this.syncBookerToParticipant();
                   },
                   syncBookerToParticipant() {
-                      if (!this.useBookerAsParticipant || this.participantCount !== 1) {
-                          return;
-                      }
-
-                      if (!this.participants[0]) {
-                          this.participants.push({ first_name: '', last_name: '', email: '', phone: '' });
-                      }
-
-                      this.participants[0] = {
-                          first_name: this.booker.first_name,
-                          last_name: this.booker.last_name,
-                          email: this.booker.email,
-                          phone: this.booker.phone,
-                      };
+                      this.syncParticipants();
                   },
                   totalAmount() {
                       return (this.participantCount * this.pricePerPerson).toFixed(2).replace('.', ',');
@@ -299,25 +287,33 @@
                     <p class="mt-1 text-sm text-slate-500">Bitte trage alle Personen ein, für die du diese Veranstaltung buchen möchtest.</p>
                 </div>
 
-                <div x-show="participantCount === 1" x-cloak class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+                <div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
                     <input type="hidden" name="use_booker_as_participant" :value="useBookerAsParticipant ? 1 : 0">
                     <label class="flex items-start gap-3 text-sm text-indigo-950">
                         <input type="checkbox"
                                x-model="useBookerAsParticipant"
-                               @change="syncBookerToParticipant()"
+                               @change="syncParticipants()"
                                class="mt-0.5 rounded border-indigo-200 text-indigo-600 focus:ring-indigo-500">
                         <span>
                             <span class="block font-semibold">Ansprechpartner nimmt selbst teil</span>
-                            <span class="mt-1 block text-indigo-900/80">Dann nutzen wir die Angaben oben direkt auch als Teilnehmerdaten.</span>
+                            <span class="mt-1 block text-indigo-900/80">
+                                Dann nutzen wir die Angaben oben direkt als ersten Teilnehmer. Du trägst nur noch weitere Personen ein.
+                            </span>
                         </span>
                     </label>
                 </div>
 
-                <div class="space-y-4" x-show="!(participantCount === 1 && useBookerAsParticipant)" x-cloak>
+                <div x-show="useBookerAsParticipant" x-cloak class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                    <span class="font-semibold text-slate-900">Teilnehmer 1:</span>
+                    <span x-text="`${booker.first_name || 'Vorname'} ${booker.last_name || 'Nachname'}`"></span>
+                    <span class="text-slate-400">aus Ansprechpartner übernommen</span>
+                </div>
+
+                <div class="space-y-4" x-show="additionalParticipantCount() > 0" x-cloak>
                     <template x-for="(participant, index) in participants" :key="index">
                         <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                             <div class="mb-4 text-sm font-semibold text-slate-800">
-                                Teilnehmer <span x-text="index + 1"></span>
+                                Teilnehmer <span x-text="index + 1 + (useBookerAsParticipant ? 1 : 0)"></span>
                             </div>
 
                             <div class="grid gap-4 md:grid-cols-2">

@@ -106,3 +106,91 @@ test('paid public event booking creates linked invoice and dispatch log', functi
 
     expect($dispatchLog)->not->toBeNull();
 });
+
+test('event booking reuses booker as first participant when multiple participants are booked', function () {
+    Mail::fake();
+
+    $tenant = Tenant::create([
+        'name' => 'Mehrpersonenverein',
+        'slug' => 'mehrpersonenverein-event',
+        'email' => 'vorstand-mehr@example.test',
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Workshop',
+        'start' => now()->addWeek(),
+        'end' => now()->addWeek()->addHours(3),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 10,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 4,
+    ]);
+
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'title' => 'Anmeldung Workshop',
+        'slug' => 'workshop-anmeldung',
+        'description' => 'Anmeldung',
+        'form_type' => 'event',
+        'success_message' => 'ok',
+        'is_active' => true,
+    ]);
+
+    foreach ([
+        ['label' => 'Vorname Ansprechpartner', 'slug' => 'first_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 1],
+        ['label' => 'Nachname Ansprechpartner', 'slug' => 'last_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 2],
+        ['label' => 'E-Mail', 'slug' => 'email', 'field_type' => 'email', 'is_required' => true, 'sort_order' => 3],
+        ['label' => 'Telefon', 'slug' => 'phone', 'field_type' => 'text', 'is_required' => false, 'sort_order' => 4],
+    ] as $field) {
+        PublicFormField::create([
+            'public_form_id' => $form->id,
+            'label' => $field['label'],
+            'slug' => $field['slug'],
+            'field_type' => $field['field_type'],
+            'is_required' => $field['is_required'],
+            'sort_order' => $field['sort_order'],
+        ]);
+    }
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertSee('Ansprechpartner nimmt selbst teil')
+        ->assertSee('Du trägst nur noch weitere Personen ein');
+
+    $response = $this->post(route('forms.public.submit', $form->slug), [
+        'fields' => [
+            'first_name' => 'Anna',
+            'last_name' => 'Ansprechpartner',
+            'email' => 'anna@example.test',
+            'phone' => '0123000000',
+            'street' => 'Musterstrasse 12',
+            'zip' => '12345',
+            'city' => 'Musterstadt',
+            'country' => 'Deutschland',
+        ],
+        'participant_count' => 2,
+        'use_booker_as_participant' => 1,
+        'participants' => [
+            [
+                'first_name' => 'Ben',
+                'last_name' => 'Begleitung',
+                'email' => 'ben@example.test',
+                'phone' => '',
+            ],
+        ],
+    ]);
+
+    $response->assertRedirect();
+
+    $booking = EventBooking::query()->where('event_id', $event->id)->with('participants')->first();
+
+    expect($booking)->not->toBeNull();
+    expect($booking->participant_count)->toBe(2);
+    expect((float) $booking->total_amount)->toBe(20.0);
+    expect($booking->participants)->toHaveCount(2);
+    expect($booking->participants[0]->full_name)->toBe('Anna Ansprechpartner');
+    expect($booking->participants[1]->full_name)->toBe('Ben Begleitung');
+});
