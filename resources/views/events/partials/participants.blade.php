@@ -3,30 +3,240 @@
         <div>
             <h2 class="text-lg font-semibold text-slate-900">Teilnehmerliste</h2>
             <p class="mt-1 text-sm text-slate-500">
-                @if($event->activeBookingForm)
+                @if($bookingSubmissionCount > 0)
                     {{ $bookingSubmissionCount }} Buchung{{ $bookingSubmissionCount === 1 ? '' : 'en' }}, {{ $participantCount }} Teilnehmer insgesamt.
+                @elseif($event->activeBookingForm)
+                    Online-Anmeldung ist aktiv, bisher aber ohne Teilnehmer.
                 @else
-                    Für dieses Event gibt es noch kein aktives Buchungsformular.
+                    Teilnehmer können auch ohne öffentliches Formular manuell nachgetragen werden.
                 @endif
             </p>
         </div>
 
-        @if($event->activeBookingForm)
+        @if($event->activeBookingForm || $bookingSubmissionCount > 0)
             <div class="flex flex-wrap gap-3">
-                <a href="{{ route('forms.submissions', $event->activeBookingForm) }}"
-                   class="inline-flex rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-                    Vollständige Antworten
-                </a>
+                @if($event->activeBookingForm)
+                    <a href="{{ route('forms.submissions', $event->activeBookingForm) }}"
+                       class="inline-flex rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                        Vollständige Antworten
+                    </a>
+                @endif
 
                 <a href="{{ route('events.participants.export', $event) }}"
                    class="inline-flex rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
                     Teilnehmer exportieren
                 </a>
+
+                <a href="{{ route('events.participants.print', $event) }}"
+                   target="_blank"
+                   class="inline-flex rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+                    Teilnehmerliste drucken
+                </a>
             </div>
         @endif
     </div>
 
-    @if($event->activeBookingForm && $bookingSubmissionCount > 0)
+    @if($canManageManualParticipants ?? false)
+    <div id="teilnehmer-nachtragen" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5" x-data="{ type: 'member', listDisplay: 'person', guestMode: 'person', paymentRequired: {{ (float) $event->price_per_person > 0 ? 'true' : 'false' }} }">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+                <h3 class="text-base font-semibold text-slate-950">Teilnehmer nachtragen</h3>
+                <p class="mt-1 text-sm text-slate-500">Für telefonische Anmeldungen, Abendkasse, Gäste, Sponsoren oder Teilnehmer ohne Online-Zugang.</p>
+            </div>
+            <span class="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">Intern</span>
+        </div>
+
+        <form method="POST" action="{{ route('events.manual-participants.store', $event) }}" class="mt-5 space-y-5">
+            @csrf
+
+            <div class="grid gap-3 sm:grid-cols-3">
+                <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                    <input type="radio" name="participant_type" value="member" x-model="type" class="border-slate-300 text-slate-950 focus:ring-slate-400">
+                    Mitglied
+                </label>
+                <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                    <input type="radio" name="participant_type" value="contact" x-model="type" class="border-slate-300 text-slate-950 focus:ring-slate-400">
+                    Kontakt
+                </label>
+                <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                    <input type="radio" name="participant_type" value="guest" x-model="type" class="border-slate-300 text-slate-950 focus:ring-slate-400">
+                    Freier Gast
+                </label>
+            </div>
+
+            <div x-show="type === 'member' || type === 'contact'" class="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p class="text-sm font-semibold text-slate-900">Anzeige der Auswahl</p>
+                    <p class="text-xs text-slate-500">Wähle, ob Organisationen oder Personennamen im Vordergrund stehen.</p>
+                </div>
+                <div class="grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-sm font-semibold text-slate-600">
+                    <button type="button" x-on:click="listDisplay = 'person'" :class="listDisplay === 'person' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'" class="rounded-md px-3 py-2">Vor-/Nachname</button>
+                    <button type="button" x-on:click="listDisplay = 'organization'" :class="listDisplay === 'organization' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500'" class="rounded-md px-3 py-2">Firma/Organisation</button>
+                </div>
+            </div>
+
+            <div class="grid gap-4 lg:grid-cols-2">
+                <div x-show="type === 'member'">
+                    @php
+                        $selectedMemberIds = collect(old('member_ids', []))->map(fn ($id) => (string) $id)->all();
+                    @endphp
+                    <div class="mb-2 flex items-center justify-between gap-3">
+                        <label class="block text-sm font-medium text-slate-600">Mitglieder auswählen</label>
+                        <span class="text-xs font-medium text-slate-400">{{ $manualParticipantMembers->count() }} verfügbar</span>
+                    </div>
+                    <div class="max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                        @forelse($manualParticipantMembers as $member)
+                            @php
+                                $memberName = $member->full_name ?: 'Mitglied ohne Namen';
+                                $memberOrganization = trim((string) $member->organization);
+                            @endphp
+                            <label class="flex cursor-pointer items-start gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0 hover:bg-slate-50">
+                                <input type="checkbox" name="member_ids[]" value="{{ $member->id }}" @checked(in_array((string) $member->id, $selectedMemberIds, true)) class="mt-1 rounded border-slate-300 text-slate-950 focus:ring-slate-400">
+                                <span class="min-w-0">
+                                    <span x-show="listDisplay === 'person'" class="block">
+                                        <span class="block text-sm font-semibold text-slate-900">{{ $memberName }}</span>
+                                        <span class="mt-0.5 block truncate text-xs text-slate-500">{{ $memberOrganization ?: ($member->email ?: $member->mobile ?: $member->landline ?: 'Keine Kontaktinfo hinterlegt') }}</span>
+                                    </span>
+                                    <span x-show="listDisplay === 'organization'" class="block">
+                                        <span class="block text-sm font-semibold text-slate-900">{{ $memberOrganization ?: $memberName }}</span>
+                                        <span class="mt-0.5 block truncate text-xs text-slate-500">{{ $memberOrganization ? $memberName : ($member->email ?: $member->mobile ?: $member->landline ?: 'Keine Kontaktinfo hinterlegt') }}</span>
+                                    </span>
+                                </span>
+                            </label>
+                        @empty
+                            <div class="px-4 py-5 text-sm text-slate-500">Keine aktiven Mitglieder verfügbar.</div>
+                        @endforelse
+                    </div>
+                </div>
+
+                <div x-show="type === 'contact'">
+                    @php
+                        $selectedContactIds = collect(old('contact_ids', []))->map(fn ($id) => (string) $id)->all();
+                    @endphp
+                    <div class="mb-2 flex items-center justify-between gap-3">
+                        <label class="block text-sm font-medium text-slate-600">Kontakte auswählen</label>
+                        <span class="text-xs font-medium text-slate-400">{{ $manualParticipantContacts->count() }} verfügbar</span>
+                    </div>
+                    <div class="max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+                        @forelse($manualParticipantContacts as $contact)
+                            @php
+                                $contactName = $contact->full_name ?: 'Kontakt ohne Namen';
+                                $contactOrganization = trim((string) ($contact->organization ?: $contact->company));
+                            @endphp
+                            <label class="flex cursor-pointer items-start gap-3 border-b border-slate-100 px-4 py-3 last:border-b-0 hover:bg-slate-50">
+                                <input type="checkbox" name="contact_ids[]" value="{{ $contact->id }}" @checked(in_array((string) $contact->id, $selectedContactIds, true)) class="mt-1 rounded border-slate-300 text-slate-950 focus:ring-slate-400">
+                                <span class="min-w-0">
+                                    <span x-show="listDisplay === 'person'" class="block">
+                                        <span class="block text-sm font-semibold text-slate-900">{{ $contactName }}</span>
+                                        <span class="mt-0.5 block truncate text-xs text-slate-500">{{ $contactOrganization ?: ($contact->primary_email ?: $contact->primary_phone ?: 'Keine Kontaktinfo hinterlegt') }}</span>
+                                    </span>
+                                    <span x-show="listDisplay === 'organization'" class="block">
+                                        <span class="block text-sm font-semibold text-slate-900">{{ $contactOrganization ?: $contactName }}</span>
+                                        <span class="mt-0.5 block truncate text-xs text-slate-500">{{ $contactOrganization ? $contactName : ($contact->primary_email ?: $contact->primary_phone ?: 'Keine Kontaktinfo hinterlegt') }}</span>
+                                    </span>
+                                </span>
+                            </label>
+                        @empty
+                            <div class="px-4 py-5 text-sm text-slate-500">Keine aktiven Kontakte verfügbar.</div>
+                        @endforelse
+                    </div>
+                </div>
+
+                <div x-show="type === 'guest'" class="space-y-3">
+                    <div class="grid gap-2 sm:grid-cols-2">
+                        <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                            <input type="radio" name="guest_mode" value="person" x-model="guestMode" class="border-slate-300 text-slate-950 focus:ring-slate-400">
+                            Person
+                        </label>
+                        <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                            <input type="radio" name="guest_mode" value="organization" x-model="guestMode" class="border-slate-300 text-slate-950 focus:ring-slate-400">
+                            Firma oder Organisation
+                        </label>
+                    </div>
+
+                    <div x-show="guestMode === 'person'" class="grid gap-3 sm:grid-cols-2">
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-slate-600">Vorname</label>
+                            <input type="text" name="first_name" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-slate-600">Nachname</label>
+                            <input type="text" name="last_name" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                        </div>
+                    </div>
+
+                    <div x-show="guestMode === 'organization'">
+                        <label class="mb-1 block text-sm font-medium text-slate-600">Firma oder Organisation</label>
+                        <input type="text" name="organization_name" placeholder="z. B. Muster GmbH, Förderverein, Gastverein" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                    </div>
+                </div>
+
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                        <label class="mb-1 block text-sm font-medium text-slate-600">E-Mail überschreiben</label>
+                        <input type="email" name="email" placeholder="optional" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-sm font-medium text-slate-600">Telefon überschreiben</label>
+                        <input type="text" name="phone" placeholder="optional" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem_14rem_14rem] lg:items-end">
+                <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                    <input type="checkbox" name="payment_required" value="1" x-model="paymentRequired" class="mt-0.5 rounded border-slate-300 text-slate-950 focus:ring-slate-400">
+                    <span>
+                        <span class="block font-medium text-slate-950">Teilnehmer muss zahlen</span>
+                        <span class="mt-1 block text-slate-500">Wenn aus, wird der Teilnehmer als kostenfrei geführt.</span>
+                    </span>
+                </label>
+                <div>
+                    <label class="mb-1 block text-sm font-medium text-slate-600">Preis</label>
+                    <input type="number" step="0.01" min="0" name="price_amount" value="{{ number_format((float) $event->price_per_person, 2, '.', '') }}" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                </div>
+                <div>
+                    <label class="mb-1 block text-sm font-medium text-slate-600">Zahlstatus</label>
+                    <select name="payment_status" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                        <option value="not_required">Keine Zahlung nötig</option>
+                        <option value="open" @selected((float) $event->price_per_person > 0)>Offen</option>
+                        <option value="paid">Bezahlt</option>
+                        <option value="cancelled">Storniert</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-sm font-medium text-slate-600">Herkunft</label>
+                    <select name="source" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                        <option value="manual">Manuell</option>
+                        <option value="phone">Telefonisch</option>
+                        <option value="email">E-Mail</option>
+                        <option value="abendkasse">Abendkasse</option>
+                        <option value="imported">Importiert</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid gap-4 lg:grid-cols-2">
+                <div>
+                    <label class="mb-1 block text-sm font-medium text-slate-600">Grund / Preisnotiz</label>
+                    <input type="text" name="payment_reason" placeholder="z. B. Helfer, Ehrengast, Sponsor, ermäßigt" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                </div>
+                <div>
+                    <label class="mb-1 block text-sm font-medium text-slate-600">Interne Notiz</label>
+                    <input type="text" name="note" placeholder="optional" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button type="submit" class="inline-flex rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-slate-800">
+                    Teilnehmer speichern
+                </button>
+            </div>
+        </form>
+    </div>
+    @endif
+
+    @if($bookingSubmissionCount > 0)
         <div class="mt-6 grid gap-4 md:grid-cols-3">
             <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div class="text-sm font-medium text-slate-500">Buchungen</div>
@@ -87,12 +297,29 @@
                                 <div class="space-y-1">
                                     @foreach($booking->participants as $participant)
                                         <div class="rounded-lg bg-slate-50 px-3 py-2">
-                                            <div class="font-medium text-slate-800">{{ $participant->full_name }}</div>
+                                            <div class="font-medium text-slate-800">{{ $participant->display_name }}</div>
+                                            <div class="mt-1 flex flex-wrap gap-1.5 text-xs">
+                                                <span class="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-600">{{ $participant->type_label }}</span>
+                                                <span class="rounded-full {{ $participant->payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' : ($participant->payment_status === 'not_required' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700') }} px-2 py-0.5 font-semibold">
+                                                    {{ $participant->payment_status_label }}
+                                                </span>
+                                                <span class="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-600">
+                                                    {{ number_format((float) $participant->price_amount, 2, ',', '.') }} {{ strtoupper($booking->currency ?: 'EUR') }}
+                                                </span>
+                                            </div>
                                             @if($participant->email || $participant->phone)
                                                 <div class="mt-1 text-xs text-slate-500">
                                                     {{ $participant->email ?: 'keine E-Mail' }}
                                                     @if($participant->phone)
                                                         · {{ $participant->phone }}
+                                                    @endif
+                                                </div>
+                                            @endif
+                                            @if($participant->payment_reason || $participant->source || $participant->note)
+                                                <div class="mt-1 text-xs text-slate-500">
+                                                    {{ $participant->payment_reason ?: ucfirst((string) $participant->source) }}
+                                                    @if($participant->note)
+                                                        · {{ $participant->note }}
                                                     @endif
                                                 </div>
                                             @endif
@@ -210,7 +437,7 @@
         </div>
     @else
         <div class="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-            Schalte die Buchbarkeit ein, damit Clubano automatisch Anmeldungen sammeln und hier anzeigen kann.
+            Noch keine Teilnehmer vorhanden. Du kannst Teilnehmer oben manuell nachtragen oder die Buchbarkeit für Online-Anmeldungen einschalten.
         </div>
     @endif
 </div>

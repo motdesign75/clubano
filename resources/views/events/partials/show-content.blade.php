@@ -243,6 +243,7 @@
                     'bookingSubmissionCount' => $bookingSubmissionCount,
                     'participantCount' => $participantCount,
                     'bookingRevenue' => $bookingRevenue,
+                    'canManageManualParticipants' => false,
                 ])
 
                 @if($canManageEvents)

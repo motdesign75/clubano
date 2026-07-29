@@ -2,7 +2,9 @@
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Mail\EventInvitationMail;
+use App\Models\Contact;
 use App\Models\Event;
+use App\Models\EventBooking;
 use App\Models\EventAttendance;
 use App\Models\EventCategory;
 use App\Models\EventChangeLog;
@@ -218,6 +220,129 @@ test('calendar supports day and year views', function () {
     $yearResponse->assertOk();
     $yearResponse->assertSee('Jahresübersicht');
     $yearResponse->assertSee('Workshop');
+});
+
+test('staff can manually add event participants from members contacts and guests with payment state', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Nachpflegeverein',
+        'slug' => 'nachpflegeverein',
+        'email' => 'nachpflege@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Sommerfest',
+        'location' => 'Vereinsheim',
+        'start' => now()->addDays(10)->setTime(18, 0),
+        'end' => now()->addDays(10)->setTime(23, 0),
+        'is_public' => false,
+        'booking_enabled' => false,
+        'price_per_person' => 25,
+        'currency' => 'EUR',
+        'created_by' => $staff->id,
+        'updated_by' => $staff->id,
+    ]);
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Anna',
+        'last_name' => 'Mitglied',
+        'email' => 'anna@example.test',
+        'mobile' => '0171000000',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    $secondMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Ben',
+        'last_name' => 'Mitglied',
+        'email' => 'ben@example.test',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    $contact = Contact::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'organization' => 'Sponsor GmbH',
+        'first_name' => 'Clara',
+        'last_name' => 'Kontakt',
+        'email' => 'clara@example.test',
+        'is_active' => true,
+    ]);
+
+    $secondContact = Contact::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'organization' => 'Presse Demo',
+        'first_name' => 'Petra',
+        'last_name' => 'Kontakt',
+        'email' => 'petra@example.test',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($staff)->post(route('events.manual-participants.store', $event), [
+        'participant_type' => 'member',
+        'member_ids' => [$member->id, $secondMember->id],
+        'payment_required' => '1',
+        'price_amount' => '25.00',
+        'payment_status' => 'open',
+        'source' => 'phone',
+    ])->assertRedirect(route('events.edit', $event));
+
+    $this->actingAs($staff)->post(route('events.manual-participants.store', $event), [
+        'participant_type' => 'contact',
+        'contact_ids' => [$contact->id, $secondContact->id],
+        'payment_status' => 'not_required',
+        'payment_reason' => 'Sponsor',
+        'source' => 'manual',
+    ])->assertRedirect(route('events.edit', $event));
+
+    $this->actingAs($staff)->post(route('events.manual-participants.store', $event), [
+        'participant_type' => 'guest',
+        'guest_mode' => 'person',
+        'first_name' => 'Gunnar',
+        'last_name' => 'Gast',
+        'email' => 'gunnar@example.test',
+        'payment_required' => '1',
+        'price_amount' => '10.00',
+        'payment_status' => 'paid',
+        'source' => 'abendkasse',
+    ])->assertRedirect(route('events.edit', $event));
+
+    $this->actingAs($staff)->post(route('events.manual-participants.store', $event), [
+        'participant_type' => 'guest',
+        'guest_mode' => 'organization',
+        'organization_name' => 'Gastverein Demostadt',
+        'payment_status' => 'not_required',
+        'source' => 'manual',
+    ])->assertRedirect(route('events.edit', $event));
+
+    $bookings = EventBooking::query()->where('event_id', $event->id)->with('participants')->get();
+
+    expect($bookings)->toHaveCount(4);
+    expect($bookings->sum('total_amount'))->toBe(60.0);
+    expect($bookings->flatMap->participants)->toHaveCount(6);
+    expect($bookings->flatMap->participants->pluck('participant_type')->sort()->values()->all())->toBe(['contact', 'contact', 'guest', 'guest', 'member', 'member']);
+    expect($bookings->flatMap->participants->firstWhere('participant_type', 'contact')->payment_status)->toBe('not_required');
+    expect($bookings->flatMap->participants->firstWhere('email', 'gunnar@example.test')->payment_status)->toBe('paid');
+    expect($bookings->flatMap->participants->firstWhere('organization_name', 'Gastverein Demostadt')->display_name)->toBe('Gastverein Demostadt');
+
+    $this->actingAs($staff)->get(route('events.edit', $event))
+        ->assertOk()
+        ->assertSee('Teilnehmer nachtragen')
+        ->assertSee('Sponsor GmbH - Clara Kontakt');
+
+    $this->actingAs($staff)->get(route('events.participants.print', $event))
+        ->assertOk()
+        ->assertSee('Teilnehmerliste')
+        ->assertSee('Ben Mitglied')
+        ->assertSee('Presse Demo - Petra Kontakt')
+        ->assertSee('Gastverein Demostadt');
 });
 
 test('staff can see and delete calendar events', function () {

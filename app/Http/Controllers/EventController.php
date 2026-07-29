@@ -15,6 +15,7 @@ use App\Models\EventCategory;
 use App\Models\EventInvitation;
 use App\Models\EventShift;
 use App\Models\EventShiftAssignment;
+use App\Models\Contact;
 use App\Models\Document;
 use App\Models\Member;
 use App\Models\PublicForm;
@@ -896,11 +897,8 @@ class EventController extends Controller
         $this->authorizeEvent($event);
         $event->load(['activeBookingForm.fields']);
 
-        abort_unless($event->activeBookingForm, 404, 'Kein Buchungsformular vorhanden.');
-
         $bookings = $event->bookings()->with('participants')->get();
-        $fieldLabels = $event->activeBookingForm->fields
-            ->pluck('label', 'slug');
+        $fieldLabels = $event->activeBookingForm?->fields?->pluck('label', 'slug') ?? collect();
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
@@ -916,6 +914,7 @@ class EventController extends Controller
             $columns[] = $label;
         }
         $columns[] = 'teilnehmer';
+        $columns[] = 'teilnehmer_details';
 
         $callback = function () use ($columns, $bookings, $fieldLabels) {
             $handle = fopen('php://output', 'w');
@@ -954,7 +953,17 @@ class EventController extends Controller
                 }
 
                 $row[] = $booking->participants
-                    ->map(fn ($participant) => $participant->full_name)
+                    ->map(fn ($participant) => $participant->display_name)
+                    ->implode(', ');
+
+                $row[] = $booking->participants
+                    ->map(fn ($participant) => implode(' | ', [
+                        $participant->display_name,
+                        $participant->type_label,
+                        number_format((float) $participant->price_amount, 2, '.', ''),
+                        $participant->payment_status,
+                        $participant->source,
+                    ]))
                     ->implode(', ');
 
                 fputcsv($handle, $row, ';');
@@ -964,6 +973,33 @@ class EventController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    public function participantsPrint(Event $event)
+    {
+        $this->authorizeEvent($event);
+
+        $event->load(['tenant', 'bookings.participants.member', 'bookings.participants.contact']);
+        $participants = $event->bookings
+            ->flatMap(fn (EventBooking $booking) => $booking->participants->map(fn ($participant) => [
+                'booking' => $booking,
+                'participant' => $participant,
+            ]))
+            ->sortBy(fn (array $row) => mb_strtolower($row['participant']->display_name))
+            ->values();
+
+        return view('events.participants-print', [
+            'event' => $event,
+            'tenant' => $event->tenant,
+            'participants' => $participants,
+            'stats' => [
+                'count' => $participants->count(),
+                'open' => $participants->filter(fn (array $row) => $row['participant']->payment_status === 'open')->count(),
+                'paid' => $participants->filter(fn (array $row) => $row['participant']->payment_status === 'paid')->count(),
+                'free' => $participants->filter(fn (array $row) => $row['participant']->payment_status === 'not_required')->count(),
+                'total' => $participants->sum(fn (array $row) => (float) $row['participant']->price_amount),
+            ],
+        ]);
     }
 
     public function updateBooking(Request $request, Event $event, EventBooking $booking)
@@ -988,6 +1024,93 @@ class EventController extends Controller
         return redirect()
             ->route('events.edit', $event)
             ->with('success', 'Buchungs- und Zahlungsstatus wurden aktualisiert.');
+    }
+
+    public function storeManualParticipant(Request $request, Event $event)
+    {
+        $this->authorizeEvent($event);
+        $tenantId = auth()->user()->tenant_id;
+
+        $validated = $request->validate([
+            'participant_type' => ['required', Rule::in(['member', 'contact', 'guest'])],
+            'member_id' => ['nullable', Rule::exists('members', 'id')->where('tenant_id', $tenantId)],
+            'member_ids' => ['required_if:participant_type,member', 'nullable', 'array', 'min:1'],
+            'member_ids.*' => ['integer', Rule::exists('members', 'id')->where('tenant_id', $tenantId)],
+            'contact_id' => ['nullable', Rule::exists('contacts', 'id')->where('tenant_id', $tenantId)],
+            'contact_ids' => ['required_if:participant_type,contact', 'nullable', 'array', 'min:1'],
+            'contact_ids.*' => ['integer', Rule::exists('contacts', 'id')->where('tenant_id', $tenantId)],
+            'guest_mode' => ['nullable', Rule::in(['person', 'organization'])],
+            'organization_name' => [
+                Rule::requiredIf(fn () => $request->input('participant_type') === 'guest' && $request->input('guest_mode', 'person') === 'organization'),
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'first_name' => [
+                Rule::requiredIf(fn () => $request->input('participant_type') === 'guest' && $request->input('guest_mode', 'person') !== 'organization'),
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'last_name' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:255'],
+            'payment_required' => ['nullable', 'boolean'],
+            'price_amount' => ['nullable', 'numeric', 'min:0', 'max:999999.99'],
+            'payment_status' => ['required', Rule::in(['not_required', 'open', 'paid', 'cancelled'])],
+            'payment_reason' => ['nullable', 'string', 'max:255'],
+            'source' => ['required', Rule::in(['manual', 'phone', 'email', 'abendkasse', 'imported'])],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $participants = $this->manualParticipantPayloads($validated);
+        $paymentRequired = $request->boolean('payment_required');
+        $priceAmount = $paymentRequired ? round((float) ($validated['price_amount'] ?? $event->price_per_person ?? 0), 2) : 0;
+        $paymentStatus = $paymentRequired ? $validated['payment_status'] : 'not_required';
+
+        if ($priceAmount <= 0 && $paymentStatus === 'open') {
+            $paymentStatus = 'not_required';
+        }
+
+        $bookingName = $participants->count() === 1
+            ? $participants->first()['booker_name']
+            : $participants->count() . ' manuell nachgetragene Teilnehmer';
+        $firstParticipant = $participants->first()['data'];
+
+        $booking = EventBooking::create([
+            'tenant_id' => $event->tenant_id,
+            'event_id' => $event->id,
+            'booking_reference' => $this->generateBookingReference($event),
+            'booker_name' => $bookingName,
+            'booker_email' => $participants->count() === 1 ? ($firstParticipant['email'] ?? null) : null,
+            'booker_phone' => $participants->count() === 1 ? ($firstParticipant['phone'] ?? null) : null,
+            'participant_count' => $participants->count(),
+            'price_per_person' => $priceAmount,
+            'total_amount' => $priceAmount * $participants->count(),
+            'currency' => strtoupper($event->currency ?: 'EUR'),
+            'payment_status' => $paymentStatus,
+            'booking_status' => 'confirmed',
+            'notes' => trim('Manuell nachgetragen' . (filled($validated['note'] ?? null) ? ': ' . $validated['note'] : '')),
+        ]);
+
+        $participants->each(function (array $participant, int $index) use ($booking, $validated, $paymentRequired, $priceAmount, $paymentStatus) {
+            $booking->participants()->create(array_merge($participant['data'], [
+                'position' => $index + 1,
+                'participant_type' => $validated['participant_type'],
+                'payment_required' => $paymentRequired,
+                'price_amount' => $priceAmount,
+                'payment_status' => $paymentStatus,
+                'payment_reason' => $validated['payment_reason'] ?? null,
+                'source' => $validated['source'],
+                'note' => $validated['note'] ?? null,
+            ]));
+        });
+
+        $booking->recalculateTotalsFromParticipants();
+
+        return redirect()
+            ->route('events.edit', $event)
+            ->with('success', $participants->count() . ' Teilnehmer wurden nachgetragen.');
     }
 
     public function schedulePrint(Event $event)
@@ -1351,17 +1474,8 @@ class EventController extends Controller
 
     private function participantViewData(Event $event): array
     {
-        if (!$event->booking_enabled) {
-            return [
-                'eventBookings' => collect(),
-                'bookingSubmissionCount' => 0,
-                'participantCount' => 0,
-                'bookingRevenue' => 0,
-            ];
-        }
-
         $bookings = $event->bookings()
-            ->with(['participants', 'submission'])
+            ->with(['participants.member', 'participants.contact', 'submission'])
             ->paginate(20, ['*'], 'anmeldungen');
 
         $bookingTotals = EventBooking::query()
@@ -1375,7 +1489,101 @@ class EventController extends Controller
             'bookingSubmissionCount' => (int) ($bookingTotals->booking_count ?? 0),
             'participantCount' => (int) ($bookingTotals->participant_count ?? 0),
             'bookingRevenue' => (float) ($bookingTotals->revenue ?? 0),
+            'manualParticipantMembers' => Member::query()
+                ->where('tenant_id', $event->tenant_id)
+                ->whereNull('archived_at')
+                ->orderBy('last_name')
+                ->orderBy('first_name')
+                ->get(['id', 'first_name', 'last_name', 'organization', 'email', 'mobile', 'landline']),
+            'manualParticipantContacts' => Contact::query()
+                ->where('tenant_id', $event->tenant_id)
+                ->where('is_active', true)
+                ->orderBy('organization')
+                ->orderBy('last_name')
+                ->orderBy('first_name')
+                ->get(['id', 'organization', 'company', 'first_name', 'last_name', 'email', 'mobile', 'phone', 'phone_mobile', 'phone_landline']),
         ];
+    }
+
+    private function manualParticipantPayloads(array $validated)
+    {
+        if ($validated['participant_type'] === 'member') {
+            $memberIds = collect($validated['member_ids'] ?? [$validated['member_id'] ?? null])->filter()->unique()->values();
+
+            return Member::forCurrentTenant()
+                ->whereIn('id', $memberIds)
+                ->orderBy('last_name')
+                ->orderBy('first_name')
+                ->get()
+                ->map(function (Member $member) use ($validated) {
+                    $fullName = trim($member->full_name);
+
+                    return [
+                        'booker_name' => $fullName ?: 'Mitglied #' . $member->id,
+                        'data' => [
+                            'member_id' => $member->id,
+                            'contact_id' => null,
+                            'first_name' => $member->first_name ?: ($fullName ?: 'Mitglied'),
+                            'last_name' => $member->last_name ?: '',
+                            'email' => $validated['email'] ?? $member->email,
+                            'phone' => $validated['phone'] ?? ($member->mobile ?: $member->landline),
+                        ],
+                    ];
+                });
+        }
+
+        if ($validated['participant_type'] === 'contact') {
+            $contactIds = collect($validated['contact_ids'] ?? [$validated['contact_id'] ?? null])->filter()->unique()->values();
+
+            return Contact::forCurrentTenant()
+                ->whereIn('id', $contactIds)
+                ->orderBy('organization')
+                ->orderBy('last_name')
+                ->orderBy('first_name')
+                ->get()
+                ->map(function (Contact $contact) use ($validated) {
+                    $displayName = $contact->display_name;
+
+                    return [
+                        'booker_name' => $displayName,
+                        'data' => [
+                            'member_id' => null,
+                            'contact_id' => $contact->id,
+                            'first_name' => $contact->first_name ?: $displayName,
+                            'last_name' => $contact->last_name ?: '',
+                            'email' => $validated['email'] ?? $contact->primary_email,
+                            'phone' => $validated['phone'] ?? $contact->primary_phone,
+                        ],
+                    ];
+                });
+        }
+
+        $firstName = trim((string) ($validated['first_name'] ?? ''));
+        $lastName = trim((string) ($validated['last_name'] ?? ''));
+        $organizationName = trim((string) ($validated['organization_name'] ?? ''));
+        $bookerName = $organizationName ?: (trim($firstName . ' ' . $lastName) ?: 'Gast');
+
+        return collect([[
+            'booker_name' => $bookerName,
+            'data' => [
+                'member_id' => null,
+                'contact_id' => null,
+                'first_name' => $organizationName ? '' : ($firstName ?: $bookerName),
+                'last_name' => $lastName,
+                'organization_name' => $organizationName ?: null,
+                'email' => $validated['email'] ?? null,
+                'phone' => $validated['phone'] ?? null,
+            ],
+        ]]);
+    }
+
+    private function generateBookingReference(Event $event): string
+    {
+        do {
+            $reference = sprintf('EVT-%d-%s', $event->id, Str::upper(Str::random(6)));
+        } while (EventBooking::query()->where('booking_reference', $reference)->exists());
+
+        return $reference;
     }
 
     private function publicListData(string $tenantSlug, Request $request): array

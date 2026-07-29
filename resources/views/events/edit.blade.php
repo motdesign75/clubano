@@ -140,6 +140,7 @@
         'bookingSubmissionCount' => $bookingSubmissionCount,
         'participantCount' => $participantCount,
         'bookingRevenue' => $bookingRevenue,
+        'canManageManualParticipants' => true,
     ])
 </div>
 @endsection

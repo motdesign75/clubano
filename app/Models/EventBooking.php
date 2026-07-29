@@ -57,4 +57,28 @@ class EventBooking extends Model
     {
         return $this->hasMany(EventBookingParticipant::class)->orderBy('position');
     }
+
+    public function recalculateTotalsFromParticipants(): void
+    {
+        $participants = $this->participants()->get();
+        $totalAmount = $participants->sum(fn (EventBookingParticipant $participant) => (float) $participant->price_amount);
+        $participantCount = max(1, $participants->count());
+        $paymentStatuses = $participants->pluck('payment_status');
+
+        $paymentStatus = 'not_required';
+        if ($totalAmount > 0) {
+            $paymentStatus = $paymentStatuses->contains('open') ? 'open' : 'paid';
+        }
+
+        if ($paymentStatuses->every(fn ($status) => $status === 'cancelled')) {
+            $paymentStatus = 'cancelled';
+        }
+
+        $this->forceFill([
+            'participant_count' => $participantCount,
+            'price_per_person' => $participantCount > 0 ? round($totalAmount / $participantCount, 2) : 0,
+            'total_amount' => $totalAmount,
+            'payment_status' => $paymentStatus,
+        ])->save();
+    }
 }

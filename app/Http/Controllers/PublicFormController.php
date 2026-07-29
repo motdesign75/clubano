@@ -486,6 +486,11 @@ class PublicFormController extends Controller
                         'last_name' => $participant['last_name'],
                         'email' => $participant['email'] ?? null,
                         'phone' => $participant['phone'] ?? null,
+                        'participant_type' => 'guest',
+                        'payment_required' => $pricePerPerson > 0,
+                        'price_amount' => $pricePerPerson,
+                        'payment_status' => $pricePerPerson > 0 ? 'open' : 'not_required',
+                        'source' => 'online',
                         'answers' => [],
                     ]);
                 }
