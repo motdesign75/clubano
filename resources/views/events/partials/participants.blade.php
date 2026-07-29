@@ -279,6 +279,27 @@
             </div>
         </div>
 
+        <form id="participants-bulk-free-form" method="POST" action="{{ route('events.participants.mark-free', $event) }}" class="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+            @csrf
+            @method('PATCH')
+
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <h3 class="text-sm font-semibold text-blue-950">Mehrere Teilnehmer korrigieren</h3>
+                    <p class="mt-1 text-sm text-blue-800">Markiere unten Teilnehmer und setze sie gemeinsam auf kostenfrei.</p>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-[minmax(0,18rem),auto] sm:items-end">
+                    <div>
+                        <label for="bulk_payment_reason" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-blue-700">Grund</label>
+                        <input id="bulk_payment_reason" type="text" name="payment_reason" placeholder="z. B. Ehrengast, Sponsor, Helfer" class="w-full rounded-lg border-blue-200 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-200">
+                    </div>
+                    <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800">
+                        Ausgewählte kostenfrei setzen
+                    </button>
+                </div>
+            </div>
+        </form>
+
         <div class="mt-6 overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50">
@@ -320,7 +341,10 @@
                                 <div class="space-y-1">
                                     @foreach($booking->participants as $participant)
                                         <div class="rounded-lg bg-slate-50 px-3 py-2">
-                                            <div class="font-medium text-slate-800">{{ $participant->display_name }}</div>
+                                            <label class="flex cursor-pointer items-start gap-2">
+                                                <input form="participants-bulk-free-form" type="checkbox" name="participant_ids[]" value="{{ $participant->id }}" class="mt-1 rounded border-slate-300 text-blue-700 focus:ring-blue-400">
+                                                <span class="font-medium text-slate-800">{{ $participant->display_name }}</span>
+                                            </label>
                                             <div class="mt-1 flex flex-wrap gap-1.5 text-xs">
                                                 <span class="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-600">{{ $participant->type_label }}</span>
                                                 <span class="rounded-full {{ $participant->payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' : ($participant->payment_status === 'not_required' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700') }} px-2 py-0.5 font-semibold">

@@ -354,11 +354,40 @@ test('staff can manually add event participants from members contacts and guests
     expect((float) $guestParticipant->booking->fresh()->total_amount)->toBe(0.0);
     expect((float) EventBooking::query()->where('event_id', $event->id)->sum('total_amount'))->toBe(50.0);
 
+    $memberParticipantIds = EventBooking::query()
+        ->where('event_id', $event->id)
+        ->with('participants')
+        ->get()
+        ->flatMap->participants
+        ->where('participant_type', 'member')
+        ->pluck('id')
+        ->all();
+
+    $this->actingAs($staff)->patch(route('events.participants.mark-free', $event), [
+        'participant_ids' => $memberParticipantIds,
+        'payment_reason' => 'Helfereinsatz',
+    ])->assertRedirect(route('events.edit', $event));
+
+    $freeMembers = EventBooking::query()
+        ->where('event_id', $event->id)
+        ->with('participants')
+        ->get()
+        ->flatMap->participants
+        ->whereIn('id', $memberParticipantIds);
+
+    expect($freeMembers)->toHaveCount(2);
+    expect($freeMembers->every(fn ($participant) => $participant->payment_required === false))->toBeTrue();
+    expect($freeMembers->every(fn ($participant) => (float) $participant->price_amount === 0.0))->toBeTrue();
+    expect($freeMembers->every(fn ($participant) => $participant->payment_status === 'not_required'))->toBeTrue();
+    expect($freeMembers->every(fn ($participant) => $participant->payment_reason === 'Helfereinsatz'))->toBeTrue();
+    expect((float) EventBooking::query()->where('event_id', $event->id)->sum('total_amount'))->toBe(0.0);
+
     $this->actingAs($staff)->get(route('events.edit', $event))
         ->assertOk()
         ->assertSee('Teilnehmer nachtragen')
         ->assertSee('Sponsor GmbH - Clara Kontakt')
         ->assertSee('Teilnehmer bearbeiten')
+        ->assertSee('Ausgewählte kostenfrei setzen')
         ->assertSee('PDF öffnen')
         ->assertSee('Firma / Organisation')
         ->assertSee('Nachträglich kostenfrei gestellt');

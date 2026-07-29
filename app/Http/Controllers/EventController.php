@@ -1142,6 +1142,42 @@ class EventController extends Controller
             ->with('success', 'Teilnehmer wurde aktualisiert.');
     }
 
+    public function markParticipantsFree(Request $request, Event $event)
+    {
+        $this->authorizeEvent($event);
+
+        $validated = $request->validate([
+            'participant_ids' => ['required', 'array', 'min:1'],
+            'participant_ids.*' => ['integer'],
+            'payment_reason' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $participants = EventBookingParticipant::query()
+            ->whereIn('id', $validated['participant_ids'])
+            ->whereHas('booking', fn ($query) => $query->where('event_id', $event->id)->where('tenant_id', $event->tenant_id))
+            ->with('booking')
+            ->get();
+
+        $participants->each(function (EventBookingParticipant $participant) use ($validated) {
+            $participant->update([
+                'payment_required' => false,
+                'price_amount' => 0,
+                'payment_status' => 'not_required',
+                'payment_reason' => $validated['payment_reason'] ?? $participant->payment_reason,
+            ]);
+        });
+
+        $participants
+            ->pluck('booking')
+            ->filter()
+            ->unique('id')
+            ->each(fn (EventBooking $booking) => $booking->recalculateTotalsFromParticipants());
+
+        return redirect()
+            ->route('events.edit', $event)
+            ->with('success', $participants->count() . ' Teilnehmer wurden kostenfrei gesetzt.');
+    }
+
     public function storeManualParticipant(Request $request, Event $event)
     {
         $this->authorizeEvent($event);
