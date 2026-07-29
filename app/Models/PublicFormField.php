@@ -38,6 +38,46 @@ class PublicFormField extends Model
         return self::sanitizeHelpText($this->help_text);
     }
 
+    public function isLegacyEventBookingAddressDuplicate(iterable $fieldSlugs): bool
+    {
+        $slugs = collect($fieldSlugs)->map(fn ($slug) => (string) $slug);
+
+        if ($slugs->intersect(['street', 'zip', 'city'])->count() !== 3) {
+            return false;
+        }
+
+        $slug = $this->normalizeDuplicateKey($this->slug);
+        $label = $this->normalizeDuplicateKey($this->label);
+
+        return in_array($slug, self::legacyEventBookingAddressDuplicateKeys(), true)
+            || in_array($label, self::legacyEventBookingAddressDuplicateKeys(), true);
+    }
+
+    public static function legacyEventBookingAddressDuplicateKeys(): array
+    {
+        return [
+            'address',
+            'adresse',
+            'anschrift',
+            'zip_city',
+            'zipcity',
+            'plz_ort',
+            'plzort',
+            'plz_und_ort',
+            'plzundort',
+            'plz_and_ort',
+        ];
+    }
+
+    private function normalizeDuplicateKey(?string $value): string
+    {
+        $value = mb_strtolower(trim((string) $value));
+        $value = str_replace(['&', '+'], ' und ', $value);
+        $value = preg_replace('/[^a-z0-9äöüß]+/u', '_', $value) ?: '';
+
+        return trim($value, '_');
+    }
+
     public static function sanitizeHelpText(?string $value): ?string
     {
         $value = trim((string) $value);

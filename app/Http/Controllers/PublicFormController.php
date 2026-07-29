@@ -337,9 +337,14 @@ class PublicFormController extends Controller
         $rules = [];
         $isEventBooking = $form->form_type === 'event' && $form->event;
         $maxParticipants = max(1, (int) ($form->event?->max_participants_per_booking ?: 1));
+        $fieldSlugs = $form->fields->pluck('slug');
 
         foreach ($form->fields as $field) {
             if ($isEventBooking && in_array($field->slug, ['participant_count', 'participant_notes'], true)) {
+                continue;
+            }
+
+            if ($isEventBooking && $field->isLegacyEventBookingAddressDuplicate($fieldSlugs)) {
                 continue;
             }
 
@@ -389,7 +394,9 @@ class PublicFormController extends Controller
         }
 
         $validated = $request->validate($rules);
-        $answers = collect($form->fields)->mapWithKeys(function (PublicFormField $field) use ($validated) {
+        $answers = collect($form->fields)
+            ->reject(fn (PublicFormField $field) => $isEventBooking && $field->isLegacyEventBookingAddressDuplicate($fieldSlugs))
+            ->mapWithKeys(function (PublicFormField $field) use ($validated) {
             $value = data_get($validated, 'fields.' . $field->slug);
 
             if ($field->field_type === 'checkbox') {

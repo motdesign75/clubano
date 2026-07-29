@@ -152,8 +152,12 @@
                 </div>
         @endif
 
+        @php
+            $fieldSlugs = $form->fields->pluck('slug');
+        @endphp
         @foreach($form->fields as $field)
             @continue($isEventBooking && in_array($field->slug, ['participant_count', 'participant_notes'], true))
+            @continue($isEventBooking && $field->isLegacyEventBookingAddressDuplicate($fieldSlugs))
             <div>
                 <label class="block text-sm font-medium text-gray-700">
                     {{ $field->label }}

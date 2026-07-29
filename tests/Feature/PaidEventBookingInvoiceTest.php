@@ -46,6 +46,8 @@ test('paid public event booking creates linked invoice and dispatch log', functi
         ['label' => 'Nachname Ansprechpartner', 'slug' => 'last_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 2],
         ['label' => 'E-Mail', 'slug' => 'email', 'field_type' => 'email', 'is_required' => true, 'sort_order' => 3],
         ['label' => 'Telefon', 'slug' => 'phone', 'field_type' => 'text', 'is_required' => false, 'sort_order' => 4],
+        ['label' => 'Adresse', 'slug' => 'adresse', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 5],
+        ['label' => 'PLZ & Ort', 'slug' => 'plz_ort', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 6],
     ] as $field) {
         PublicFormField::create([
             'public_form_id' => $form->id,
@@ -56,6 +58,14 @@ test('paid public event booking creates linked invoice and dispatch log', functi
             'sort_order' => $field['sort_order'],
         ]);
     }
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertDontSee('fields[adresse]', false)
+        ->assertDontSee('fields[plz_ort]', false)
+        ->assertSee('Strasse und Hausnummer')
+        ->assertSee('PLZ')
+        ->assertSee('Ort');
 
     $response = $this->post(route('forms.public.submit', $form->slug), [
         'fields' => [
