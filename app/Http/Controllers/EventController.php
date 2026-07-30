@@ -543,7 +543,7 @@ class EventController extends Controller
     public function edit(Event $event)
     {
         $this->authorizeEvent($event);
-        $event->load(['activeBookingForm.fields', 'shifts.assignments.member', 'category.defaultTargetTag', 'targetTag', 'tenant', 'responsibleUser', 'creator', 'updater', 'changeLogs.user']);
+        $event->load(['activeBookingForm.fields', 'category.defaultTargetTag', 'targetTag', 'tenant', 'responsibleUser', 'creator', 'updater', 'changeLogs.user']);
         $event->setAttribute('conflicting_events', $this->findConflictingEvents($event));
         $event->setAttribute('conflict_count', $event->conflicting_events->count());
 
@@ -552,8 +552,8 @@ class EventController extends Controller
             'categories' => EventCategory::query()->with('defaultTargetTag')->orderBy('name')->get(),
             'targetTags' => Tag::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
             'users' => User::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
-            ...$this->participantViewData($event),
-            ...$this->shiftViewData($event),
+            ...$this->participantSummaryData($event),
+            ...$this->shiftSummaryData($event),
         ]);
     }
 
@@ -605,6 +605,28 @@ class EventController extends Controller
             ...$this->invitationViewData($event),
             ...$this->attendanceViewData($event),
             ...$this->participantViewData($event),
+            ...$this->shiftViewData($event),
+        ]);
+    }
+
+    public function participants(Event $event)
+    {
+        $this->authorizeEvent($event);
+        $event->load(['tenant', 'activeBookingForm.fields', 'category', 'targetTag', 'responsibleUser']);
+
+        return view('events.participants', [
+            'event' => $event,
+            ...$this->participantViewData($event),
+        ]);
+    }
+
+    public function schedule(Event $event)
+    {
+        $this->authorizeEvent($event);
+        $event->load(['tenant', 'category', 'targetTag', 'responsibleUser', 'shifts.assignments.member']);
+
+        return view('events.schedule', [
+            'event' => $event,
             ...$this->shiftViewData($event),
         ]);
     }
@@ -1079,7 +1101,7 @@ class EventController extends Controller
         ]);
 
         return redirect()
-            ->route('events.edit', $event)
+            ->route('events.participants.manage', $event)
             ->with('success', 'Buchungs- und Zahlungsstatus wurden aktualisiert.');
     }
 
@@ -1138,7 +1160,7 @@ class EventController extends Controller
         }
 
         return redirect()
-            ->route('events.edit', $event)
+            ->route('events.participants.manage', $event)
             ->with('success', 'Teilnehmer wurde aktualisiert.');
     }
 
@@ -1174,7 +1196,7 @@ class EventController extends Controller
             ->each(fn (EventBooking $booking) => $booking->recalculateTotalsFromParticipants());
 
         return redirect()
-            ->route('events.edit', $event)
+            ->route('events.participants.manage', $event)
             ->with('success', $participants->count() . ' Teilnehmer wurden kostenfrei gesetzt.');
     }
 
@@ -1261,7 +1283,7 @@ class EventController extends Controller
         $booking->recalculateTotalsFromParticipants();
 
         return redirect()
-            ->route('events.edit', $event)
+            ->route('events.participants.manage', $event)
             ->with('success', $participants->count() . ' Teilnehmer wurden nachgetragen.');
     }
 
@@ -1405,7 +1427,7 @@ class EventController extends Controller
             'notes' => $validated['notes'] ?? null,
         ]);
 
-        return redirect()->route('events.edit', $event)->with('success', 'Schicht wurde angelegt.');
+        return redirect()->route('events.schedule.manage', $event)->with('success', 'Schicht wurde angelegt.');
     }
 
     public function updateShift(Request $request, Event $event, EventShift $shift)
@@ -1425,7 +1447,7 @@ class EventController extends Controller
 
         $shift->update($validated);
 
-        return redirect()->route('events.edit', $event)->with('success', 'Schicht wurde aktualisiert.');
+        return redirect()->route('events.schedule.manage', $event)->with('success', 'Schicht wurde aktualisiert.');
     }
 
     public function destroyShift(Event $event, EventShift $shift)
@@ -1435,7 +1457,7 @@ class EventController extends Controller
 
         $shift->delete();
 
-        return redirect()->route('events.edit', $event)->with('success', 'Schicht wurde gelöscht.');
+        return redirect()->route('events.schedule.manage', $event)->with('success', 'Schicht wurde gelöscht.');
     }
 
     public function storeShiftAssignment(Request $request, Event $event, EventShift $shift)
@@ -1453,7 +1475,7 @@ class EventController extends Controller
         ]);
 
         if (blank($validated['member_id'] ?? null) && blank($validated['helper_name'] ?? null)) {
-            return redirect()->route('events.edit', $event)->withErrors([
+            return redirect()->route('events.schedule.manage', $event)->withErrors([
                 'helper_name' => 'Bitte Mitglied oder Helfername angeben.',
             ]);
         }
@@ -1469,7 +1491,7 @@ class EventController extends Controller
                 ->exists();
 
             if ($alreadyAssigned) {
-                return redirect()->route('events.edit', $event)->withErrors([
+                return redirect()->route('events.schedule.manage', $event)->withErrors([
                     'member_id' => 'Dieses Mitglied ist dieser Schicht bereits zugeordnet.',
                 ]);
             }
@@ -1486,7 +1508,7 @@ class EventController extends Controller
             'notes' => $validated['notes'] ?? null,
         ]);
 
-        return redirect()->route('events.edit', $event)->with('success', 'Helferzuordnung wurde gespeichert.');
+        return redirect()->route('events.schedule.manage', $event)->with('success', 'Helferzuordnung wurde gespeichert.');
     }
 
     public function destroyShiftAssignment(Event $event, EventShift $shift, EventShiftAssignment $assignment)
@@ -1501,7 +1523,7 @@ class EventController extends Controller
 
         $assignment->delete();
 
-        return redirect()->route('events.edit', $event)->with('success', 'Zuordnung wurde entfernt.');
+        return redirect()->route('events.schedule.manage', $event)->with('success', 'Zuordnung wurde entfernt.');
     }
 
     public function image(int $eventId): StreamedResponse
@@ -1626,9 +1648,36 @@ class EventController extends Controller
 
     private function participantViewData(Event $event): array
     {
-        $bookings = $event->bookings()
-            ->with(['participants.member', 'participants.contact', 'submission'])
-            ->paginate(20, ['*'], 'anmeldungen');
+        $participantSearch = trim((string) request('teilnehmer_suche', ''));
+        $participantPaymentStatus = request('zahlstatus');
+        $participantType = request('teilnehmertyp');
+        $participantDisplayMode = request('anzeige') === 'organization' ? 'organization' : 'person';
+
+        $participants = EventBookingParticipant::query()
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $event->id)
+                ->where('tenant_id', $event->tenant_id))
+            ->with(['booking.submission', 'member', 'contact'])
+            ->when($participantSearch !== '', function ($query) use ($participantSearch) {
+                $query->where(function ($subQuery) use ($participantSearch) {
+                    $subQuery
+                        ->where('first_name', 'like', '%'.$participantSearch.'%')
+                        ->orWhere('last_name', 'like', '%'.$participantSearch.'%')
+                        ->orWhere('organization_name', 'like', '%'.$participantSearch.'%')
+                        ->orWhere('email', 'like', '%'.$participantSearch.'%')
+                        ->orWhere('phone', 'like', '%'.$participantSearch.'%')
+                        ->orWhereHas('booking', fn ($bookingQuery) => $bookingQuery
+                            ->where('booking_reference', 'like', '%'.$participantSearch.'%')
+                            ->orWhere('booker_name', 'like', '%'.$participantSearch.'%')
+                            ->orWhere('booker_email', 'like', '%'.$participantSearch.'%'));
+                });
+            })
+            ->when(filled($participantPaymentStatus), fn ($query) => $query->where('payment_status', $participantPaymentStatus))
+            ->when(filled($participantType), fn ($query) => $query->where('participant_type', $participantType))
+            ->orderByDesc('event_booking_id')
+            ->orderBy('position')
+            ->paginate(50, ['*'], 'teilnehmer')
+            ->withQueryString();
 
         $bookingTotals = EventBooking::query()
             ->where('event_id', $event->id)
@@ -1637,10 +1686,16 @@ class EventController extends Controller
             ->first();
 
         return [
-            'eventBookings' => $bookings,
+            'eventParticipants' => $participants,
             'bookingSubmissionCount' => (int) ($bookingTotals->booking_count ?? 0),
             'participantCount' => (int) ($bookingTotals->participant_count ?? 0),
             'bookingRevenue' => (float) ($bookingTotals->revenue ?? 0),
+            'participantFilters' => [
+                'search' => $participantSearch,
+                'payment_status' => $participantPaymentStatus,
+                'type' => $participantType,
+                'display' => $participantDisplayMode,
+            ],
             'manualParticipantMembers' => Member::query()
                 ->where('tenant_id', $event->tenant_id)
                 ->whereNull('archived_at')
@@ -1654,6 +1709,30 @@ class EventController extends Controller
                 ->orderBy('last_name')
                 ->orderBy('first_name')
                 ->get(['id', 'organization', 'company', 'first_name', 'last_name', 'email', 'mobile', 'phone', 'phone_mobile', 'phone_landline']),
+        ];
+    }
+
+    private function participantSummaryData(Event $event): array
+    {
+        $bookingTotals = EventBooking::query()
+            ->where('event_id', $event->id)
+            ->where('tenant_id', $event->tenant_id)
+            ->selectRaw('COUNT(*) as booking_count, COALESCE(SUM(participant_count), 0) as participant_count, COALESCE(SUM(total_amount), 0) as revenue')
+            ->first();
+
+        return [
+            'bookingSubmissionCount' => (int) ($bookingTotals->booking_count ?? 0),
+            'participantCount' => (int) ($bookingTotals->participant_count ?? 0),
+            'bookingRevenue' => (float) ($bookingTotals->revenue ?? 0),
+        ];
+    }
+
+    private function shiftSummaryData(Event $event): array
+    {
+        return [
+            'eventShiftCount' => $event->shifts()
+                ->where('tenant_id', $event->tenant_id)
+                ->count(),
         ];
     }
 

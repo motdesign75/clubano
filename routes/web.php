@@ -283,6 +283,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/events/anwesenheit/auswertung', [$cls, 'attendanceReport'])->middleware('tenant.role:Mitarbeiter')->name('events.attendance.report');
         Route::resource('events', $cls)->except(['show'])->middleware('tenant.role:Lesen')->where(['event' => '[0-9]+']);
         Route::get('/events/{event}', [$cls, 'show'])->whereNumber('event')->name('events.show');
+        Route::get('/events/{event}/teilnehmer', [$cls, 'participants'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.manage');
         Route::get('/events/{event}/teilnehmer/export', [$cls, 'participantsExport'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.export');
         Route::get('/events/{event}/teilnehmer/drucken', [$cls, 'participantsPrint'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.print');
         Route::get('/events/{event}/teilnehmer/pdf', [$cls, 'participantsPdf'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.pdf');
@@ -290,6 +291,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::patch('/events/{event}/buchungen/{booking}/teilnehmer/{participant}', [$cls, 'updateParticipant'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.update');
         Route::patch('/events/{event}/teilnehmer/kostenfrei', [$cls, 'markParticipantsFree'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.mark-free');
         Route::post('/events/{event}/teilnehmer/nachtragen', [$cls, 'storeManualParticipant'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.manual-participants.store');
+        Route::get('/events/{event}/dienstplan', [$cls, 'schedule'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.manage');
         Route::get('/events/{event}/dienstplan/druck', [$cls, 'schedulePrint'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.print');
         Route::get('/events/{event}/dienstplan/pdf', [$cls, 'schedulePdf'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.pdf');
         Route::get('/events/{event}/dienstplan/mitglieder-pdf', [$cls, 'scheduleMemberPdf'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.member-pdf');

@@ -292,7 +292,7 @@ test('staff can manually add event participants from members contacts and guests
         'price_amount' => '25.00',
         'payment_status' => 'open',
         'source' => 'phone',
-    ])->assertRedirect(route('events.edit', $event));
+    ])->assertRedirect(route('events.participants.manage', $event));
 
     $this->actingAs($staff)->post(route('events.manual-participants.store', $event), [
         'participant_type' => 'contact',
@@ -300,7 +300,7 @@ test('staff can manually add event participants from members contacts and guests
         'payment_status' => 'not_required',
         'payment_reason' => 'Sponsor',
         'source' => 'manual',
-    ])->assertRedirect(route('events.edit', $event));
+    ])->assertRedirect(route('events.participants.manage', $event));
 
     $this->actingAs($staff)->post(route('events.manual-participants.store', $event), [
         'participant_type' => 'guest',
@@ -312,7 +312,7 @@ test('staff can manually add event participants from members contacts and guests
         'price_amount' => '10.00',
         'payment_status' => 'paid',
         'source' => 'abendkasse',
-    ])->assertRedirect(route('events.edit', $event));
+    ])->assertRedirect(route('events.participants.manage', $event));
 
     $this->actingAs($staff)->post(route('events.manual-participants.store', $event), [
         'participant_type' => 'guest',
@@ -320,7 +320,7 @@ test('staff can manually add event participants from members contacts and guests
         'organization_name' => 'Gastverein Demostadt',
         'payment_status' => 'not_required',
         'source' => 'manual',
-    ])->assertRedirect(route('events.edit', $event));
+    ])->assertRedirect(route('events.participants.manage', $event));
 
     $bookings = EventBooking::query()->where('event_id', $event->id)->with('participants')->get();
 
@@ -343,7 +343,7 @@ test('staff can manually add event participants from members contacts and guests
         'payment_reason' => 'Ehrengast',
         'source' => 'abendkasse',
         'note' => 'Nachträglich kostenfrei gestellt',
-    ])->assertRedirect(route('events.edit', $event));
+    ])->assertRedirect(route('events.participants.manage', $event));
 
     $guestParticipant->refresh();
     expect($guestParticipant->payment_required)->toBeFalse();
@@ -366,7 +366,7 @@ test('staff can manually add event participants from members contacts and guests
     $this->actingAs($staff)->patch(route('events.participants.mark-free', $event), [
         'participant_ids' => $memberParticipantIds,
         'payment_reason' => 'Helfereinsatz',
-    ])->assertRedirect(route('events.edit', $event));
+    ])->assertRedirect(route('events.participants.manage', $event));
 
     $freeMembers = EventBooking::query()
         ->where('event_id', $event->id)
@@ -382,7 +382,7 @@ test('staff can manually add event participants from members contacts and guests
     expect($freeMembers->every(fn ($participant) => $participant->payment_reason === 'Helfereinsatz'))->toBeTrue();
     expect((float) EventBooking::query()->where('event_id', $event->id)->sum('total_amount'))->toBe(0.0);
 
-    $this->actingAs($staff)->get(route('events.edit', $event))
+    $this->actingAs($staff)->get(route('events.participants.manage', $event))
         ->assertOk()
         ->assertSee('Teilnehmer nachtragen')
         ->assertSee('Sponsor GmbH - Clara Kontakt')

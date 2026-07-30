@@ -1,4 +1,4 @@
-<div class="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+<div class="{{ ($embeddedInEditor ?? false) ? '' : 'mt-10' }} rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
             <h2 class="text-lg font-semibold text-slate-900">Teilnehmerliste</h2>
@@ -300,271 +300,276 @@
             </div>
         </form>
 
-        <div class="mt-6 overflow-x-auto">
+        <form method="GET" action="{{ route('events.participants.manage', $event) }}" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_12rem_12rem_16rem_auto] lg:items-end">
+                <div>
+                    <label for="teilnehmer_suche" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Suchen</label>
+                    <input id="teilnehmer_suche" type="search" name="teilnehmer_suche" value="{{ $participantFilters['search'] ?? '' }}" placeholder="Name, Firma, E-Mail, Telefon oder Buchung" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                </div>
+                <div>
+                    <label for="zahlstatus" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Zahlstatus</label>
+                    <select id="zahlstatus" name="zahlstatus" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                        <option value="">Alle</option>
+                        <option value="not_required" @selected(($participantFilters['payment_status'] ?? null) === 'not_required')>Kostenfrei</option>
+                        <option value="open" @selected(($participantFilters['payment_status'] ?? null) === 'open')>Offen</option>
+                        <option value="paid" @selected(($participantFilters['payment_status'] ?? null) === 'paid')>Bezahlt</option>
+                        <option value="cancelled" @selected(($participantFilters['payment_status'] ?? null) === 'cancelled')>Storniert</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="teilnehmertyp" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Typ</label>
+                    <select id="teilnehmertyp" name="teilnehmertyp" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                        <option value="">Alle</option>
+                        <option value="member" @selected(($participantFilters['type'] ?? null) === 'member')>Mitglieder</option>
+                        <option value="contact" @selected(($participantFilters['type'] ?? null) === 'contact')>Kontakte</option>
+                        <option value="guest" @selected(($participantFilters['type'] ?? null) === 'guest')>Freie Gäste</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="anzeige" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Anzeige</label>
+                    <select id="anzeige" name="anzeige" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                        <option value="person" @selected(($participantFilters['display'] ?? 'person') === 'person')>Vor- und Nachname</option>
+                        <option value="organization" @selected(($participantFilters['display'] ?? 'person') === 'organization')>Firma / Organisation</option>
+                    </select>
+                </div>
+                <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+                    Anzeigen
+                </button>
+            </div>
+        </form>
+
+        <div class="mt-4 flex flex-col gap-2 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                {{ $eventParticipants->firstItem() ?? 0 }}-{{ $eventParticipants->lastItem() ?? 0 }} von {{ $eventParticipants->total() }} Teilnehmern
+            </div>
+            @if(($participantFilters['search'] ?? '') !== '' || filled($participantFilters['payment_status'] ?? null) || filled($participantFilters['type'] ?? null) || ($participantFilters['display'] ?? 'person') !== 'person')
+                <a href="{{ route('events.participants.manage', $event) }}" class="font-semibold text-slate-700 hover:text-slate-950">Filter zurücksetzen</a>
+            @endif
+        </div>
+
+        <div class="mt-3 overflow-x-auto rounded-2xl border border-slate-200">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
                 <thead class="bg-slate-50">
                     <tr class="text-left text-slate-600">
-                        <th class="px-4 py-3 font-semibold">Buchung</th>
-                        <th class="px-4 py-3 font-semibold">Ansprechpartner</th>
+                        <th class="w-10 px-4 py-3 font-semibold"></th>
                         <th class="px-4 py-3 font-semibold">Teilnehmer</th>
-                        <th class="px-4 py-3 font-semibold">Preis</th>
-                        <th class="px-4 py-3 font-semibold">Status</th>
-                        <th class="px-4 py-3 font-semibold">Workflow</th>
-                        <th class="px-4 py-3 font-semibold">Zusatzangaben</th>
+                        <th class="px-4 py-3 font-semibold">Buchung</th>
+                        <th class="px-4 py-3 font-semibold">Zahlung</th>
                         <th class="px-4 py-3 font-semibold">Eingang</th>
+                        <th class="px-4 py-3 font-semibold">Aktion</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-100">
-                    @foreach($eventBookings as $booking)
+                <tbody class="divide-y divide-slate-100 bg-white">
+                    @forelse($eventParticipants as $participant)
                         @php
-                            $submission = $booking->submission;
+                            $booking = $participant->booking;
+                            $submission = $booking?->submission;
                             $additionalAnswers = collect($submission?->answers ?? [])
                                 ->reject(fn ($value, $key) => in_array($key, ['first_name', 'last_name', 'full_name', 'email', 'phone', 'mobile', 'participant_count', 'participant_notes'], true))
                                 ->filter(fn ($value) => !blank($value));
+                            $personName = $participant->full_name ?: ($participant->member?->full_name ?: $participant->contact?->full_name);
+                            $organizationName = $participant->organization_name
+                                ?: ($participant->member?->organization ?: ($participant->contact?->organization ?: $participant->contact?->company));
+                            $displayAsOrganization = ($participantFilters['display'] ?? 'person') === 'organization';
+                            $primaryName = $displayAsOrganization
+                                ? ($organizationName ?: ($personName ?: $participant->display_name))
+                                : ($personName ?: ($organizationName ?: $participant->display_name));
+                            $secondaryName = $displayAsOrganization
+                                ? ($organizationName && $personName ? $personName : null)
+                                : ($personName && $organizationName ? $organizationName.' - '.$personName : null);
                         @endphp
 
-                        <tr class="align-top">
-                            <td class="px-4 py-3">
-                                <div class="font-medium text-slate-900">{{ $booking->booking_reference }}</div>
-                                <div class="mt-1 text-xs text-slate-500">
-                                    {{ $booking->participant_count }} Person{{ $booking->participant_count === 1 ? '' : 'en' }}
-                                </div>
+                        <tr class="align-top hover:bg-slate-50/70">
+                            <td class="px-4 py-4">
+                                <input form="participants-bulk-free-form" type="checkbox" name="participant_ids[]" value="{{ $participant->id }}" class="rounded border-slate-300 text-blue-700 focus:ring-blue-400">
                             </td>
-                            <td class="px-4 py-3">
-                                <div class="font-medium text-slate-900">{{ $booking->booker_name ?: 'Unbekannt' }}</div>
-                                <div class="mt-1 text-sm text-slate-600">{{ $booking->booker_email ?: 'keine E-Mail' }}</div>
-                                @if($booking->booker_phone)
-                                    <div class="mt-1 text-sm text-slate-600">{{ $booking->booker_phone }}</div>
+                            <td class="px-4 py-4">
+                                <div class="font-semibold text-slate-950">{{ $primaryName }}</div>
+                                @if($secondaryName)
+                                    <div class="mt-1 text-xs font-medium text-slate-500">{{ $secondaryName }}</div>
                                 @endif
-                            </td>
-                            <td class="px-4 py-3 text-slate-600">
-                                <div class="space-y-1">
-                                    @foreach($booking->participants as $participant)
-                                        <div class="rounded-lg bg-slate-50 px-3 py-2">
-                                            <label class="flex cursor-pointer items-start gap-2">
-                                                <input form="participants-bulk-free-form" type="checkbox" name="participant_ids[]" value="{{ $participant->id }}" class="mt-1 rounded border-slate-300 text-blue-700 focus:ring-blue-400">
-                                                <span class="font-medium text-slate-800">{{ $participant->display_name }}</span>
-                                            </label>
-                                            <div class="mt-1 flex flex-wrap gap-1.5 text-xs">
-                                                <span class="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-600">{{ $participant->type_label }}</span>
-                                                <span class="rounded-full {{ $participant->payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' : ($participant->payment_status === 'not_required' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700') }} px-2 py-0.5 font-semibold">
-                                                    {{ $participant->payment_status_label }}
-                                                </span>
-                                                <span class="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-600">
-                                                    {{ number_format((float) $participant->price_amount, 2, ',', '.') }} {{ strtoupper($booking->currency ?: 'EUR') }}
-                                                </span>
-                                            </div>
-                                            @if($participant->email || $participant->phone)
-                                                <div class="mt-1 text-xs text-slate-500">
-                                                    {{ $participant->email ?: 'keine E-Mail' }}
-                                                    @if($participant->phone)
-                                                        · {{ $participant->phone }}
-                                                    @endif
-                                                </div>
-                                            @endif
-                                            @if($participant->payment_reason || $participant->source || $participant->note)
-                                                <div class="mt-1 text-xs text-slate-500">
-                                                    {{ $participant->payment_reason ?: ucfirst((string) $participant->source) }}
-                                                    @if($participant->note)
-                                                        · {{ $participant->note }}
-                                                    @endif
-                                                </div>
-                                            @endif
-                                            <details class="group mt-2 rounded-lg border border-slate-200 bg-white">
-                                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
-                                                    Teilnehmer bearbeiten
-                                                    <x-heroicon-o-chevron-down class="h-4 w-4 text-slate-400 transition group-open:rotate-180" />
-                                                </summary>
-                                                <form method="POST" action="{{ route('events.participants.update', [$event, $booking, $participant]) }}" class="space-y-3 border-t border-slate-100 p-3">
-                                                    @csrf
-                                                    @method('PATCH')
-
-                                                    <div class="grid gap-2 sm:grid-cols-2">
-                                                        <div>
-                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Vorname</label>
-                                                            <input type="text" name="first_name" value="{{ old('first_name', $participant->first_name) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                                        </div>
-                                                        <div>
-                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Nachname</label>
-                                                            <input type="text" name="last_name" value="{{ old('last_name', $participant->last_name) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Firma / Organisation</label>
-                                                        <input type="text" name="organization_name" value="{{ old('organization_name', $participant->organization_name) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                                    </div>
-
-                                                    <div class="grid gap-2 sm:grid-cols-2">
-                                                        <div>
-                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">E-Mail</label>
-                                                            <input type="email" name="email" value="{{ old('email', $participant->email) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                                        </div>
-                                                        <div>
-                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Telefon</label>
-                                                            <input type="text" name="phone" value="{{ old('phone', $participant->phone) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                                        </div>
-                                                    </div>
-
-                                                    <label class="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                                                        <input type="checkbox" name="payment_required" value="1" class="mt-0.5 rounded border-slate-300 text-slate-950 focus:ring-slate-400" @checked(old('payment_required', $participant->payment_required))>
-                                                        <span>
-                                                            <span class="block font-semibold text-slate-900">Teilnehmer muss zahlen</span>
-                                                            <span class="block text-slate-500">Wenn aus, wird Betrag und Status auf kostenfrei gesetzt.</span>
-                                                        </span>
-                                                    </label>
-
-                                                    <div class="grid gap-2 sm:grid-cols-2">
-                                                        <div>
-                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Betrag</label>
-                                                            <input type="number" step="0.01" min="0" name="price_amount" value="{{ old('price_amount', number_format((float) $participant->price_amount, 2, '.', '')) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                                        </div>
-                                                        <div>
-                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Zahlstatus</label>
-                                                            <select name="payment_status" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                                                <option value="not_required" @selected(old('payment_status', $participant->payment_status) === 'not_required')>Keine Zahlung nötig</option>
-                                                                <option value="open" @selected(old('payment_status', $participant->payment_status) === 'open')>Offen</option>
-                                                                <option value="paid" @selected(old('payment_status', $participant->payment_status) === 'paid')>Bezahlt</option>
-                                                                <option value="cancelled" @selected(old('payment_status', $participant->payment_status) === 'cancelled')>Storniert</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-
-                                                    <div class="grid gap-2 sm:grid-cols-2">
-                                                        <div>
-                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Grund / Hinweis</label>
-                                                            <input type="text" name="payment_reason" value="{{ old('payment_reason', $participant->payment_reason) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300" placeholder="z. B. Sponsor, Ehrengast">
-                                                        </div>
-                                                        <div>
-                                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Herkunft</label>
-                                                            <select name="source" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                                                <option value="manual" @selected(old('source', $participant->source) === 'manual')>Manuell</option>
-                                                                <option value="phone" @selected(old('source', $participant->source) === 'phone')>Telefon</option>
-                                                                <option value="email" @selected(old('source', $participant->source) === 'email')>E-Mail</option>
-                                                                <option value="abendkasse" @selected(old('source', $participant->source) === 'abendkasse')>Abendkasse</option>
-                                                                <option value="imported" @selected(old('source', $participant->source) === 'imported')>Importiert</option>
-                                                                <option value="online" @selected(old('source', $participant->source) === 'online')>Online</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-
-                                                    <div>
-                                                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Notiz</label>
-                                                        <textarea name="note" rows="2" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">{{ old('note', $participant->note) }}</textarea>
-                                                    </div>
-
-                                                    <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">
-                                                        Teilnehmer speichern
-                                                    </button>
-                                                </form>
-                                            </details>
-                                        </div>
-                                    @endforeach
-                                </div>
-                            </td>
-                            <td class="px-4 py-3 text-slate-600">
-                                <div>{{ number_format((float) $booking->total_amount, 2, ',', '.') }} {{ strtoupper($booking->currency ?: 'EUR') }}</div>
-                                <div class="mt-1 text-xs text-slate-500">
-                                    {{ number_format((float) $booking->price_per_person, 2, ',', '.') }} {{ strtoupper($booking->currency ?: 'EUR') }} pro Person
-                                </div>
-                            </td>
-                            <td class="px-4 py-3 text-slate-600">
-                                <div class="space-y-2">
-                                    <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                                        {{ match($booking->booking_status) {
-                                            'confirmed' => 'Bestätigt',
-                                            'cancelled' => 'Storniert',
-                                            default => 'Vorgemerkt',
-                                        } }}
-                                    </span>
-
-                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $booking->payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' : ($booking->payment_status === 'not_required' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700') }}">
-                                        {{ match($booking->payment_status) {
-                                            'paid' => 'Bezahlt',
-                                            'cancelled' => 'Zahlung storniert',
-                                            'not_required' => 'Keine Zahlung nötig',
-                                            default => 'Zahlung offen',
-                                        } }}
-                                    </span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3 text-slate-600">
-                                <form method="POST" action="{{ route('events.bookings.update', [$event, $booking]) }}" class="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                                    @csrf
-                                    @method('PATCH')
-
-                                    <div>
-                                        <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Buchungsstatus</label>
-                                        <select name="booking_status" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                            <option value="pending" @selected($booking->booking_status === 'pending')>Vorgemerkt</option>
-                                            <option value="confirmed" @selected($booking->booking_status === 'confirmed')>Bestätigt</option>
-                                            <option value="cancelled" @selected($booking->booking_status === 'cancelled')>Storniert</option>
-                                        </select>
-                                    </div>
-
-                                    @if((float) $booking->price_per_person > 0)
-                                        <div>
-                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Zahlstatus</label>
-                                            <select name="payment_status" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                                <option value="open" @selected($booking->payment_status === 'open')>Offen</option>
-                                                <option value="paid" @selected($booking->payment_status === 'paid')>Bezahlt</option>
-                                                <option value="cancelled" @selected($booking->payment_status === 'cancelled')>Storniert</option>
-                                            </select>
-                                        </div>
-                                    @else
-                                        <input type="hidden" name="payment_status" value="not_required">
-                                        <div class="rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-800">
-                                            Für diese Buchung ist keine Zahlung erforderlich.
-                                        </div>
+                                <div class="mt-1 flex flex-wrap gap-1.5 text-xs">
+                                    <span class="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600">{{ $participant->type_label }}</span>
+                                    @if($participant->source)
+                                        <span class="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600">{{ ucfirst((string) $participant->source) }}</span>
                                     @endif
-
-                                    <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-                                        Status speichern
-                                    </button>
-                                </form>
+                                </div>
+                                @if($participant->email || $participant->phone)
+                                    <div class="mt-1 text-xs text-slate-500">
+                                        {{ $participant->email ?: 'keine E-Mail' }}
+                                        @if($participant->phone)
+                                            · {{ $participant->phone }}
+                                        @endif
+                                    </div>
+                                @endif
+                                @if($participant->note)
+                                    <div class="mt-1 text-xs text-slate-500">{{ $participant->note }}</div>
+                                @endif
                             </td>
-                            <td class="px-4 py-3 text-slate-600">
-                                @if($additionalAnswers->isEmpty())
-                                    <span class="text-slate-400">—</span>
-                                @else
-                                    <div class="space-y-1">
-                                        @foreach($additionalAnswers as $key => $value)
-                                            <div>
-                                                <span class="font-medium text-slate-700">
-                                                    {{ optional($event->activeBookingForm->fields->firstWhere('slug', $key))->label ?? $key }}:
-                                                </span>
-                                                <span>
-                                                    @if(is_bool($value))
-                                                        {{ $value ? 'Ja' : 'Nein' }}
-                                                    @elseif(is_array($value))
-                                                        {{ implode(', ', $value) }}
-                                                    @else
-                                                        {{ $value }}
-                                                    @endif
-                                                </span>
+                            <td class="px-4 py-4 text-slate-600">
+                                <div class="font-medium text-slate-900">{{ $booking?->booking_reference ?: 'Ohne Buchung' }}</div>
+                                <div class="mt-1 text-xs text-slate-500">{{ $booking?->booker_name ?: 'Kein Ansprechpartner' }}</div>
+                                @if($booking?->booker_email)
+                                    <div class="mt-1 text-xs text-slate-500">{{ $booking->booker_email }}</div>
+                                @endif
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $participant->payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' : ($participant->payment_status === 'not_required' ? 'bg-blue-100 text-blue-700' : ($participant->payment_status === 'cancelled' ? 'bg-slate-100 text-slate-600' : 'bg-amber-100 text-amber-700')) }}">
+                                    {{ $participant->payment_status_label }}
+                                </div>
+                                <div class="mt-2 text-sm font-semibold text-slate-900">
+                                    {{ number_format((float) $participant->price_amount, 2, ',', '.') }} {{ strtoupper($booking?->currency ?: $event->currency ?: 'EUR') }}
+                                </div>
+                                @if($participant->payment_reason)
+                                    <div class="mt-1 text-xs text-slate-500">{{ $participant->payment_reason }}</div>
+                                @endif
+                            </td>
+                            <td class="px-4 py-4 text-slate-600">
+                                {{ optional($booking?->created_at)->format('d.m.Y H:i') ?: '—' }}
+                            </td>
+                            <td class="px-4 py-4">
+                                <details class="group min-w-72 rounded-lg border border-slate-200 bg-white">
+                                    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
+                                        Teilnehmer bearbeiten
+                                        <x-heroicon-o-chevron-down class="h-4 w-4 text-slate-400 transition group-open:rotate-180" />
+                                    </summary>
+                                    <div class="space-y-3 border-t border-slate-100 p-3">
+                                        <form method="POST" action="{{ route('events.participants.update', [$event, $booking, $participant]) }}" class="space-y-3">
+                                            @csrf
+                                            @method('PATCH')
+
+                                            <div class="grid gap-2 sm:grid-cols-2">
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Vorname</label>
+                                                    <input type="text" name="first_name" value="{{ old('first_name', $participant->first_name) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Nachname</label>
+                                                    <input type="text" name="last_name" value="{{ old('last_name', $participant->last_name) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                </div>
                                             </div>
-                                        @endforeach
-                                    </div>
-                                @endif
 
-                                @if(!blank($submission?->answers['participant_notes'] ?? null))
-                                    <div class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                                        <span class="font-semibold">Gruppenhinweis:</span>
-                                        {{ $submission->answers['participant_notes'] }}
+                                            <div>
+                                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Firma / Organisation</label>
+                                                <input type="text" name="organization_name" value="{{ old('organization_name', $participant->organization_name) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                            </div>
+
+                                            <div class="grid gap-2 sm:grid-cols-2">
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">E-Mail</label>
+                                                    <input type="email" name="email" value="{{ old('email', $participant->email) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Telefon</label>
+                                                    <input type="text" name="phone" value="{{ old('phone', $participant->phone) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                </div>
+                                            </div>
+
+                                            <label class="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                                <input type="checkbox" name="payment_required" value="1" class="mt-0.5 rounded border-slate-300 text-slate-950 focus:ring-slate-400" @checked(old('payment_required', $participant->payment_required))>
+                                                <span>
+                                                    <span class="block font-semibold text-slate-900">Teilnehmer muss zahlen</span>
+                                                    <span class="block text-slate-500">Wenn aus, wird Betrag und Status auf kostenfrei gesetzt.</span>
+                                                </span>
+                                            </label>
+
+                                            <div class="grid gap-2 sm:grid-cols-2">
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Betrag</label>
+                                                    <input type="number" step="0.01" min="0" name="price_amount" value="{{ old('price_amount', number_format((float) $participant->price_amount, 2, '.', '')) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Zahlstatus</label>
+                                                    <select name="payment_status" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                        <option value="not_required" @selected(old('payment_status', $participant->payment_status) === 'not_required')>Keine Zahlung nötig</option>
+                                                        <option value="open" @selected(old('payment_status', $participant->payment_status) === 'open')>Offen</option>
+                                                        <option value="paid" @selected(old('payment_status', $participant->payment_status) === 'paid')>Bezahlt</option>
+                                                        <option value="cancelled" @selected(old('payment_status', $participant->payment_status) === 'cancelled')>Storniert</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div class="grid gap-2 sm:grid-cols-2">
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Grund / Hinweis</label>
+                                                    <input type="text" name="payment_reason" value="{{ old('payment_reason', $participant->payment_reason) }}" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300" placeholder="z. B. Sponsor, Ehrengast">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Herkunft</label>
+                                                    <select name="source" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                        <option value="manual" @selected(old('source', $participant->source) === 'manual')>Manuell</option>
+                                                        <option value="phone" @selected(old('source', $participant->source) === 'phone')>Telefon</option>
+                                                        <option value="email" @selected(old('source', $participant->source) === 'email')>E-Mail</option>
+                                                        <option value="abendkasse" @selected(old('source', $participant->source) === 'abendkasse')>Abendkasse</option>
+                                                        <option value="imported" @selected(old('source', $participant->source) === 'imported')>Importiert</option>
+                                                        <option value="online" @selected(old('source', $participant->source) === 'online')>Online</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Notiz</label>
+                                                <textarea name="note" rows="2" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">{{ old('note', $participant->note) }}</textarea>
+                                            </div>
+
+                                            <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                                                Teilnehmer speichern
+                                            </button>
+                                        </form>
+
+                                        <form method="POST" action="{{ route('events.bookings.update', [$event, $booking]) }}" class="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                                            @csrf
+                                            @method('PATCH')
+
+                                            <label class="block text-xs font-semibold uppercase tracking-wide text-slate-500">Buchungsstatus</label>
+                                            <select name="booking_status" class="w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                                <option value="pending" @selected($booking?->booking_status === 'pending')>Vorgemerkt</option>
+                                                <option value="confirmed" @selected($booking?->booking_status === 'confirmed')>Bestätigt</option>
+                                                <option value="cancelled" @selected($booking?->booking_status === 'cancelled')>Storniert</option>
+                                            </select>
+                                            <input type="hidden" name="payment_status" value="{{ $booking?->payment_status ?: 'not_required' }}">
+
+                                            <button type="submit" class="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                                                Buchung speichern
+                                            </button>
+                                        </form>
+
+                                        @if($additionalAnswers->isNotEmpty() || !blank($submission?->answers['participant_notes'] ?? null))
+                                            <div class="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+                                                @if(!blank($submission?->answers['participant_notes'] ?? null))
+                                                    <div><span class="font-semibold">Gruppenhinweis:</span> {{ $submission->answers['participant_notes'] }}</div>
+                                                @endif
+                                                @foreach($additionalAnswers as $key => $value)
+                                                    <div class="mt-1">
+                                                        <span class="font-semibold">{{ optional($event->activeBookingForm?->fields->firstWhere('slug', $key))->label ?? $key }}:</span>
+                                                        @if(is_bool($value))
+                                                            {{ $value ? 'Ja' : 'Nein' }}
+                                                        @elseif(is_array($value))
+                                                            {{ implode(', ', $value) }}
+                                                        @else
+                                                            {{ $value }}
+                                                        @endif
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        @endif
                                     </div>
-                                @endif
-                            </td>
-                            <td class="px-4 py-3 text-slate-600">
-                                {{ $booking->created_at->format('d.m.Y H:i') }}
+                                </details>
                             </td>
                         </tr>
-                    @endforeach
+                    @empty
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center text-sm text-slate-500">
+                                Keine Teilnehmer für die aktuelle Auswahl gefunden.
+                            </td>
+                        </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
 
         <div class="mt-4">
-            {{ $eventBookings->links() }}
+            {{ $eventParticipants->links() }}
         </div>
     @elseif($event->activeBookingForm)
         <div class="mt-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">

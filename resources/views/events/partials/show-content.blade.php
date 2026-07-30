@@ -239,10 +239,11 @@
 
                 @include('events.partials.participants', [
                     'event' => $event,
-                    'eventBookings' => $eventBookings,
+                    'eventParticipants' => $eventParticipants,
                     'bookingSubmissionCount' => $bookingSubmissionCount,
                     'participantCount' => $participantCount,
                     'bookingRevenue' => $bookingRevenue,
+                    'participantFilters' => $participantFilters,
                     'canManageManualParticipants' => false,
                 ])
 

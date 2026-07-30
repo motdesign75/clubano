@@ -14,7 +14,7 @@
     $summaryStyle = $coverageStyles[$scheduleStats['coverage_status']] ?? $coverageStyles['understaffed'];
 @endphp
 
-<div class="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+<div class="{{ ($embeddedInEditor ?? false) ? '' : 'mt-10' }} rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
     <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
             <h2 class="text-lg font-semibold text-slate-900">🗓️ Dienstplan</h2>
