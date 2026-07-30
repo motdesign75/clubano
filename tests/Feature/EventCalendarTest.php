@@ -654,10 +654,11 @@ test('staff can record attendance and count selected hours toward member duty ho
         'tenant_id' => $tenant->id,
         'title' => 'Vereinsarbeit',
         'location' => 'Vereinsheim',
-        'start' => now()->addDays(4)->setTime(10, 0),
-        'end' => now()->addDays(4)->setTime(13, 0),
+        'start' => now()->subDay()->setTime(10, 0),
+        'end' => now()->subDay()->setTime(13, 0),
         'is_public' => false,
         'booking_enabled' => false,
+        'attendance_enabled' => true,
         'created_by' => $staff->id,
         'updated_by' => $staff->id,
     ]);

@@ -1,5 +1,6 @@
 @php
     $canManageEvents = ! $isPublicPreview && (auth()->user()?->isStaff() ?? false);
+    $eventHasEnded = $event->end?->isPast() ?? false;
 @endphp
 
 <div class="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -51,13 +52,42 @@
                     @endif
 
                     @if($canManageEvents)
+                        <a href="{{ route('events.participants.manage', $event) }}#teilnehmer-nachtragen"
+                           class="inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800">
+                            Teilnehmer hinzufügen
+                        </a>
                         <a href="{{ route('events.edit', $event) }}"
                            class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                            Bearbeiten
+                            Termin bearbeiten
                         </a>
                     @endif
                 </div>
             </div>
+
+            @if($canManageEvents)
+                <section class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div>
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Nächste Schritte</div>
+                            <p class="mt-1 text-sm text-slate-600">Was möchtest du für diese Veranstaltung tun?</p>
+                        </div>
+                        <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            <a href="{{ route('events.participants.manage', $event) }}#teilnehmer-nachtragen" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+                                Teilnehmer hinzufügen
+                            </a>
+                            <a href="{{ route('events.participants.manage', $event) }}" class="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                Teilnehmerliste
+                            </a>
+                            <a href="{{ route('events.schedule.manage', $event) }}" class="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                Dienstplan
+                            </a>
+                            <a href="{{ route('events.edit', $event) }}" class="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                Termin bearbeiten
+                            </a>
+                        </div>
+                    </div>
+                </section>
+            @endif
 
             @if($event->description)
                 <div class="mt-8 prose max-w-none prose-slate">
@@ -222,12 +252,29 @@
                         'invitationStatuses' => $invitationStatuses,
                     ])
 
-                    @include('events.partials.attendance', [
-                        'event' => $event,
-                        'attendanceMembers' => $attendanceMembers,
-                        'attendancesByMember' => $attendancesByMember,
-                        'attendanceStats' => $attendanceStats,
-                    ])
+                    @if($eventHasEnded)
+                        @include('events.partials.attendance', [
+                            'event' => $event,
+                            'attendanceMembers' => $attendanceMembers,
+                            'attendancesByMember' => $attendancesByMember,
+                            'attendanceStats' => $attendanceStats,
+                        ])
+                    @elseif($event->attendance_enabled)
+                        <section class="mt-10 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Anwesenheit</div>
+                                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Nach dem Termin erfassen</h2>
+                                    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                                        Vor der Veranstaltung zählt erst, wer zugesagt hat. Die tatsächliche Anwesenheit wird nach dem Termin dokumentiert.
+                                    </p>
+                                </div>
+                                <div class="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                    Verfügbar ab {{ $event->end->format('d.m.Y H:i') }} Uhr.
+                                </div>
+                            </div>
+                        </section>
+                    @endif
                 @endif
 
                 <section class="mt-10 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
