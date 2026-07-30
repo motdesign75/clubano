@@ -18,7 +18,7 @@
                 <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">Event-Editor</div>
                 <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{{ $event->title }}</h1>
                 <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
-                    Bearbeite die wichtigsten Informationen zuerst. Veröffentlichung, Dienstplan und Anmeldungen folgen darunter.
+                    Bearbeite hier nur den Termin selbst. Dienstplan und Teilnehmer sind eigene Arbeitsbereiche.
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">

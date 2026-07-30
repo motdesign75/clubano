@@ -230,22 +230,57 @@
                     ])
                 @endif
 
-                @include('events.partials.schedule', [
-                    'event' => $event,
-                    'eventShifts' => $eventShifts,
-                    'assignableMembers' => $assignableMembers,
-                    'scheduleStats' => $scheduleStats,
-                ])
+                <section class="mt-10 rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h2 class="text-lg font-semibold text-slate-950">Arbeitsbereiche</h2>
+                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
+                                Dienstplan und Teilnehmer bleiben mit dieser Veranstaltung verbunden, werden aber in eigenen Ansichten gepflegt.
+                            </p>
+                        </div>
+                    </div>
 
-                @include('events.partials.participants', [
-                    'event' => $event,
-                    'eventParticipants' => $eventParticipants,
-                    'bookingSubmissionCount' => $bookingSubmissionCount,
-                    'participantCount' => $participantCount,
-                    'bookingRevenue' => $bookingRevenue,
-                    'participantFilters' => $participantFilters,
-                    'canManageManualParticipants' => false,
-                ])
+                    <div class="mt-5 grid gap-4 md:grid-cols-2">
+                        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <div class="flex items-start justify-between gap-4">
+                                <div>
+                                    <h3 class="text-base font-semibold text-slate-950">Dienstplan</h3>
+                                    <p class="mt-2 text-sm leading-6 text-slate-500">Schichten, Helfer und Aushänge für diese Veranstaltung.</p>
+                                </div>
+                                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                    {{ $scheduleStats['shift_count'] ?? 0 }} Schicht{{ ($scheduleStats['shift_count'] ?? 0) === 1 ? '' : 'en' }}
+                                </span>
+                            </div>
+
+                            @if($canManageEvents)
+                                <a href="{{ route('events.schedule.manage', $event) }}" class="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+                                    Dienstplan öffnen
+                                </a>
+                            @endif
+                        </div>
+
+                        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <div class="flex items-start justify-between gap-4">
+                                <div>
+                                    <h3 class="text-base font-semibold text-slate-950">Teilnehmer</h3>
+                                    <p class="mt-2 text-sm leading-6 text-slate-500">Teilnehmer suchen, hinzufügen, korrigieren und Listen ausgeben.</p>
+                                </div>
+                                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                                    {{ $participantCount }} Teilnehmer
+                                </span>
+                            </div>
+
+                            @if($canManageEvents)
+                                <a href="{{ route('events.participants.manage', $event) }}#teilnehmer-nachtragen" class="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+                                    Teilnehmer hinzufügen
+                                </a>
+                                <a href="{{ route('events.participants.manage', $event) }}" class="mt-4 ml-2 inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                    Liste öffnen
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+                </section>
 
                 @if($canManageEvents)
                     <section class="mt-10 rounded-2xl border border-rose-200 bg-rose-50 p-6">
