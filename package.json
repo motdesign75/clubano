@@ -1,5 +1,6 @@
 {
     "$schema": "https://json.schemastore.org/package.json",
+    "name": "app.clubano.de",
     "private": true,
     "type": "module",
     "scripts": {
