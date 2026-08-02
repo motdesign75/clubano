@@ -512,6 +512,18 @@ test('events index shows the calmer calendar cockpit', function () {
         'is_public' => false,
     ]);
 
+    Event::create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $staff->id,
+        'title' => 'Skatturnier',
+        'description' => 'Feier auf dem Vereinsgelände.',
+        'location' => 'Vereinsheim',
+        'start' => now()->addDays(9)->setTime(17, 0),
+        'end' => now()->addDays(9)->setTime(23, 0),
+        'category_id' => $category->id,
+        'is_public' => false,
+    ]);
+
     $response = $this->actingAs($staff)->get(route('events.index', [
         'view' => 'month',
         'month' => now()->format('Y-m'),
@@ -520,10 +532,34 @@ test('events index shows the calmer calendar cockpit', function () {
     $response->assertOk();
     $response->assertSee('Vereinskalender');
     $response->assertSee('Kalenderwerkzeuge');
-    $response->assertSee('Agenda');
+    $response->assertSee('Termine im');
+    $response->assertSee('Freie Tage im');
+    $response->assertSee('Freie Termine sofort erkennen');
+    $response->assertSee('Vorheriger Monat');
+    $response->assertSee('Dieser Monat');
+    $response->assertSee('Nächster Monat');
+    $response->assertSee('belegt');
     $response->assertSee('Abendtraining');
     $response->assertSee('Termin oder Serie planen');
     $response->assertSee('Serientermin');
+
+    $freeDate = now()->addDays(6)->format('Y-m-d');
+    $createResponse = $this->actingAs($staff)->get(route('events.create', ['date' => $freeDate]));
+
+    $createResponse->assertOk();
+    $createResponse->assertSee($freeDate . 'T19:00', false);
+    $createResponse->assertSee($freeDate . 'T21:00', false);
+
+    $searchResponse = $this->actingAs($staff)->get(route('events.index', [
+        'view' => 'month',
+        'month' => now()->format('Y-m'),
+        'search' => 'Sporthalle',
+    ]));
+
+    $searchResponse->assertOk();
+    $searchResponse->assertSee('Suche');
+    $searchResponse->assertSee('Abendtraining');
+    $searchResponse->assertDontSee('Skatturnier');
 });
 
 test('event create shows the guided event editor', function () {

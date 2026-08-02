@@ -151,6 +151,7 @@ class EventController extends Controller
         $year = request('year');
         $categoryId = request('category_id');
         $responsibleId = request('responsible_user_id');
+        $search = trim((string) request('search', ''));
         $conflictsOnly = request()->boolean('conflicts_only');
         $allowedViews = ['day', 'month', 'year'];
 
@@ -189,6 +190,15 @@ class EventController extends Controller
             })
             ->when($categoryId, fn ($query) => $query->where('category_id', $categoryId))
             ->when($responsibleId, fn ($query) => $query->where('responsible_user_id', $responsibleId))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($searchQuery) use ($search) {
+                    $searchQuery
+                        ->where('title', 'like', '%' . $search . '%')
+                        ->orWhere('location', 'like', '%' . $search . '%')
+                        ->orWhere('description', 'like', '%' . $search . '%')
+                        ->orWhereHas('responsibleUser', fn ($userQuery) => $userQuery->where('name', 'like', '%' . $search . '%'));
+                });
+            })
             ->orderBy('start')
             ->get();
 
@@ -200,16 +210,28 @@ class EventController extends Controller
 
         $calendarDays = collect();
         $calendarYearMonths = collect();
+        $availableDays = collect();
         $cursor = $rangeStart->copy();
 
         while ($view === 'month' && $cursor <= $rangeEnd) {
             $daySlot = $cursor->copy();
+            $dayEvents = $events->filter(fn (Event $event) => $event->start->isSameDay($daySlot))->values();
+            $isCurrentMonth = $daySlot->month === $calendarMonth->month;
+            $isPast = $daySlot->lt(now()->startOfDay());
+            $isAvailable = $isCurrentMonth && ! $isPast && $dayEvents->isEmpty();
+
             $calendarDays->push([
                 'date' => $daySlot,
-                'events' => $events->filter(fn (Event $event) => $event->start->isSameDay($daySlot))->values(),
-                'isCurrentMonth' => $daySlot->month === $calendarMonth->month,
+                'events' => $dayEvents,
+                'isCurrentMonth' => $isCurrentMonth,
                 'isToday' => $daySlot->isToday(),
+                'isPast' => $isPast,
+                'isAvailable' => $isAvailable,
             ]);
+
+            if ($isAvailable) {
+                $availableDays->push($daySlot);
+            }
 
             $cursor->addDay();
         }
@@ -241,6 +263,7 @@ class EventController extends Controller
             'calendarView' => $view,
             'events' => $events,
             'calendarDays' => $calendarDays,
+            'availableDays' => $availableDays,
             'calendarDay' => $calendarDay,
             'calendarMonth' => $calendarMonth,
             'calendarYear' => $calendarYear,
@@ -251,6 +274,7 @@ class EventController extends Controller
             'filters' => [
                 'category_id' => $categoryId,
                 'responsible_user_id' => $responsibleId,
+                'search' => $search,
                 'conflicts_only' => $conflictsOnly,
                 'month' => $calendarMonth->format('Y-m'),
                 'day' => $calendarDay->format('Y-m-d'),
@@ -352,6 +376,12 @@ class EventController extends Controller
      */
     public function create()
     {
+        $plannedDate = request('date')
+            ? Carbon::parse(request('date'))->startOfDay()
+            : null;
+        $plannedStart = $plannedDate?->copy()->setTime(19, 0);
+        $plannedEnd = $plannedStart?->copy()->addHours(2);
+
         return view('events.create', [
             'event' => new Event([
                 'is_public' => true,
@@ -360,6 +390,8 @@ class EventController extends Controller
                 'response_required' => false,
                 'counts_toward_required_hours' => false,
                 'reminders_enabled' => false,
+                'start' => $plannedStart,
+                'end' => $plannedEnd,
             ]),
             'categories' => EventCategory::query()->with('defaultTargetTag')->orderBy('name')->get(),
             'targetTags' => Tag::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
