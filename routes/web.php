@@ -269,6 +269,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             ->middleware('tenant.role:Admin')
             ->name('import.mitglieder.undo');
 
+        Route::get('/import/{importRun}/bericht', [$cls, 'report'])
+            ->middleware('tenant.role:Admin')
+            ->name('import.report');
+
         Route::get('/import/kontakte', [$cls, 'showContactUploadForm'])
             ->middleware('tenant.role:Admin')
             ->name('import.kontakte');

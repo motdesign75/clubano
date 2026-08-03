@@ -80,12 +80,21 @@
                         </div>
 
                         @if($run->isUndoable())
-                            <form method="POST" action="{{ route('import.mitglieder.undo', $run) }}" onsubmit="return confirm('Diesen Import wirklich rückgängig machen?')">
-                                @csrf
-                                <button type="submit" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100">
-                                    Rückgängig machen
-                                </button>
-                            </form>
+                            <div class="flex flex-wrap gap-2">
+                                <a href="{{ route('import.report', $run) }}" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                    Bericht
+                                </a>
+                                <form method="POST" action="{{ route('import.mitglieder.undo', $run) }}" onsubmit="return confirm('Diesen Import wirklich rückgängig machen?')">
+                                    @csrf
+                                    <button type="submit" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100">
+                                        Rückgängig machen
+                                    </button>
+                                </form>
+                            </div>
+                        @else
+                            <a href="{{ route('import.report', $run) }}" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                Bericht
+                            </a>
                         @endif
                     </div>
                 </div>

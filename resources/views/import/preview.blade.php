@@ -10,7 +10,12 @@
                 <a href="{{ route($config['index_route']) }}" class="text-sm font-semibold text-slate-500 hover:text-slate-900">{{ $config['title'] }}</a>
                 <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Import prüfen</h1>
                 <p class="mt-2 text-sm leading-6 text-slate-500">
-                    {{ $rowCount }} Zeile(n) erkannt. Trennzeichen: <span class="font-semibold">{{ $delimiter === "\t" ? 'Tabulator' : $delimiter }}</span>.
+                    {{ $rowCount }} Zeile(n) aus {{ $sourceProfileLabel }} erkannt.
+                    @if($fileType === 'csv')
+                        Trennzeichen: <span class="font-semibold">{{ $delimiter === "\t" ? 'Tabulator' : $delimiter }}</span>.
+                    @else
+                        Datei: <span class="font-semibold">{{ strtoupper($fileType) }}</span>.
+                    @endif
                 </p>
             </div>
             <a href="{{ route($config['index_route']) }}" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
@@ -18,6 +23,68 @@
             </a>
         </div>
     </section>
+
+    <section class="grid gap-4 lg:grid-cols-4">
+        <div class="rounded-xl border {{ $readiness['state'] === 'ready' ? 'border-emerald-200 bg-emerald-50' : ($readiness['state'] === 'check' ? 'border-amber-200 bg-amber-50' : 'border-rose-200 bg-rose-50') }} p-5">
+            <div class="text-xs font-semibold uppercase tracking-[0.22em] {{ $readiness['state'] === 'ready' ? 'text-emerald-700' : ($readiness['state'] === 'check' ? 'text-amber-700' : 'text-rose-700') }}">Import-Bereitschaft</div>
+            <div class="mt-2 text-3xl font-semibold text-slate-950">{{ $readiness['score'] }}%</div>
+            <div class="mt-1 text-sm text-slate-600">
+                @if($readiness['state'] === 'ready')
+                    Bereit für den Import.
+                @elseif($readiness['state'] === 'check')
+                    Bitte Zuordnung prüfen.
+                @else
+                    Es fehlen wichtige Felder.
+                @endif
+            </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Spalten</div>
+            <div class="mt-2 text-3xl font-semibold text-slate-950">{{ $readiness['mapped_count'] }}/{{ $readiness['header_count'] }}</div>
+            <div class="mt-1 text-sm text-slate-500">automatisch zugeordnet</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Datensätze</div>
+            <div class="mt-2 text-3xl font-semibold text-slate-950">{{ $readiness['row_count'] }}</div>
+            <div class="mt-1 text-sm text-slate-500">in der Datei gefunden</div>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Warnungen</div>
+            <div class="mt-2 text-3xl font-semibold text-slate-950">{{ $readiness['warning_count'] }}</div>
+            <div class="mt-1 text-sm text-slate-500">werden dokumentiert</div>
+        </div>
+    </section>
+
+    @if(count($readiness['missing_required']) > 0 || count($readiness['missing_recommended']) > 0)
+        <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-950">Was Clubano noch vermisst</h2>
+            <div class="mt-4 grid gap-4 md:grid-cols-2">
+                <div>
+                    <div class="text-sm font-semibold text-slate-900">Pflicht für sicheren Import</div>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        @forelse($readiness['missing_required'] as $label)
+                            <span class="rounded-md bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700">{{ $label }}</span>
+                        @empty
+                            <span class="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">Alles vorhanden</span>
+                        @endforelse
+                    </div>
+                </div>
+                <div>
+                    <div class="text-sm font-semibold text-slate-900">Empfohlen für weniger Nacharbeit</div>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        @forelse($readiness['missing_recommended'] as $label)
+                            <span class="rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{{ $label }}</span>
+                        @empty
+                            <span class="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">Sehr gute Datei</span>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+        </section>
+    @endif
 
     @if($analysis['warning_count'] > 0)
         <section class="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
@@ -39,6 +106,9 @@
     <form method="POST" action="{{ route($config['confirm_route']) }}" class="space-y-6">
         @csrf
         <input type="hidden" name="path" value="{{ $path }}">
+        <input type="hidden" name="source_profile" value="{{ $sourceProfile }}">
+        <input type="hidden" name="original_filename" value="{{ $originalFilename }}">
+        <input type="hidden" name="import_goal" value="{{ $importGoal }}">
 
         <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div class="border-b border-slate-200 px-5 py-4">

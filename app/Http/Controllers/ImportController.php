@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class ImportController extends Controller
 {
@@ -67,6 +68,17 @@ class ImportController extends Controller
         return $this->undoMembersImport($importRun);
     }
 
+    public function report(ImportRun $importRun)
+    {
+        abort_unless((int) $importRun->tenant_id === (int) auth()->user()->tenant_id, 403);
+
+        return view('import.report', [
+            'importRun' => $importRun->load('creator'),
+            'config' => $this->importConfig($importRun->import_type),
+            'nextSteps' => $this->nextStepsFor($importRun),
+        ]);
+    }
+
     private function showTypedUploadForm(string $type)
     {
         $recentImportRuns = $this->recentImportRuns($type);
@@ -78,27 +90,38 @@ class ImportController extends Controller
     private function previewTypedImport(Request $request, string $type)
     {
         $request->validate([
-            'csv_file' => 'required|file|mimes:csv,txt',
+            'csv_file' => 'required|file|mimes:csv,txt,xlsx,xls',
+            'source_profile' => 'nullable|string|max:60',
+            'import_goal' => 'nullable|string|max:120',
         ]);
 
         $path = $request->file('csv_file')->store('temp');
-        $parsed = $this->readCsvFromStorage($path);
+        $originalFilename = $request->file('csv_file')->getClientOriginalName();
+        $parsed = $this->readTabularFileFromStorage($path, $originalFilename);
         $config = $this->importConfig($type);
         $fieldOptions = $this->fieldOptions($type);
         $suggestedMapping = $this->suggestMapping($parsed['headers'], $type);
         $previewRows = array_slice($parsed['rows'], 0, 8);
         $analysis = $this->analyzeRows($parsed['rows'], $suggestedMapping, $type);
+        $sourceProfile = $this->normalizeSourceProfile($request->input('source_profile'));
+        $importGoal = trim((string) $request->input('import_goal'));
 
         return view('import.preview', [
             'config' => $config,
             'path' => $path,
+            'originalFilename' => $originalFilename,
+            'sourceProfile' => $sourceProfile,
+            'sourceProfileLabel' => $this->sourceProfileLabel($sourceProfile),
+            'importGoal' => $importGoal,
             'headers' => $parsed['headers'],
             'rows' => $previewRows,
             'delimiter' => $parsed['delimiter'],
+            'fileType' => $parsed['file_type'],
             'rowCount' => count($parsed['rows']),
             'fieldOptions' => $fieldOptions,
             'suggestedMapping' => $suggestedMapping,
             'analysis' => $analysis,
+            'readiness' => $this->buildReadiness($parsed['headers'], $parsed['rows'], $suggestedMapping, $type),
         ]);
     }
 
@@ -107,14 +130,19 @@ class ImportController extends Controller
         $request->validate([
             'path' => 'required|string',
             'mapping' => 'required|array',
+            'source_profile' => 'nullable|string|max:60',
+            'original_filename' => 'nullable|string|max:255',
+            'import_goal' => 'nullable|string|max:120',
         ]);
 
-        $parsed = $this->readCsvFromStorage($request->input('path'));
+        $parsed = $this->readTabularFileFromStorage($request->input('path'), $request->input('original_filename'));
         $rows = $parsed['rows'];
         $mapping = $request->input('mapping');
         $tenantId = auth()->user()->tenant_id;
         $importedCount = 0;
         $skippedRows = [];
+        $importRun = null;
+        $sourceProfile = $this->normalizeSourceProfile($request->input('source_profile'));
 
         if ($type === 'members' && $limitMessage = $this->memberImportLimitMessage($rows, $mapping, $tenantId)) {
             return redirect()
@@ -122,12 +150,12 @@ class ImportController extends Controller
                 ->with('error', $limitMessage);
         }
 
-        DB::transaction(function () use ($type, $request, $rows, $mapping, $tenantId, &$importedCount, &$skippedRows) {
+        DB::transaction(function () use ($type, $request, $rows, $mapping, $tenantId, $parsed, $sourceProfile, &$importRun, &$importedCount, &$skippedRows) {
             $importRun = ImportRun::create([
                 'tenant_id' => $tenantId,
                 'import_type' => $type,
                 'created_by' => auth()->id(),
-                'filename' => basename((string) $request->input('path')),
+                'filename' => $request->input('original_filename') ?: basename((string) $request->input('path')),
                 'status' => 'completed',
                 'row_count' => count($rows),
                 'imported_count' => 0,
@@ -175,6 +203,13 @@ class ImportController extends Controller
                 'imported_count' => $importedCount,
                 'skipped_count' => count($skippedRows),
                 'summary' => [
+                    'source_profile' => $sourceProfile,
+                    'source_profile_label' => $this->sourceProfileLabel($sourceProfile),
+                    'import_goal' => trim((string) $request->input('import_goal')),
+                    'delimiter' => $parsed['delimiter'],
+                    'file_type' => $parsed['file_type'],
+                    'mapped_fields' => $this->mappedFieldLabels($mapping, $type),
+                    'readiness' => $this->buildReadiness($parsed['headers'], $rows, $mapping, $type),
                     'skipped_rows' => array_slice($skippedRows, 0, 50),
                 ],
             ])->save();
@@ -188,7 +223,7 @@ class ImportController extends Controller
             $message .= ' ' . count($skippedRows) . ' Zeile(n) wurden wegen Fehlern oder Dubletten uebersprungen.';
         }
 
-        return $this->redirectToImport($type)->with('success', $message);
+        return redirect()->route('import.report', $importRun)->with('success', $message);
     }
 
     private function undoMembersImport(ImportRun $importRun)
@@ -247,6 +282,17 @@ class ImportController extends Controller
         ])->save();
     }
 
+    private function readTabularFileFromStorage(string $path, ?string $originalFilename = null): array
+    {
+        $extension = Str::lower(pathinfo($originalFilename ?: $path, PATHINFO_EXTENSION));
+
+        if (in_array($extension, ['xlsx', 'xls'], true)) {
+            return $this->readSpreadsheetFromStorage($path, $extension);
+        }
+
+        return $this->readCsvFromStorage($path);
+    }
+
     private function readCsvFromStorage(string $path): array
     {
         $content = Storage::get($path);
@@ -270,6 +316,39 @@ class ImportController extends Controller
             'headers' => $headers,
             'rows' => array_values(array_filter(array_slice($rows, 1), fn ($row) => ! $this->isEmptyRow($row))),
             'delimiter' => $delimiter,
+            'file_type' => 'csv',
+        ];
+    }
+
+    private function readSpreadsheetFromStorage(string $path, string $extension): array
+    {
+        $spreadsheet = IOFactory::load(Storage::path($path));
+        $worksheet = $spreadsheet->getActiveSheet();
+        $highestRow = $worksheet->getHighestDataRow();
+        $highestColumn = $worksheet->getHighestDataColumn();
+        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
+        $rows = [];
+
+        for ($rowIndex = 1; $rowIndex <= $highestRow; $rowIndex++) {
+            $row = [];
+
+            for ($columnIndex = 1; $columnIndex <= $highestColumnIndex; $columnIndex++) {
+                $cell = $worksheet->getCell([$columnIndex, $rowIndex]);
+                $row[] = trim((string) $cell->getFormattedValue());
+            }
+
+            if (! $this->isEmptyRow($row)) {
+                $rows[] = $row;
+            }
+        }
+
+        $headers = array_map(fn ($header) => trim((string) $header), $rows[0] ?? []);
+
+        return [
+            'headers' => $headers,
+            'rows' => array_values(array_filter(array_slice($rows, 1), fn ($row) => ! $this->isEmptyRow($row))),
+            'delimiter' => null,
+            'file_type' => $extension,
         ];
     }
 
@@ -357,6 +436,10 @@ class ImportController extends Controller
             return $this->normalizeDate($value);
         }
 
+        if (in_array($field, ['membership_amount', 'required_service_hours'], true)) {
+            return $this->normalizeDecimal($value);
+        }
+
         if (in_array($field, ['is_active', 'is_favorite', 'consent_email', 'consent_phone', 'consent_post', 'gdpr_consent'], true)) {
             return in_array(Str::lower($value), ['1', 'ja', 'yes', 'true', 'x'], true);
         }
@@ -372,6 +455,14 @@ class ImportController extends Controller
         }
 
         return $value;
+    }
+
+    private function normalizeDecimal(string $value): ?string
+    {
+        $normalized = str_replace(['.', ' '], '', $value);
+        $normalized = str_replace(',', '.', $normalized);
+
+        return is_numeric($normalized) ? number_format((float) $normalized, 2, '.', '') : null;
     }
 
     private function normalizeDate(string $value): ?string
@@ -601,6 +692,19 @@ class ImportController extends Controller
             'bic' => 'bic',
             'sepa' => 'sepa_mandate_reference',
             'mandatsreferenz' => 'sepa_mandate_reference',
+            'mitgliedsbeitrag' => 'membership_amount',
+            'beitrag' => 'membership_amount',
+            'betrag' => 'membership_amount',
+            'zahlungsweise' => 'membership_interval',
+            'intervall' => 'membership_interval',
+            'abbuchungsrhythmus' => 'membership_interval',
+            'zahlungsmethode' => 'payment_method',
+            'zahlart' => 'payment_method',
+            'sepaunterschriebenam' => 'sepa_signed_at',
+            'mandatsdatum' => 'sepa_signed_at',
+            'kontoinhaber' => 'sepa_account_holder',
+            'pflichtstunden' => 'required_service_hours',
+            'arbeitsstunden' => 'required_service_hours',
         ];
     }
 
@@ -657,6 +761,9 @@ class ImportController extends Controller
                 'entry_date' => 'Eintritt',
                 'exit_date' => 'Austritt',
                 'termination_date' => 'Kündigungsdatum',
+                'membership_amount' => 'Beitrag',
+                'membership_interval' => 'Zahlungsweise',
+                'required_service_hours' => 'Pflichtstunden',
             ],
             'Kommunikation' => [
                 'email' => 'E-Mail',
@@ -673,6 +780,9 @@ class ImportController extends Controller
                 'iban' => 'IBAN',
                 'bic' => 'BIC',
                 'sepa_mandate_reference' => 'SEPA-Mandatsreferenz',
+                'sepa_signed_at' => 'SEPA unterschrieben am',
+                'sepa_account_holder' => 'Kontoinhaber',
+                'payment_method' => 'Zahlungsmethode',
             ],
         ];
     }
@@ -689,6 +799,7 @@ class ImportController extends Controller
                 'upload_route' => 'import.kontakte.preview',
                 'confirm_route' => 'import.kontakte.confirm',
                 'index_route' => 'import.kontakte',
+                'sources' => $this->sourceProfiles(),
             ];
         }
 
@@ -701,6 +812,7 @@ class ImportController extends Controller
             'upload_route' => 'import.mitglieder.preview',
             'confirm_route' => 'import.mitglieder.confirm',
             'index_route' => 'import.mitglieder',
+            'sources' => $this->sourceProfiles(),
         ];
     }
 
@@ -723,5 +835,115 @@ class ImportController extends Controller
     private function isEmptyRow(array $row): bool
     {
         return collect($row)->every(fn ($value) => trim((string) $value) === '');
+    }
+
+    private function sourceProfiles(): array
+    {
+        return [
+            'excel' => 'Excel / freie CSV',
+            'wiso' => 'WISO MeinVerein',
+            'campai' => 'Campai',
+            'vereinonline' => 'VereinOnline',
+            'easyverein' => 'easyVerein',
+            'other' => 'Anderes System',
+        ];
+    }
+
+    private function normalizeSourceProfile(?string $sourceProfile): string
+    {
+        return array_key_exists((string) $sourceProfile, $this->sourceProfiles()) ? (string) $sourceProfile : 'excel';
+    }
+
+    private function sourceProfileLabel(string $sourceProfile): string
+    {
+        return $this->sourceProfiles()[$sourceProfile] ?? $this->sourceProfiles()['excel'];
+    }
+
+    private function buildReadiness(array $headers, array $rows, array $mapping, string $type): array
+    {
+        $mappedFields = collect($mapping)->reject(fn ($field) => $field === 'skip')->values();
+        $required = $type === 'contacts' ? ['organization|first_name|last_name'] : ['first_name', 'last_name'];
+        $recommended = $type === 'contacts'
+            ? ['email', 'category', 'city']
+            : ['email', 'member_id', 'entry_date', 'membership_amount', 'membership_interval', 'iban'];
+        $missingRequired = [];
+
+        foreach ($required as $field) {
+            if (str_contains($field, '|')) {
+                $alternatives = explode('|', $field);
+
+                if ($mappedFields->intersect($alternatives)->isEmpty()) {
+                    $missingRequired[] = 'Name oder Organisation';
+                }
+
+                continue;
+            }
+
+            if (! $mappedFields->contains($field)) {
+                $missingRequired[] = $this->fieldLabel($field, $type);
+            }
+        }
+
+        $missingRecommended = collect($recommended)
+            ->reject(fn ($field) => $mappedFields->contains($field))
+            ->map(fn ($field) => $this->fieldLabel($field, $type))
+            ->values()
+            ->all();
+
+        $analysis = $this->analyzeRows($rows, $mapping, $type);
+        $score = 100;
+        $score -= count($missingRequired) * 35;
+        $score -= min(count($missingRecommended) * 6, 30);
+        $score -= min($analysis['warning_count'] * 4, 30);
+        $score = max($score, 0);
+
+        return [
+            'score' => $score,
+            'state' => $score >= 80 ? 'ready' : ($score >= 55 ? 'check' : 'blocked'),
+            'mapped_count' => $mappedFields->count(),
+            'header_count' => count($headers),
+            'row_count' => count($rows),
+            'missing_required' => $missingRequired,
+            'missing_recommended' => $missingRecommended,
+            'warning_count' => $analysis['warning_count'],
+        ];
+    }
+
+    private function mappedFieldLabels(array $mapping, string $type): array
+    {
+        return collect($mapping)
+            ->reject(fn ($field) => $field === 'skip')
+            ->map(fn ($field) => $this->fieldLabel((string) $field, $type))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function fieldLabel(string $field, string $type): string
+    {
+        foreach ($this->fieldOptions($type) as $fields) {
+            if (isset($fields[$field])) {
+                return $fields[$field];
+            }
+        }
+
+        return Str::of($field)->replace('_', ' ')->title()->toString();
+    }
+
+    private function nextStepsFor(ImportRun $importRun): array
+    {
+        if ($importRun->import_type === 'contacts') {
+            return [
+                'Kontakte stichprobenartig öffnen und Kategorien prüfen.',
+                'Für Sponsoren und Behörden fehlende Ansprechpartner ergänzen.',
+                'Beim nächsten Versand Zielgruppen über Kontakte testen.',
+            ];
+        }
+
+        return [
+            'Mitglieder stichprobenartig öffnen und Beitrag, Zahlungsweise und SEPA prüfen.',
+            'Mitgliedschaften oder Beitragsmodelle bei Bedarf nachziehen.',
+            'Vor dem ersten Rechnungslauf eine kleine Testgruppe kontrollieren.',
+        ];
     }
 }
