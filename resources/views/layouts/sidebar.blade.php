@@ -229,8 +229,8 @@
         ],
         [
             'label' => 'Import',
-            'route' => route('import.mitglieder'),
-            'active' => request()->routeIs('import.mitglieder*'),
+            'route' => route('import.index'),
+            'active' => request()->routeIs('import.*'),
             'icon' => 'cloud-arrow-down',
             'minRole' => 'Admin',
         ],

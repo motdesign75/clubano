@@ -246,6 +246,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
 
     // CSV-Import (mit Limit-Blocker)
     $when($C.'ImportController', function($cls){
+        Route::get('/import', [$cls, 'index'])
+            ->middleware('tenant.role:Admin')
+            ->name('import.index');
+
         Route::get('/import/mitglieder', [$cls, 'showUploadForm'])
             ->middleware('tenant.role:Admin')
             ->middleware('member.limit')
@@ -264,6 +268,18 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::post('/import/mitglieder/{importRun}/undo', [$cls, 'undo'])
             ->middleware('tenant.role:Admin')
             ->name('import.mitglieder.undo');
+
+        Route::get('/import/kontakte', [$cls, 'showContactUploadForm'])
+            ->middleware('tenant.role:Admin')
+            ->name('import.kontakte');
+
+        Route::post('/import/kontakte/preview', [$cls, 'previewContacts'])
+            ->middleware('tenant.role:Admin')
+            ->name('import.kontakte.preview');
+
+        Route::post('/import/kontakte/confirm', [$cls, 'confirmContacts'])
+            ->middleware('tenant.role:Admin')
+            ->name('import.kontakte.confirm');
     });
 
     // Vereinsprofil

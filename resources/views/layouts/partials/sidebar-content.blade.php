@@ -73,10 +73,10 @@
             </a>
         </li>
         <li>
-            <a href="{{ route('import.mitglieder') }}"
+            <a href="{{ route('import.index') }}"
                class="block px-3 py-2 rounded hover:bg-indigo-100 transition"
-               @if (request()->routeIs('import.mitglieder')) aria-current="page" @endif>
-                📥 Mitgliederimport
+               @if (request()->routeIs('import.*')) aria-current="page" @endif>
+                📥 Import
             </a>
         </li>
         @if(auth()->user()?->isSuperAdmin())

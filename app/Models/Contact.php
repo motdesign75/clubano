@@ -15,6 +15,7 @@ class Contact extends Model
 
     protected $fillable = [
         'tenant_id',
+        'import_run_id',
 
         /*
         |--------------------------------------------------------------------------

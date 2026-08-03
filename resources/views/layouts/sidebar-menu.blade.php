@@ -44,7 +44,7 @@
         <ul class="space-y-1">
             <li><a href="{{ route('memberships.index') }}" class="flex items-center px-3 py-2 rounded-md hover:bg-indigo-50 text-gray-700">💳 <span class="ml-2">Mitgliedschaften</span></a></li>
             <li><a href="{{ route('profile.edit') }}" class="flex items-center px-3 py-2 rounded-md hover:bg-indigo-50 text-gray-700">🙍 <span class="ml-2">Profil</span></a></li>
-            <li><a href="{{ route('import.mitglieder') }}" class="flex items-center px-3 py-2 rounded-md hover:bg-indigo-50 text-gray-700">📥 <span class="ml-2">Mitgliederimport</span></a></li>
+            <li><a href="{{ route('import.index') }}" class="flex items-center px-3 py-2 rounded-md hover:bg-indigo-50 text-gray-700">📥 <span class="ml-2">Import</span></a></li>
             @if(auth()->user()?->isSuperAdmin())
                 <li><a href="{{ route('roles.edit') }}" class="flex items-center px-3 py-2 rounded-md hover:bg-indigo-50 text-gray-700">🔐 <span class="ml-2">Rollen</span></a></li>
             @endif
