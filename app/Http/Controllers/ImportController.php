@@ -123,15 +123,8 @@ class ImportController extends Controller
         $search = trim((string) $request->query('q', ''));
         $spreadsheet = $this->buildQualityIssueSpreadsheet($importRun, $issue, $check, $search);
         $filename = 'clubano-korrekturliste-' . $issue . '-' . $importRun->id . '.xlsx';
-        $path = storage_path('app/temp/' . Str::uuid() . '-' . $filename);
 
-        if (! is_dir(dirname($path))) {
-            mkdir(dirname($path), 0755, true);
-        }
-
-        (new Xlsx($spreadsheet))->save($path);
-
-        return response()->download($path, $filename)->deleteFileAfterSend(true);
+        return $this->downloadSpreadsheet($spreadsheet, $filename);
     }
 
     public function template(string $type)
@@ -141,15 +134,8 @@ class ImportController extends Controller
         $importType = $type === 'kontakte' ? 'contacts' : 'members';
         $spreadsheet = $this->buildTemplateSpreadsheet($importType);
         $filename = 'clubano-importvorlage-' . $type . '.xlsx';
-        $path = storage_path('app/temp/' . Str::uuid() . '-' . $filename);
 
-        if (! is_dir(dirname($path))) {
-            mkdir(dirname($path), 0755, true);
-        }
-
-        (new Xlsx($spreadsheet))->save($path);
-
-        return response()->download($path, $filename)->deleteFileAfterSend(true);
+        return $this->downloadSpreadsheet($spreadsheet, $filename);
     }
 
     public function reportExport(ImportRun $importRun)
@@ -158,15 +144,8 @@ class ImportController extends Controller
 
         $spreadsheet = $this->buildReportSpreadsheet($importRun);
         $filename = 'clubano-importbericht-' . $importRun->id . '.xlsx';
-        $path = storage_path('app/temp/' . Str::uuid() . '-' . $filename);
 
-        if (! is_dir(dirname($path))) {
-            mkdir(dirname($path), 0755, true);
-        }
-
-        (new Xlsx($spreadsheet))->save($path);
-
-        return response()->download($path, $filename)->deleteFileAfterSend(true);
+        return $this->downloadSpreadsheet($spreadsheet, $filename);
     }
 
     public function correctionsExport(ImportRun $importRun)
@@ -175,15 +154,19 @@ class ImportController extends Controller
 
         $spreadsheet = $this->buildCorrectionsWorkbook($importRun);
         $filename = 'clubano-korrekturmappe-import-' . $importRun->id . '.xlsx';
-        $path = storage_path('app/temp/' . Str::uuid() . '-' . $filename);
 
-        if (! is_dir(dirname($path))) {
-            mkdir(dirname($path), 0755, true);
-        }
+        return $this->downloadSpreadsheet($spreadsheet, $filename);
+    }
 
-        (new Xlsx($spreadsheet))->save($path);
-
-        return response()->download($path, $filename)->deleteFileAfterSend(true);
+    private function downloadSpreadsheet(Spreadsheet $spreadsheet, string $filename)
+    {
+        return response()->streamDownload(function () use ($spreadsheet) {
+            (new Xlsx($spreadsheet))->save('php://output');
+            $spreadsheet->disconnectWorksheets();
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Cache-Control' => 'max-age=0, no-cache, no-store, must-revalidate',
+        ]);
     }
 
     private function showTypedUploadForm(string $type)
