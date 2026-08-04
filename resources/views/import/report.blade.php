@@ -22,9 +22,15 @@
                 </p>
             </div>
 
-            <a href="{{ route($config['index_route']) }}" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-white px-4 text-sm font-semibold text-slate-950 hover:bg-slate-100">
-                Weiteren Import starten
-            </a>
+            <div class="flex flex-wrap gap-2">
+                <a href="{{ route('import.report.export', $importRun) }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-slate-950 hover:bg-slate-100">
+                    <x-heroicon-o-arrow-down-tray class="h-5 w-5" />
+                    Bericht laden
+                </a>
+                <a href="{{ route($config['index_route']) }}" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/20 px-4 text-sm font-semibold text-white hover:bg-white/10">
+                    Weiteren Import starten
+                </a>
+            </div>
         </div>
     </section>
 
@@ -63,7 +69,7 @@
             <div class="divide-y divide-slate-100 text-sm">
                 <div class="grid gap-1 px-5 py-4 sm:grid-cols-3">
                     <div class="font-semibold text-slate-900">Ziel</div>
-                    <div class="text-slate-600 sm:col-span-2">{{ $summary['import_goal'] ?: 'Nicht angegeben' }}</div>
+                    <div class="text-slate-600 sm:col-span-2">{{ ($summary['import_goal'] ?? '') ?: 'Nicht angegeben' }}</div>
                 </div>
                 <div class="grid gap-1 px-5 py-4 sm:grid-cols-3">
                     <div class="font-semibold text-slate-900">Quelle</div>
@@ -77,6 +83,12 @@
                         @empty
                             <span class="text-slate-500">Keine Feldliste gespeichert.</span>
                         @endforelse
+                    </div>
+                </div>
+                <div class="grid gap-1 px-5 py-4 sm:grid-cols-3">
+                    <div class="font-semibold text-slate-900">Dubletten</div>
+                    <div class="text-slate-600 sm:col-span-2">
+                        {{ $summary['duplicate_count'] ?? 0 }} mögliche Treffer · {{ $summary['duplicate_strategy_label'] ?? 'Dubletten überspringen' }}
                     </div>
                 </div>
                 <div class="grid gap-1 px-5 py-4 sm:grid-cols-3">
@@ -115,7 +127,12 @@
                 @foreach($skippedRows as $row)
                     <div class="grid gap-1 px-5 py-3 text-sm sm:grid-cols-[8rem_1fr]">
                         <div class="font-semibold text-amber-950">Zeile {{ $row['row'] }}</div>
-                        <div class="text-amber-800">{{ $row['reason'] }}</div>
+                        <div class="text-amber-800">
+                            {{ $row['reason'] }}
+                            @if($row['incoming'] ?? null)
+                                <span class="text-amber-700">· {{ $row['incoming'] }}</span>
+                            @endif
+                        </div>
                     </div>
                 @endforeach
             </div>

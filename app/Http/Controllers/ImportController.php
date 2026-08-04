@@ -11,7 +11,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class ImportController extends Controller
 {
@@ -79,6 +83,41 @@ class ImportController extends Controller
         ]);
     }
 
+    public function template(string $type)
+    {
+        abort_unless(in_array($type, ['mitglieder', 'kontakte'], true), 404);
+
+        $importType = $type === 'kontakte' ? 'contacts' : 'members';
+        $spreadsheet = $this->buildTemplateSpreadsheet($importType);
+        $filename = 'clubano-importvorlage-' . $type . '.xlsx';
+        $path = storage_path('app/temp/' . Str::uuid() . '-' . $filename);
+
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0755, true);
+        }
+
+        (new Xlsx($spreadsheet))->save($path);
+
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
+    }
+
+    public function reportExport(ImportRun $importRun)
+    {
+        abort_unless((int) $importRun->tenant_id === (int) auth()->user()->tenant_id, 403);
+
+        $spreadsheet = $this->buildReportSpreadsheet($importRun);
+        $filename = 'clubano-importbericht-' . $importRun->id . '.xlsx';
+        $path = storage_path('app/temp/' . Str::uuid() . '-' . $filename);
+
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0755, true);
+        }
+
+        (new Xlsx($spreadsheet))->save($path);
+
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
+    }
+
     private function showTypedUploadForm(string $type)
     {
         $recentImportRuns = $this->recentImportRuns($type);
@@ -105,6 +144,7 @@ class ImportController extends Controller
         $analysis = $this->analyzeRows($parsed['rows'], $suggestedMapping, $type);
         $sourceProfile = $this->normalizeSourceProfile($request->input('source_profile'));
         $importGoal = trim((string) $request->input('import_goal'));
+        $duplicateAnalysis = $this->analyzeDuplicates($parsed['rows'], $suggestedMapping, $type, auth()->user()->tenant_id);
 
         return view('import.preview', [
             'config' => $config,
@@ -121,6 +161,7 @@ class ImportController extends Controller
             'fieldOptions' => $fieldOptions,
             'suggestedMapping' => $suggestedMapping,
             'analysis' => $analysis,
+            'duplicateAnalysis' => $duplicateAnalysis,
             'readiness' => $this->buildReadiness($parsed['headers'], $parsed['rows'], $suggestedMapping, $type),
         ]);
     }
@@ -133,6 +174,7 @@ class ImportController extends Controller
             'source_profile' => 'nullable|string|max:60',
             'original_filename' => 'nullable|string|max:255',
             'import_goal' => 'nullable|string|max:120',
+            'duplicate_strategy' => 'nullable|in:skip,create_new',
         ]);
 
         $parsed = $this->readTabularFileFromStorage($request->input('path'), $request->input('original_filename'));
@@ -143,14 +185,21 @@ class ImportController extends Controller
         $skippedRows = [];
         $importRun = null;
         $sourceProfile = $this->normalizeSourceProfile($request->input('source_profile'));
+        $duplicateStrategy = $request->input('duplicate_strategy', 'skip');
+        $duplicateAnalysisBeforeImport = $this->analyzeDuplicates($rows, $mapping, $type, $tenantId);
+        $mappingBlocker = $this->mappingBlockerMessage($mapping, $type);
 
-        if ($type === 'members' && $limitMessage = $this->memberImportLimitMessage($rows, $mapping, $tenantId)) {
+        if ($mappingBlocker) {
+            return $this->redirectToImport($type)->with('error', $mappingBlocker);
+        }
+
+        if ($type === 'members' && $limitMessage = $this->memberImportLimitMessage($rows, $mapping, $tenantId, $duplicateStrategy)) {
             return redirect()
                 ->route('import.mitglieder')
                 ->with('error', $limitMessage);
         }
 
-        DB::transaction(function () use ($type, $request, $rows, $mapping, $tenantId, $parsed, $sourceProfile, &$importRun, &$importedCount, &$skippedRows) {
+        DB::transaction(function () use ($type, $request, $rows, $mapping, $tenantId, $parsed, $sourceProfile, $duplicateStrategy, $duplicateAnalysisBeforeImport, &$importRun, &$importedCount, &$skippedRows) {
             $importRun = ImportRun::create([
                 'tenant_id' => $tenantId,
                 'import_type' => $type,
@@ -171,18 +220,12 @@ class ImportController extends Controller
                 $validationError = $this->rowValidationError($data, $type);
 
                 if ($validationError) {
-                    $skippedRows[] = [
-                        'row' => $position + 2,
-                        'reason' => $validationError,
-                    ];
+                    $skippedRows[] = $this->skippedRowPayload($position, $validationError, $data, $type);
                     continue;
                 }
 
-                if ($this->isDuplicate($data, $type, $tenantId)) {
-                    $skippedRows[] = [
-                        'row' => $position + 2,
-                        'reason' => 'Mögliche Dublette vorhanden',
-                    ];
+                if ($duplicateStrategy === 'skip' && $this->isDuplicate($data, $type, $tenantId)) {
+                    $skippedRows[] = $this->skippedRowPayload($position, 'Mögliche Dublette vorhanden', $data, $type);
                     continue;
                 }
 
@@ -208,6 +251,9 @@ class ImportController extends Controller
                     'import_goal' => trim((string) $request->input('import_goal')),
                     'delimiter' => $parsed['delimiter'],
                     'file_type' => $parsed['file_type'],
+                    'duplicate_strategy' => $duplicateStrategy,
+                    'duplicate_strategy_label' => $this->duplicateStrategyLabel($duplicateStrategy),
+                    'duplicate_count' => $duplicateAnalysisBeforeImport['duplicate_count'],
                     'mapped_fields' => $this->mappedFieldLabels($mapping, $type),
                     'readiness' => $this->buildReadiness($parsed['headers'], $rows, $mapping, $type),
                     'skipped_rows' => array_slice($skippedRows, 0, 50),
@@ -584,7 +630,7 @@ class ImportController extends Controller
         ];
     }
 
-    private function memberImportLimitMessage(array $rows, array $mapping, int $tenantId): ?string
+    private function memberImportLimitMessage(array $rows, array $mapping, int $tenantId, string $duplicateStrategy = 'skip'): ?string
     {
         $tenant = auth()->user()?->tenant;
 
@@ -606,7 +652,7 @@ class ImportController extends Controller
             ->reject(fn ($row) => $this->isEmptyRow($row))
             ->map(fn ($row) => $this->normalizeMappedRow($row, $mapping, 'members'))
             ->filter(fn ($data) => $this->rowValidationError($data, 'members') === null)
-            ->reject(fn ($data) => $this->isDuplicate($data, 'members', $tenantId))
+            ->reject(fn ($data) => $duplicateStrategy === 'skip' && $this->isDuplicate($data, 'members', $tenantId))
             ->count();
 
         if ($currentMembers + $importableRows <= (int) $limit) {
@@ -909,6 +955,168 @@ class ImportController extends Controller
         ];
     }
 
+    private function mappingBlockerMessage(array $mapping, string $type): ?string
+    {
+        $mappedFields = collect($mapping)->reject(fn ($field) => $field === 'skip')->values();
+
+        if ($mappedFields->isEmpty()) {
+            return 'Bitte ordne vor dem Import mindestens eine Spalte zu.';
+        }
+
+        if ($type === 'contacts') {
+            if ($mappedFields->intersect(['organization', 'first_name', 'last_name'])->isEmpty()) {
+                return 'Bitte ordne für Kontakte mindestens Organisation, Vorname oder Nachname zu.';
+            }
+
+            return null;
+        }
+
+        $missing = collect(['first_name' => 'Vorname', 'last_name' => 'Nachname'])
+            ->reject(fn ($label, $field) => $mappedFields->contains($field))
+            ->values();
+
+        if ($missing->isNotEmpty()) {
+            return 'Bitte ordne für Mitglieder mindestens ' . $missing->implode(' und ') . ' zu.';
+        }
+
+        return null;
+    }
+
+    private function analyzeDuplicates(array $rows, array $mapping, string $type, int $tenantId): array
+    {
+        $duplicates = [];
+
+        foreach ($rows as $position => $row) {
+            if ($this->isEmptyRow($row)) {
+                continue;
+            }
+
+            $data = $this->normalizeMappedRow($row, $mapping, $type);
+
+            if ($this->rowValidationError($data, $type) !== null) {
+                continue;
+            }
+
+            $duplicate = $this->duplicateMatch($data, $type, $tenantId);
+
+            if ($duplicate) {
+                $duplicates[] = [
+                    'row' => $position + 2,
+                    'incoming' => $this->incomingDuplicateLabel($data, $type),
+                    'existing' => $duplicate['label'],
+                    'reason' => $duplicate['reason'],
+                ];
+            }
+        }
+
+        return [
+            'duplicate_count' => count($duplicates),
+            'duplicates' => array_slice($duplicates, 0, 10),
+        ];
+    }
+
+    private function duplicateMatch(array $data, string $type, int $tenantId): ?array
+    {
+        if ($type === 'contacts') {
+            if (filled($data['email'] ?? null)) {
+                $contact = Contact::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('email', $data['email'])->first();
+
+                if ($contact) {
+                    return [
+                        'label' => $contact->organization ?: trim(($contact->first_name ?? '') . ' ' . ($contact->last_name ?? '')),
+                        'reason' => 'gleiche E-Mail',
+                    ];
+                }
+            }
+
+            if (filled($data['organization'] ?? null) && blank($data['email'] ?? null)) {
+                $contact = Contact::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantId)
+                    ->where('organization', $data['organization'])
+                    ->where('city', $data['city'] ?? null)
+                    ->first();
+
+                if ($contact) {
+                    return [
+                        'label' => $contact->organization,
+                        'reason' => 'gleiche Organisation und gleicher Ort',
+                    ];
+                }
+            }
+
+            return null;
+        }
+
+        if (filled($data['member_id'] ?? null)) {
+            $member = Member::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('member_id', $data['member_id'])->first();
+
+            if ($member) {
+                return [
+                    'label' => $member->full_name,
+                    'reason' => 'gleiche Mitgliedsnummer',
+                ];
+            }
+        }
+
+        if (filled($data['email'] ?? null)) {
+            $member = Member::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('email', $data['email'])->first();
+
+            if ($member) {
+                return [
+                    'label' => $member->full_name,
+                    'reason' => 'gleiche E-Mail',
+                ];
+            }
+        }
+
+        if (filled($data['first_name'] ?? null) && filled($data['last_name'] ?? null)) {
+            $member = Member::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('first_name', $data['first_name'])
+                ->where('last_name', $data['last_name'])
+                ->when(filled($data['birthday'] ?? null), fn ($query) => $query->where('birthday', $data['birthday']))
+                ->first();
+
+            if ($member) {
+                return [
+                    'label' => $member->full_name,
+                    'reason' => filled($data['birthday'] ?? null) ? 'gleicher Name und Geburtstag' : 'gleicher Name',
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    private function incomingDuplicateLabel(array $data, string $type): string
+    {
+        if ($type === 'contacts') {
+            return $data['organization']
+                ?? trim(($data['first_name'] ?? '') . ' ' . ($data['last_name'] ?? ''))
+                ?: 'Kontakt ohne Anzeigename';
+        }
+
+        return trim(($data['first_name'] ?? '') . ' ' . ($data['last_name'] ?? '')) ?: 'Mitglied ohne Anzeigename';
+    }
+
+    private function duplicateStrategyLabel(string $strategy): string
+    {
+        return $strategy === 'create_new' ? 'Dubletten trotzdem neu anlegen' : 'Dubletten überspringen';
+    }
+
+    private function skippedRowPayload(int $position, string $reason, array $data, string $type): array
+    {
+        return [
+            'row' => $position + 2,
+            'reason' => $reason,
+            'incoming' => $this->incomingDuplicateLabel($data, $type),
+            'values' => collect($data)
+                ->reject(fn ($value, $key) => in_array($key, ['tenant_id', 'import_run_id'], true))
+                ->mapWithKeys(fn ($value, $key) => [$this->fieldLabel((string) $key, $type) => is_array($value) ? implode(', ', $value) : $value])
+                ->all(),
+        ];
+    }
+
     private function mappedFieldLabels(array $mapping, string $type): array
     {
         return collect($mapping)
@@ -944,6 +1152,199 @@ class ImportController extends Controller
             'Mitglieder stichprobenartig öffnen und Beitrag, Zahlungsweise und SEPA prüfen.',
             'Mitgliedschaften oder Beitragsmodelle bei Bedarf nachziehen.',
             'Vor dem ersten Rechnungslauf eine kleine Testgruppe kontrollieren.',
+        ];
+    }
+
+    private function buildTemplateSpreadsheet(string $type): Spreadsheet
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle($type === 'contacts' ? 'Kontakte' : 'Mitglieder');
+
+        $headers = $this->templateHeaders($type);
+        $exampleRows = $this->templateExampleRows($type);
+
+        $sheet->fromArray($headers, null, 'A1');
+        $sheet->fromArray($exampleRows, null, 'A2');
+        $sheet->freezePane('A2');
+        $sheet->getStyle('A1:' . $sheet->getHighestColumn() . '1')->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '0F172A'],
+            ],
+        ]);
+        $sheet->setAutoFilter($sheet->calculateWorksheetDimension());
+
+        $highestColumnIndex = Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        for ($columnIndex = 1; $columnIndex <= $highestColumnIndex; $columnIndex++) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($columnIndex))->setAutoSize(true);
+        }
+
+        $notes = $spreadsheet->createSheet();
+        $notes->setTitle('Hinweise');
+        $notes->fromArray([
+            ['Clubano Importvorlage'],
+            ['Die erste Zeile bitte nicht löschen. Sie enthält die Spaltenüberschriften, die Clubano automatisch erkennt.'],
+            ['Nicht benötigte Spalten können leer bleiben. Für Mitglieder sind Vorname und Nachname Pflicht. Für Kontakte reicht Organisation oder Name.'],
+            ['Datumsformat empfohlen: TT.MM.JJJJ, zum Beispiel 01.01.2026.'],
+            ['Beträge bitte als Zahl schreiben, zum Beispiel 75,00.'],
+        ], null, 'A1');
+        $notes->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+        $notes->getColumnDimension('A')->setWidth(120);
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        return $spreadsheet;
+    }
+
+    private function buildReportSpreadsheet(ImportRun $importRun): Spreadsheet
+    {
+        $summary = $importRun->summary ?? [];
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Importbericht');
+        $sheet->fromArray([
+            ['Clubano Importbericht'],
+            ['Import-ID', $importRun->id],
+            ['Bereich', $importRun->type_label],
+            ['Datei', $importRun->filename],
+            ['Quelle', $summary['source_profile_label'] ?? 'Excel / freie CSV'],
+            ['Ziel', ($summary['import_goal'] ?? '') ?: 'Nicht angegeben'],
+            ['Erstellt am', $importRun->created_at?->format('d.m.Y H:i')],
+            ['Status', $importRun->status === 'undone' ? 'Rückgängig gemacht' : 'Abgeschlossen'],
+            ['Erkannte Zeilen', $importRun->row_count],
+            ['Importiert', $importRun->imported_count],
+            ['Übersprungen', $importRun->skipped_count],
+            ['Dubletten', $summary['duplicate_count'] ?? 0],
+            ['Dubletten-Strategie', $summary['duplicate_strategy_label'] ?? 'Dubletten überspringen'],
+        ], null, 'A1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+        $sheet->getColumnDimension('A')->setWidth(28);
+        $sheet->getColumnDimension('B')->setWidth(48);
+
+        $fieldsSheet = $spreadsheet->createSheet();
+        $fieldsSheet->setTitle('Felder');
+        $fieldsSheet->fromArray([['Zugeordnete Felder']], null, 'A1');
+        $fieldsSheet->getStyle('A1')->getFont()->setBold(true);
+
+        foreach (($summary['mapped_fields'] ?? []) as $index => $field) {
+            $fieldsSheet->setCellValue('A' . ($index + 2), $field);
+        }
+
+        $fieldsSheet->getColumnDimension('A')->setWidth(42);
+
+        $skippedSheet = $spreadsheet->createSheet();
+        $skippedSheet->setTitle('Korrekturliste');
+        $skippedSheet->fromArray([['Zeile', 'Grund', 'Datensatz', 'Werte']], null, 'A1');
+        $skippedSheet->getStyle('A1:D1')->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '0F172A'],
+            ],
+        ]);
+
+        foreach (($summary['skipped_rows'] ?? []) as $index => $row) {
+            $values = collect($row['values'] ?? [])
+                ->map(fn ($value, $label) => $label . ': ' . $value)
+                ->implode(' | ');
+
+            $skippedSheet->fromArray([[
+                $row['row'] ?? '',
+                $row['reason'] ?? '',
+                $row['incoming'] ?? '',
+                $values,
+            ]], null, 'A' . ($index + 2));
+        }
+
+        foreach (['A' => 12, 'B' => 34, 'C' => 34, 'D' => 90] as $column => $width) {
+            $skippedSheet->getColumnDimension($column)->setWidth($width);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        return $spreadsheet;
+    }
+
+    private function templateHeaders(string $type): array
+    {
+        if ($type === 'contacts') {
+            return [[
+                'Kontaktart',
+                'Kategorie',
+                'Organisation',
+                'Abteilung',
+                'Position',
+                'Vorname',
+                'Nachname',
+                'Anrede',
+                'E-Mail',
+                'Weitere E-Mail',
+                'Mobil',
+                'Telefon',
+                'Straße',
+                'Adresszusatz',
+                'PLZ',
+                'Ort',
+                'Land',
+                'Webseite',
+                'Quelle',
+                'Beziehung',
+                'Notizen',
+                'Tags',
+            ]];
+        }
+
+        return [[
+            'Mitgliedsnummer',
+            'Anrede',
+            'Vorname',
+            'Nachname',
+            'Firma',
+            'Geburtsdatum',
+            'Eintritt',
+            'Austritt',
+            'Kündigungsdatum',
+            'E-Mail',
+            'Mobil',
+            'Telefon',
+            'Straße',
+            'Adresszusatz',
+            'PLZ',
+            'Ort',
+            'Land',
+            'Beitrag',
+            'Zahlungsweise',
+            'Zahlungsmethode',
+            'IBAN',
+            'BIC',
+            'SEPA-Mandatsreferenz',
+            'SEPA unterschrieben am',
+            'Kontoinhaber',
+            'Pflichtstunden',
+        ]];
+    }
+
+    private function templateExampleRows(string $type): array
+    {
+        if ($type === 'contacts') {
+            return [
+                ['organization', 'Sponsor', 'Demo Druckerei GmbH', 'Marketing', 'Geschäftsführung', 'Clara', 'Beispiel', 'Frau', 'clara@example.test', '', '015112345678', '050661234', 'Musterstraße 12', '', '12345', 'Demostadt', 'Deutschland', 'https://example.test', 'Altbestand', 'Sponsor', 'Ansprechpartnerin für Anzeigen', 'Sponsor;Presse'],
+                ['person', 'Behörde', '', 'Sport', 'Sachbearbeitung', 'Max', 'Muster', 'Herr', 'max@example.test', '', '', '050669876', 'Rathausplatz 1', '', '12345', 'Demostadt', 'Deutschland', '', 'Altbestand', 'Stadtverwaltung', '', 'Behörde'],
+            ];
+        }
+
+        return [
+            ['M-0001', 'Frau', 'Mia', 'Muster', '', '14.03.1992', '01.01.2026', '', '', 'mia@example.test', '015112345678', '050661234', 'Musterstraße 12', '', '12345', 'Demostadt', 'Deutschland', '75,00', 'vierteljährlich', 'SEPA', 'DE02120300000000202051', 'BYLADEM1001', 'M-0001-2026', '01.01.2026', 'Mia Muster', '10'],
+            ['M-0002', 'Herr', 'Tom', 'Test', 'Testfirma GmbH', '20.08.1988', '01.02.2026', '', '', 'tom@example.test', '', '050665555', 'Beispielweg 4', 'c/o Vorstand', '12345', 'Demostadt', 'Deutschland', '120,00', 'jährlich', 'Überweisung', '', '', '', '', '', '0'],
         ];
     }
 }

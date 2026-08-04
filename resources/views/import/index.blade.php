@@ -31,7 +31,11 @@
                 <div>
                     <h2 class="text-lg font-semibold text-slate-950">Mitglieder importieren</h2>
                     <p class="mt-1 text-sm leading-6 text-slate-500">Bestandsmitglieder aus WISO, Excel oder anderen Vereinsprogrammen übernehmen.</p>
-                    <div class="mt-4 text-sm font-semibold text-slate-900">Import starten</div>
+                    <div class="mt-4 flex flex-wrap gap-2 text-sm font-semibold">
+                        <span class="text-slate-900">Import starten</span>
+                        <span class="text-slate-300">·</span>
+                        <span class="text-slate-500">Vorlage verfügbar</span>
+                    </div>
                 </div>
             </div>
         </a>
@@ -44,7 +48,11 @@
                 <div>
                     <h2 class="text-lg font-semibold text-slate-950">Kontakte importieren</h2>
                     <p class="mt-1 text-sm leading-6 text-slate-500">Sponsoren, Lieferanten, Behörden, Presse, Eltern oder Partner zentral erfassen.</p>
-                    <div class="mt-4 text-sm font-semibold text-emerald-800">Import starten</div>
+                    <div class="mt-4 flex flex-wrap gap-2 text-sm font-semibold">
+                        <span class="text-emerald-800">Import starten</span>
+                        <span class="text-slate-300">·</span>
+                        <span class="text-slate-500">Vorlage verfügbar</span>
+                    </div>
                 </div>
             </div>
         </a>

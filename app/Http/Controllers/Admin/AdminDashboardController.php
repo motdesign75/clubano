@@ -34,11 +34,17 @@ class AdminDashboardController extends Controller
 
         $tenantMetrics = [
             'members' => $this->countByTenant('members'),
+            'active_members' => $this->countByTenant('members', fn ($query) => $query->whereNull('archived_at')),
             'users' => $this->countByTenant('users'),
             'events' => $this->countByTenant('events'),
+            'protocols' => $this->countByTenant('protocols'),
+            'tasks' => $this->countByTenant('tasks'),
             'documents' => $this->countByTenant('documents'),
             'forms' => $this->countByTenant('public_forms'),
             'invitations' => $this->countByTenant('event_invitations'),
+            'donations' => $this->countByTenant('donations'),
+            'accounts' => $this->countByTenant('accounts'),
+            'imports' => $this->countByTenant('import_runs'),
         ];
 
         $lastActivity = $this->lastActivityByTenant($tenantIds->all());
@@ -50,14 +56,22 @@ class AdminDashboardController extends Controller
                 $tenantId = (int) $tenant->id;
                 $tenant->admin_metrics = [
                     'members' => $tenantMetrics['members'][$tenantId] ?? 0,
+                    'active_members' => $tenantMetrics['active_members'][$tenantId] ?? 0,
                     'users' => $tenantMetrics['users'][$tenantId] ?? 0,
                     'events' => $tenantMetrics['events'][$tenantId] ?? 0,
+                    'protocols' => $tenantMetrics['protocols'][$tenantId] ?? 0,
+                    'tasks' => $tenantMetrics['tasks'][$tenantId] ?? 0,
                     'documents' => $tenantMetrics['documents'][$tenantId] ?? 0,
                     'forms' => $tenantMetrics['forms'][$tenantId] ?? 0,
                     'invitations' => $tenantMetrics['invitations'][$tenantId] ?? 0,
+                    'donations' => $tenantMetrics['donations'][$tenantId] ?? 0,
+                    'accounts' => $tenantMetrics['accounts'][$tenantId] ?? 0,
+                    'imports' => $tenantMetrics['imports'][$tenantId] ?? 0,
                 ];
                 $tenant->admin_last_activity_at = $lastActivity[$tenantId] ?? null;
                 $tenant->admin_health = $this->tenantHealth($tenant);
+                $tenant->admin_profile = $this->tenantProfile($tenant);
+                $tenant->admin_feature_state = $this->tenantFeatureState($tenant);
 
                 return $tenant;
             });
@@ -76,6 +90,8 @@ class AdminDashboardController extends Controller
             'silent_30_days' => $allTenants->filter(fn (Tenant $tenant) => ! $tenant->admin_last_activity_at || $tenant->admin_last_activity_at->lt(now()->subDays(30)))->count(),
             'with_members' => $allTenants->filter(fn (Tenant $tenant) => ($tenant->admin_metrics['members'] ?? 0) > 0)->count(),
             'with_events' => $allTenants->filter(fn (Tenant $tenant) => ($tenant->admin_metrics['events'] ?? 0) > 0)->count(),
+            'with_location' => $allTenants->filter(fn (Tenant $tenant) => filled($tenant->city) || filled($tenant->zip))->count(),
+            'with_imports' => $allTenants->filter(fn (Tenant $tenant) => ($tenant->admin_metrics['imports'] ?? 0) > 0)->count(),
         ];
 
         $latestUsers = User::with('tenant')
@@ -151,18 +167,29 @@ class AdminDashboardController extends Controller
             'protocols' => $this->tenantCount('protocols', $tenant),
             'tasks' => $this->tenantCount('tasks', $tenant),
             'invitations' => $this->tenantCount('event_invitations', $tenant),
+            'imports' => $this->tenantCount('import_runs', $tenant),
+            'accounts' => $this->tenantCount('accounts', $tenant),
+            'donations' => $this->tenantCount('donations', $tenant),
         ];
 
         $recentEvents = $this->tenantRows('events', $tenant, ['id', 'title', 'start', 'created_at'], 'start', 8);
         $recentDocuments = $this->tenantRows('documents', $tenant, ['id', 'title', 'category', 'created_at'], 'created_at', 6);
         $recentForms = $this->tenantRows('public_forms', $tenant, ['id', 'title', 'status', 'created_at'], 'created_at', 6);
+        $recentImports = $this->tenantRows('import_runs', $tenant, ['id', 'import_type', 'filename', 'imported_count', 'skipped_count', 'created_at'], 'created_at', 6);
+        $tenantProfile = $this->tenantProfile($tenant);
+        $featureState = $this->tenantFeatureStateFromStats($tenant, $stats);
+        $lastActivity = $this->lastActivityByTenant([$tenant->id])[(int) $tenant->id] ?? null;
 
         return view('admin.tenants.show', compact(
             'tenant',
             'stats',
             'recentEvents',
             'recentDocuments',
-            'recentForms'
+            'recentForms',
+            'recentImports',
+            'tenantProfile',
+            'featureState',
+            'lastActivity'
         ));
     }
 
@@ -271,15 +298,21 @@ class AdminDashboardController extends Controller
     /**
      * @return array<int, int>
      */
-    private function countByTenant(string $table): array
+    private function countByTenant(string $table, ?callable $callback = null): array
     {
         if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'tenant_id')) {
             return [];
         }
 
-        return DB::table($table)
+        $query = DB::table($table)
             ->select('tenant_id', DB::raw('count(*) as aggregate'))
-            ->whereNotNull('tenant_id')
+            ->whereNotNull('tenant_id');
+
+        if ($callback) {
+            $callback($query);
+        }
+
+        return $query
             ->groupBy('tenant_id')
             ->pluck('aggregate', 'tenant_id')
             ->mapWithKeys(fn ($count, $tenantId) => [(int) $tenantId => (int) $count])
@@ -405,6 +438,74 @@ class AdminDashboardController extends Controller
             'level' => 'ok',
             'label' => 'Gesund',
             'reason' => 'Zugriff und Nutzung wirken plausibel.',
+        ];
+    }
+
+    /**
+     * @return array{location: string, address: string, contact: string, phone: string, age: string}
+     */
+    private function tenantProfile(Tenant $tenant): array
+    {
+        $location = trim(collect([$tenant->zip, $tenant->city])->filter()->implode(' '));
+        $addressParts = array_filter([
+            $tenant->address,
+            $location,
+        ]);
+
+        return [
+            'location' => $location !== '' ? $location : 'Ort fehlt',
+            'address' => $addressParts !== [] ? implode(', ', $addressParts) : 'Adresse fehlt',
+            'contact' => $tenant->email ?: 'E-Mail fehlt',
+            'phone' => $tenant->phone ?: 'Telefon fehlt',
+            'age' => $tenant->created_at?->diffForHumans() ?? 'unbekannt',
+        ];
+    }
+
+    /**
+     * @return array<int, array{label: string, value: int|string, state: string}>
+     */
+    private function tenantFeatureState(Tenant $tenant): array
+    {
+        return $this->tenantFeatureStateFromStats($tenant, $tenant->admin_metrics ?? []);
+    }
+
+    /**
+     * @param array<string, int> $stats
+     * @return array<int, array{label: string, value: int|string, state: string}>
+     */
+    private function tenantFeatureStateFromStats(Tenant $tenant, array $stats): array
+    {
+        return [
+            [
+                'label' => 'Onboarding',
+                'value' => ($stats['members'] ?? 0) > 0 ? 'gestartet' : 'offen',
+                'state' => ($stats['members'] ?? 0) > 0 ? 'ok' : 'watch',
+            ],
+            [
+                'label' => 'Kalender',
+                'value' => (int) ($stats['events'] ?? 0),
+                'state' => ($stats['events'] ?? 0) > 0 ? 'ok' : 'muted',
+            ],
+            [
+                'label' => 'Dokumente',
+                'value' => (int) ($stats['documents'] ?? 0),
+                'state' => ($stats['documents'] ?? 0) > 0 ? 'ok' : 'muted',
+            ],
+            [
+                'label' => 'Importe',
+                'value' => (int) ($stats['imports'] ?? 0),
+                'state' => ($stats['imports'] ?? 0) > 0 ? 'ok' : 'muted',
+            ],
+            [
+                'label' => 'Finanzen',
+                'value' => (int) ($stats['accounts'] ?? 0),
+                'state' => ($stats['accounts'] ?? 0) > 0 ? 'ok' : 'muted',
+            ],
+            [
+                'label' => 'Spenden',
+                'value' => $tenant->donation_certificates_enabled ? 'aktiv' : 'aus',
+                'state' => $tenant->donation_certificates_enabled ? 'ok' : 'muted',
+            ],
         ];
     }
 }

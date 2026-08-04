@@ -33,9 +33,9 @@
             ['label' => 'Vereine', 'value' => $platformStats['tenants'], 'hint' => $lifecycleStats['new_30_days'].' neu in 30 Tagen'],
             ['label' => 'Aktiv', 'value' => $lifecycleStats['active_30_days'], 'hint' => 'Aktivität in 30 Tagen'],
             ['label' => 'Still', 'value' => $lifecycleStats['silent_30_days'], 'hint' => 'ohne aktuelle Nutzung'],
+            ['label' => 'Mit Ort', 'value' => $lifecycleStats['with_location'], 'hint' => 'Vereinsprofil gepflegt'],
             ['label' => 'Mitglieder', 'value' => $platformStats['members'], 'hint' => 'plattformweit'],
-            ['label' => 'Termine', 'value' => $platformStats['events'], 'hint' => 'alle Aktivitäten'],
-            ['label' => 'Dokumente', 'value' => $platformStats['documents'], 'hint' => 'zentral abgelegt'],
+            ['label' => 'Importe', 'value' => $lifecycleStats['with_imports'], 'hint' => 'Umstieg begonnen'],
         ] as $stat)
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="text-sm font-medium text-slate-500">{{ $stat['label'] }}</div>
@@ -91,6 +91,7 @@
                         <div class="flex items-center justify-between gap-3">
                             <div class="min-w-0">
                                 <div class="truncate font-semibold text-slate-950">{{ $tenant->name ?: 'Unbenannter Verein' }}</div>
+                                <div class="mt-0.5 text-xs font-semibold text-slate-400">{{ $tenant->admin_profile['location'] }}</div>
                                 <div class="mt-1 text-sm text-slate-500">{{ $health['reason'] }}</div>
                             </div>
                             <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold {{ $health['level'] === 'risk' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700' }}">
@@ -121,6 +122,7 @@
                 <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     <tr>
                         <th class="px-5 py-3">Verein</th>
+                        <th class="px-5 py-3">Ort & Kontakt</th>
                         <th class="px-5 py-3">Status</th>
                         <th class="px-5 py-3">Nutzung</th>
                         <th class="px-5 py-3">Letzte Aktivität</th>
@@ -133,12 +135,21 @@
                         @php
                             $metrics = $tenant->admin_metrics ?? [];
                             $health = $tenant->admin_health;
+                            $profile = $tenant->admin_profile;
+                            $features = $tenant->admin_feature_state;
                         @endphp
                         <tr class="align-top">
                             <td class="px-5 py-4">
                                 <a href="{{ route('admin.tenants.show', $tenant) }}" class="font-semibold text-slate-950 hover:text-blue-700">{{ $tenant->name ?: 'Unbenannter Verein' }}</a>
-                                <div class="mt-1 break-all text-sm text-slate-500">{{ $tenant->email ?: 'keine E-Mail' }}</div>
+                                <div class="mt-1 text-sm text-slate-500">{{ $profile['age'] }} registriert</div>
                                 <div class="mt-1 text-xs text-slate-400">seit {{ optional($tenant->created_at)->format('d.m.Y') }}</div>
+                            </td>
+                            <td class="px-5 py-4">
+                                <div class="min-w-[220px]">
+                                    <div class="font-semibold {{ $profile['location'] === 'Ort fehlt' ? 'text-amber-700' : 'text-slate-950' }}">{{ $profile['location'] }}</div>
+                                    <div class="mt-1 text-sm text-slate-500">{{ $profile['address'] }}</div>
+                                    <div class="mt-1 break-all text-xs text-slate-400">{{ $profile['contact'] }}</div>
+                                </div>
                             </td>
                             <td class="px-5 py-4">
                                 <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $health['level'] === 'ok' ? 'bg-emerald-50 text-emerald-700' : ($health['level'] === 'risk' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700') }}">
@@ -147,19 +158,26 @@
                                 <div class="mt-2 max-w-xs text-xs leading-5 text-slate-500">{{ $health['reason'] }}</div>
                             </td>
                             <td class="px-5 py-4">
-                                <div class="grid min-w-[260px] grid-cols-3 gap-2">
+                                <div class="grid min-w-[300px] grid-cols-3 gap-2">
                                     @foreach([
-                                        'Mitglieder' => $metrics['members'] ?? 0,
+                                        'Aktiv' => $metrics['active_members'] ?? 0,
                                         'Benutzer' => $metrics['users'] ?? 0,
                                         'Termine' => $metrics['events'] ?? 0,
                                         'Dokumente' => $metrics['documents'] ?? 0,
-                                        'Formulare' => $metrics['forms'] ?? 0,
-                                        'Einladungen' => $metrics['invitations'] ?? 0,
+                                        'Protokolle' => $metrics['protocols'] ?? 0,
+                                        'Importe' => $metrics['imports'] ?? 0,
                                     ] as $label => $value)
                                         <div>
                                             <div class="font-semibold text-slate-950">{{ number_format($value, 0, ',', '.') }}</div>
                                             <div class="text-[11px] text-slate-400">{{ $label }}</div>
                                         </div>
+                                    @endforeach
+                                </div>
+                                <div class="mt-3 flex min-w-[300px] flex-wrap gap-1.5">
+                                    @foreach($features as $feature)
+                                        <span class="rounded-md px-2 py-1 text-[11px] font-semibold {{ $feature['state'] === 'ok' ? 'bg-emerald-50 text-emerald-700' : ($feature['state'] === 'watch' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500') }}">
+                                            {{ $feature['label'] }} {{ $feature['value'] }}
+                                        </span>
                                     @endforeach
                                 </div>
                             </td>
@@ -192,7 +210,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-5 py-12 text-center text-sm text-slate-500">Noch keine Vereine vorhanden.</td>
+                            <td colspan="7" class="px-5 py-12 text-center text-sm text-slate-500">Noch keine Vereine vorhanden.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -208,7 +226,7 @@
                     <a href="{{ route('admin.tenants.show', $tenant) }}" class="flex items-center justify-between gap-4 rounded-xl bg-slate-50 px-4 py-3 transition hover:bg-blue-50">
                         <div class="min-w-0">
                             <div class="truncate font-semibold text-slate-950">{{ $tenant->name ?: 'Unbenannter Verein' }}</div>
-                            <div class="mt-1 text-sm text-slate-500">{{ optional($tenant->created_at)->format('d.m.Y H:i') }}</div>
+                            <div class="mt-1 text-sm text-slate-500">{{ $tenant->admin_profile['location'] }} · {{ optional($tenant->created_at)->format('d.m.Y H:i') }}</div>
                         </div>
                         <span class="text-sm font-semibold text-slate-500">{{ ($tenant->admin_metrics['members'] ?? 0) }} Mitglieder</span>
                     </a>

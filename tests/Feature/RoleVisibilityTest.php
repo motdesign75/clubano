@@ -696,6 +696,14 @@ test('superadmin can use the platform cockpit without opening a club dashboard',
     [, $superadmin] = createTenantWithUser(User::ROLE_SUPERADMIN, 'platform-admin');
     [$clubTenant, $clubAdmin] = createTenantWithUser(User::ROLE_ADMIN, 'new-club');
 
+    $clubTenant->update([
+        'address' => 'Hauptstraße 12',
+        'zip' => '12345',
+        'city' => 'Demostadt',
+        'phone' => '05066 1234',
+        'register_number' => 'VR 1234',
+    ]);
+
     Member::withoutGlobalScopes()->create([
         'tenant_id' => $clubTenant->id,
         'first_name' => 'Neues',
@@ -720,6 +728,7 @@ test('superadmin can use the platform cockpit without opening a club dashboard',
     $dashboard->assertOk();
     $dashboard->assertSee('Admin-Cockpit');
     $dashboard->assertSee($clubTenant->name);
+    $dashboard->assertSee('12345 Demostadt');
     $dashboard->assertSee('360-Grad-Sicht');
     $dashboard->assertSee('Alle Vereine');
 
@@ -727,6 +736,9 @@ test('superadmin can use the platform cockpit without opening a club dashboard',
 
     $detail->assertOk();
     $detail->assertSee($clubTenant->name);
+    $detail->assertSee('Vereinsprofil');
+    $detail->assertSee('Clubano-Reifegrad');
+    $detail->assertSee('Hauptstraße 12');
     $detail->assertSee('Mitglieder aktiv');
     $detail->assertSee('Probetraining');
     $detail->assertSee($clubAdmin->email);

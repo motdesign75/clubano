@@ -18,6 +18,20 @@
         </div>
     </section>
 
+    <section class="grid gap-4 md:grid-cols-[1fr_auto] md:items-center rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div>
+            <h2 class="text-lg font-semibold text-slate-950">Mit einer sauberen Vorlage starten</h2>
+            <p class="mt-1 text-sm leading-6 text-slate-500">
+                Lade eine Clubano-Excelvorlage herunter, fülle sie aus und importiere sie anschließend wieder hier. Die Spalten sind so vorbereitet, dass Clubano sie automatisch erkennt.
+            </p>
+        </div>
+        <a href="{{ route('import.template', $config['type'] === 'contacts' ? 'kontakte' : 'mitglieder') }}"
+           class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <x-heroicon-o-arrow-down-tray class="h-5 w-5" />
+            Excelvorlage laden
+        </a>
+    </section>
+
     @if(session('success'))
         <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{{ session('success') }}</div>
     @endif
@@ -75,7 +89,7 @@
             </div>
 
             <div>
-                <label for="csv_file" class="text-sm font-semibold text-slate-900">CSV-Datei auswählen</label>
+                <label for="csv_file" class="text-sm font-semibold text-slate-900">Datei auswählen</label>
                 <input
                     type="file"
                     name="csv_file"
@@ -98,7 +112,7 @@
                     </div>
                     <div class="rounded-lg bg-white p-3 ring-1 ring-slate-200">
                         <div class="font-semibold text-slate-900">2. Datei</div>
-                        <div class="mt-1">CSV hochladen.</div>
+                        <div class="mt-1">Excel oder CSV hochladen.</div>
                     </div>
                     <div class="rounded-lg bg-white p-3 ring-1 ring-slate-200">
                         <div class="font-semibold text-slate-900">3. Prüfung</div>

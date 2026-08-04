@@ -19,9 +19,7 @@
                         <h1 class="mt-2 text-3xl font-semibold tracking-normal text-slate-950">{{ $tenant->name ?: 'Unbenannter Verein' }}</h1>
                         <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
                             <span>{{ $tenant->email ?: 'keine E-Mail' }}</span>
-                            @if($tenant->city || $tenant->zip)
-                                <span>{{ trim(($tenant->zip ?? '').' '.($tenant->city ?? '')) }}</span>
-                            @endif
+                            <span>{{ $tenantProfile['location'] }}</span>
                             <span>registriert {{ optional($tenant->created_at)->format('d.m.Y H:i') }}</span>
                         </div>
                     </div>
@@ -36,7 +34,7 @@
                         'Mitglieder aktiv' => $stats['active_members'],
                         'Benutzer' => $stats['users'],
                         'Termine geplant' => $stats['upcoming_events'],
-                        'Dokumente' => $stats['documents'],
+                        'Importe' => $stats['imports'],
                     ] as $label => $value)
                         <div class="rounded-xl bg-slate-50 px-4 py-3">
                             <dt class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{{ $label }}</dt>
@@ -44,6 +42,39 @@
                         </div>
                     @endforeach
                 </dl>
+            </section>
+
+            <section class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+                <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-lg font-semibold text-slate-950">Vereinsprofil</h2>
+                    <div class="mt-5 divide-y divide-slate-100 text-sm">
+                        @foreach([
+                            'Ort' => $tenantProfile['location'],
+                            'Adresse' => $tenantProfile['address'],
+                            'E-Mail' => $tenantProfile['contact'],
+                            'Telefon' => $tenantProfile['phone'],
+                            'Vereinsregister' => $tenant->register_number ?: 'fehlt',
+                        ] as $label => $value)
+                            <div class="grid gap-1 py-3 sm:grid-cols-[9rem_1fr]">
+                                <div class="font-semibold text-slate-900">{{ $label }}</div>
+                                <div class="{{ str_contains($value, 'fehlt') ? 'text-amber-700' : 'text-slate-600' }}">{{ $value }}</div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h2 class="text-lg font-semibold text-slate-950">Clubano-Reifegrad</h2>
+                    <p class="mt-1 text-sm text-slate-500">Welche Bereiche der Verein bereits nutzt.</p>
+                    <div class="mt-5 grid gap-3 sm:grid-cols-2">
+                        @foreach($featureState as $feature)
+                            <div class="rounded-xl border {{ $feature['state'] === 'ok' ? 'border-emerald-200 bg-emerald-50' : ($feature['state'] === 'watch' ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50') }} px-4 py-3">
+                                <div class="text-sm font-semibold {{ $feature['state'] === 'ok' ? 'text-emerald-800' : ($feature['state'] === 'watch' ? 'text-amber-800' : 'text-slate-600') }}">{{ $feature['label'] }}</div>
+                                <div class="mt-1 text-xl font-semibold text-slate-950">{{ $feature['value'] }}</div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
             </section>
 
             <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -63,12 +94,30 @@
                         'Protokolle' => $stats['protocols'],
                         'Aufgaben' => $stats['tasks'],
                         'Einladungen' => $stats['invitations'],
+                        'Finanzkonten' => $stats['accounts'],
+                        'Spenden' => $stats['donations'],
                     ] as $label => $value)
                         <div class="rounded-xl border border-slate-100 px-4 py-3">
                             <div class="text-xl font-semibold text-slate-950">{{ number_format($value, 0, ',', '.') }}</div>
                             <div class="mt-1 text-sm text-slate-500">{{ $label }}</div>
                         </div>
                     @endforeach
+                </div>
+            </section>
+
+            <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 class="text-lg font-semibold text-slate-950">Letzte Importe</h2>
+                <div class="mt-4 space-y-3">
+                    @forelse($recentImports as $import)
+                        <div class="rounded-xl bg-slate-50 px-4 py-3">
+                            <div class="font-semibold text-slate-900">{{ ($import->import_type ?? 'members') === 'contacts' ? 'Kontakte' : 'Mitglieder' }}</div>
+                            <div class="mt-1 text-sm text-slate-500">
+                                {{ $import->filename ?? 'Importdatei' }} · {{ $import->imported_count ?? 0 }} importiert · {{ $import->skipped_count ?? 0 }} übersprungen
+                            </div>
+                        </div>
+                    @empty
+                        <div class="text-sm text-slate-500">Noch keine Importe durchgeführt.</div>
+                    @endforelse
                 </div>
             </section>
 
@@ -126,6 +175,19 @@
         <aside class="space-y-6">
             <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 class="text-lg font-semibold text-slate-950">Lizenz</h2>
+                <div class="mt-3 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <div class="font-semibold text-slate-950">{{ $tenant->license_mode_label }}</div>
+                    <div class="mt-1">
+                        @if($tenant->license_expires_at)
+                            gültig bis {{ $tenant->license_expires_at->format('d.m.Y') }}
+                        @elseif($tenant->trial_ends_at)
+                            Testphase bis {{ $tenant->trial_ends_at->format('d.m.Y') }}
+                        @else
+                            kein Ablaufdatum hinterlegt
+                        @endif
+                    </div>
+                    <div class="mt-1">Letzte Aktivität: {{ $lastActivity ? $lastActivity->diffForHumans() : 'keine Aktivität' }}</div>
+                </div>
                 <form method="POST" action="{{ route('admin.tenants.license', $tenant) }}" class="mt-4 space-y-3">
                     @csrf
                     @method('PATCH')

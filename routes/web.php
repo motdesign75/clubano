@@ -250,6 +250,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             ->middleware('tenant.role:Admin')
             ->name('import.index');
 
+        Route::get('/import/vorlage/{type}', [$cls, 'template'])
+            ->middleware('tenant.role:Admin')
+            ->name('import.template');
+
         Route::get('/import/mitglieder', [$cls, 'showUploadForm'])
             ->middleware('tenant.role:Admin')
             ->middleware('member.limit')
@@ -272,6 +276,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/import/{importRun}/bericht', [$cls, 'report'])
             ->middleware('tenant.role:Admin')
             ->name('import.report');
+
+        Route::get('/import/{importRun}/bericht/export', [$cls, 'reportExport'])
+            ->middleware('tenant.role:Admin')
+            ->name('import.report.export');
 
         Route::get('/import/kontakte', [$cls, 'showContactUploadForm'])
             ->middleware('tenant.role:Admin')

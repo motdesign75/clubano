@@ -96,9 +96,14 @@ test('admin can import contacts and undo the import', function () {
     $csv = "Organisation;Kategorie;E-Mail;Ort\nBestehender Sponsor;sponsor;sponsor@example.test;Altstadt\nNeue Druckerei;supplier;druck@example.test;Demostadt\n";
     $file = UploadedFile::fake()->createWithContent('kontakte.csv', $csv);
 
-    $this->actingAs($admin)->post(route('import.kontakte.preview'), [
+    $preview = $this->actingAs($admin)->post(route('import.kontakte.preview'), [
         'csv_file' => $file,
-    ])->assertOk();
+    ]);
+
+    $preview->assertOk();
+    $preview->assertSee('Dublettenprüfung');
+    $preview->assertSee('Bestehender Sponsor');
+    $preview->assertSee('gleiche E-Mail');
 
     $path = collect(Storage::files('temp'))->first();
 
@@ -119,13 +124,64 @@ test('admin can import contacts and undo the import', function () {
 
     expect($run->imported_count)->toBe(1);
     expect($run->skipped_count)->toBe(1);
+    expect($run->summary['duplicate_count'])->toBe(1);
+    expect($run->summary['duplicate_strategy'])->toBe('skip');
+    expect($run->summary['skipped_rows'][0]['incoming'])->toBe('Bestehender Sponsor');
     expect(Contact::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('organization', 'Neue Druckerei')->exists())->toBeTrue();
+
+    $this->actingAs($admin)->get(route('import.report.export', $run))
+        ->assertOk()
+        ->assertDownload('clubano-importbericht-' . $run->id . '.xlsx');
 
     $this->actingAs($admin)->post(route('import.mitglieder.undo', $run))
         ->assertRedirect(route('import.kontakte'));
 
     expect(Contact::withoutGlobalScopes()->whereNull('deleted_at')->where('tenant_id', $tenant->id)->where('organization', 'Neue Druckerei')->exists())->toBeFalse();
     expect(Contact::withoutGlobalScopes()->whereNull('deleted_at')->where('tenant_id', $tenant->id)->where('organization', 'Bestehender Sponsor')->exists())->toBeTrue();
+});
+
+test('admin can intentionally create duplicate contacts from import', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake();
+
+    [$tenant, $admin] = createImportTenant('duplicate-create');
+
+    Contact::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'contact_type' => 'organization',
+        'organization' => 'Demo Sponsor',
+        'email' => 'sponsor@example.test',
+        'is_active' => true,
+    ]);
+
+    $csv = "Organisation;E-Mail;Ort\nDemo Sponsor;sponsor@example.test;Demostadt\n";
+    $file = UploadedFile::fake()->createWithContent('kontakte.csv', $csv);
+
+    $this->actingAs($admin)->post(route('import.kontakte.preview'), [
+        'csv_file' => $file,
+    ])->assertOk();
+
+    $path = collect(Storage::files('temp'))->first();
+
+    $response = $this->actingAs($admin)->post(route('import.kontakte.confirm'), [
+        'path' => $path,
+        'duplicate_strategy' => 'create_new',
+        'mapping' => [
+            0 => 'organization',
+            1 => 'email',
+            2 => 'city',
+        ],
+    ]);
+
+    $run = ImportRun::where('tenant_id', $tenant->id)->where('import_type', 'contacts')->firstOrFail();
+
+    $response->assertRedirect(route('import.report', $run));
+
+    expect($run->imported_count)->toBe(1);
+    expect($run->skipped_count)->toBe(0);
+    expect($run->summary['duplicate_count'])->toBe(1);
+    expect($run->summary['duplicate_strategy'])->toBe('create_new');
+    expect(Contact::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('email', 'sponsor@example.test')->count())->toBe(2);
 });
 
 test('admin can preview and import members from xlsx', function () {
@@ -185,4 +241,78 @@ test('admin can preview and import members from xlsx', function () {
     expect((float) $member->membership_amount)->toBe(75.0);
     expect($member->membership_interval)->toBe('vierteljährlich');
     expect($run->summary['file_type'])->toBe('xlsx');
+});
+
+test('admin can download import templates', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [, $admin] = createImportTenant('templates');
+
+    $this->actingAs($admin)->get(route('import.template', 'mitglieder'))
+        ->assertOk()
+        ->assertDownload('clubano-importvorlage-mitglieder.xlsx');
+
+    $this->actingAs($admin)->get(route('import.template', 'kontakte'))
+        ->assertOk()
+        ->assertDownload('clubano-importvorlage-kontakte.xlsx');
+});
+
+test('member import blocks unsafe mappings before writing data', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake();
+
+    [$tenant, $admin] = createImportTenant('unsafe-members');
+
+    $csv = "Vorname;E-Mail\nMia;mia@example.test\n";
+    $file = UploadedFile::fake()->createWithContent('mitglieder.csv', $csv);
+
+    $this->actingAs($admin)->post(route('import.mitglieder.preview'), [
+        'csv_file' => $file,
+    ])->assertOk();
+
+    $path = collect(Storage::files('temp'))->first();
+
+    $response = $this->actingAs($admin)->post(route('import.mitglieder.confirm'), [
+        'path' => $path,
+        'mapping' => [
+            0 => 'first_name',
+            1 => 'email',
+        ],
+    ]);
+
+    $response->assertRedirect(route('import.mitglieder'));
+    $response->assertSessionHas('error', 'Bitte ordne für Mitglieder mindestens Nachname zu.');
+
+    expect(Member::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(0);
+    expect(ImportRun::where('tenant_id', $tenant->id)->count())->toBe(0);
+});
+
+test('contact import blocks mappings without a usable name', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake();
+
+    [$tenant, $admin] = createImportTenant('unsafe-contacts');
+
+    $csv = "E-Mail;Ort\nkontakt@example.test;Demostadt\n";
+    $file = UploadedFile::fake()->createWithContent('kontakte.csv', $csv);
+
+    $this->actingAs($admin)->post(route('import.kontakte.preview'), [
+        'csv_file' => $file,
+    ])->assertOk();
+
+    $path = collect(Storage::files('temp'))->first();
+
+    $response = $this->actingAs($admin)->post(route('import.kontakte.confirm'), [
+        'path' => $path,
+        'mapping' => [
+            0 => 'email',
+            1 => 'city',
+        ],
+    ]);
+
+    $response->assertRedirect(route('import.kontakte'));
+    $response->assertSessionHas('error', 'Bitte ordne für Kontakte mindestens Organisation, Vorname oder Nachname zu.');
+
+    expect(Contact::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(0);
+    expect(ImportRun::where('tenant_id', $tenant->id)->count())->toBe(0);
 });
