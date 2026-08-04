@@ -64,6 +64,18 @@ return [
         ],
     ],
 
+    'update_notice' => [
+        'version' => env('CLUBANO_UPDATE_NOTICE_VERSION', '2026-08-04'),
+        'title' => 'Clubano wurde aktualisiert',
+        'summary' => 'Wir haben heute mehrere Bereiche verbessert, damit der Alltag im Verein ruhiger, klarer und sicherer läuft.',
+        'items' => [
+            'Admin-Cockpit mit Vereinsprüfung für neue Registrierungen',
+            'Importe mit Qualitätsprüfung, Korrekturlisten und Korrekturmappe',
+            'Kalender, Veranstaltungen und Teilnehmerlisten weiter optimiert',
+            'Stabilere Downloads für Berichte und Excel-Dateien',
+        ],
+    ],
+
     // Warnschwelle (in Prozent)
     'warn_threshold_percent' => 95,
 ];

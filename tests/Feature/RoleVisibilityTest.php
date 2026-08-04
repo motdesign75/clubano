@@ -780,3 +780,27 @@ test('operator superadmin is not tied to a club account', function () {
         ->assertSee('Betreiberkonto')
         ->assertSee('Kennwort ändern');
 });
+
+test('authenticated users can dismiss the update notice', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [, $admin] = createTenantWithUser(User::ROLE_ADMIN, 'update-notice');
+
+    $this->actingAs($admin)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertSee('Clubano wurde aktualisiert')
+        ->assertSee('Nicht mehr anzeigen');
+
+    $this->actingAs($admin)
+        ->post(route('update-notice.dismiss'))
+        ->assertRedirect();
+
+    expect($admin->fresh()->update_notice_dismissed_version)
+        ->toBe(config('clubano.update_notice.version'));
+
+    $this->actingAs($admin->fresh())
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertDontSee('Clubano wurde aktualisiert');
+});

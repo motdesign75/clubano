@@ -4,6 +4,11 @@
     $hasPageHelp = is_array($pageHelp) && !empty($pageHelp);
     $currentTenant = auth()->user()?->tenant;
     $isDemoTenant = (bool) ($currentTenant?->is_demo ?? false);
+    $updateNotice = config('clubano.update_notice', []);
+    $updateNoticeVersion = (string) ($updateNotice['version'] ?? '');
+    $showUpdateNotice = auth()->check()
+        && $updateNoticeVersion !== ''
+        && auth()->user()?->update_notice_dismissed_version !== $updateNoticeVersion;
 @endphp
 
 <!DOCTYPE html>
@@ -232,6 +237,38 @@
                         Du testest Clubano mit Beispieldaten. Anlegen und Bearbeiten ist möglich; Mailversand, SEPA, Rechnungsversand, Benutzerverwaltung, Vereinsdaten und Löschaktionen sind geschützt.
                     </div>
                 </div>
+            </div>
+        @endif
+
+        @if($showUpdateNotice)
+            <div class="mx-auto max-w-7xl px-4 pb-4 sm:px-6 lg:px-8">
+                <section class="rounded-2xl border border-blue-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div class="min-w-0">
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Update {{ $updateNoticeVersion }}</div>
+                            <h2 class="mt-2 text-lg font-semibold text-slate-950">{{ $updateNotice['title'] ?? 'Clubano wurde aktualisiert' }}</h2>
+                            <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-500">{{ $updateNotice['summary'] ?? '' }}</p>
+
+                            @if(!empty($updateNotice['items']))
+                                <div class="mt-4 grid gap-2 md:grid-cols-2">
+                                    @foreach($updateNotice['items'] as $item)
+                                        <div class="flex gap-2 text-sm leading-6 text-slate-700">
+                                            <x-heroicon-o-check-circle class="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+                                            <span>{{ $item }}</span>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+
+                        <form method="POST" action="{{ route('update-notice.dismiss') }}" class="shrink-0">
+                            @csrf
+                            <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 transition hover:bg-white">
+                                Nicht mehr anzeigen
+                            </button>
+                        </form>
+                    </div>
+                </section>
             </div>
         @endif
 

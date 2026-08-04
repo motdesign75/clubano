@@ -20,6 +20,7 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\PublicFormController;
+use App\Http\Controllers\UpdateNoticeController;
 
 
 
@@ -78,6 +79,7 @@ Route::get('/dokumentation/{path}', [DocumentationController::class, 'show'])
 Route::middleware(['auth'])->group(function () {
     Route::get('/lizenz', [SubscriptionController::class, 'index'])->name('subscription.index');
     Route::post('/lizenz/kaufen', [SubscriptionController::class, 'checkout'])->name('subscription.checkout');
+    Route::post('/update-hinweis/ausblenden', [UpdateNoticeController::class, 'dismiss'])->name('update-notice.dismiss');
 });
 
 // Dashboard (Controller, falls vorhanden; sonst Fallback-View)

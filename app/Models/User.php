@@ -31,6 +31,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'role',
         'last_login_at',
         'last_login_ip',
+        'update_notice_dismissed_version',
     ];
 
     /**
