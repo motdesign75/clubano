@@ -69,4 +69,5 @@ Homestead.json
 !resources/views/emails/**
 
 /output
+/output/pdf
 /tmp
