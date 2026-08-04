@@ -91,6 +91,26 @@
                         {{ $summary['duplicate_count'] ?? 0 }} mögliche Treffer · {{ $summary['duplicate_strategy_label'] ?? 'Dubletten überspringen' }}
                     </div>
                 </div>
+                @if($importRun->import_type === 'members')
+                    <div class="grid gap-1 px-5 py-4 sm:grid-cols-3">
+                        <div class="font-semibold text-slate-900">Mitgliedschaften</div>
+                        <div class="text-slate-600 sm:col-span-2">
+                            {{ $summary['membership_strategy_label'] ?? 'Beitragswerte nur am Mitglied speichern' }}
+                            @if(($summary['created_membership_count'] ?? 0) > 0)
+                                · {{ $summary['created_membership_count'] }} neu angelegt
+                            @endif
+                        </div>
+                    </div>
+                    <div class="grid gap-1 px-5 py-4 sm:grid-cols-3">
+                        <div class="font-semibold text-slate-900">Zusatzspalten</div>
+                        <div class="text-slate-600 sm:col-span-2">
+                            {{ $summary['custom_field_strategy_label'] ?? 'Ignorierte Spalten nicht übernehmen' }}
+                            @if(($summary['created_custom_field_count'] ?? 0) > 0)
+                                · {{ $summary['created_custom_field_count'] }} eigene Felder neu angelegt
+                            @endif
+                        </div>
+                    </div>
+                @endif
                 <div class="grid gap-1 px-5 py-4 sm:grid-cols-3">
                     <div class="font-semibold text-slate-900">Status</div>
                     <div class="text-slate-600 sm:col-span-2">

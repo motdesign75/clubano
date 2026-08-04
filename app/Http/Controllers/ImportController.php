@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Contact;
+use App\Models\CustomMemberField;
 use App\Models\ImportRun;
 use App\Models\Member;
+use App\Models\Membership;
+use App\Models\Tag;
 use App\Services\LicenseService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -175,6 +178,8 @@ class ImportController extends Controller
             'original_filename' => 'nullable|string|max:255',
             'import_goal' => 'nullable|string|max:120',
             'duplicate_strategy' => 'nullable|in:skip,create_new',
+            'membership_strategy' => 'nullable|in:snapshot_only,create_and_assign',
+            'custom_field_strategy' => 'nullable|in:ignore,create_from_unmapped',
         ]);
 
         $parsed = $this->readTabularFileFromStorage($request->input('path'), $request->input('original_filename'));
@@ -183,9 +188,13 @@ class ImportController extends Controller
         $tenantId = auth()->user()->tenant_id;
         $importedCount = 0;
         $skippedRows = [];
+        $createdMembershipIds = [];
+        $createdCustomFieldIds = [];
         $importRun = null;
         $sourceProfile = $this->normalizeSourceProfile($request->input('source_profile'));
         $duplicateStrategy = $request->input('duplicate_strategy', 'skip');
+        $membershipStrategy = $request->input('membership_strategy', 'snapshot_only');
+        $customFieldStrategy = $request->input('custom_field_strategy', 'ignore');
         $duplicateAnalysisBeforeImport = $this->analyzeDuplicates($rows, $mapping, $type, $tenantId);
         $mappingBlocker = $this->mappingBlockerMessage($mapping, $type);
 
@@ -199,7 +208,7 @@ class ImportController extends Controller
                 ->with('error', $limitMessage);
         }
 
-        DB::transaction(function () use ($type, $request, $rows, $mapping, $tenantId, $parsed, $sourceProfile, $duplicateStrategy, $duplicateAnalysisBeforeImport, &$importRun, &$importedCount, &$skippedRows) {
+        DB::transaction(function () use ($type, $request, $rows, $mapping, $tenantId, $parsed, $sourceProfile, $duplicateStrategy, $membershipStrategy, $customFieldStrategy, $duplicateAnalysisBeforeImport, &$importRun, &$importedCount, &$skippedRows, &$createdMembershipIds, &$createdCustomFieldIds) {
             $importRun = ImportRun::create([
                 'tenant_id' => $tenantId,
                 'import_type' => $type,
@@ -210,6 +219,9 @@ class ImportController extends Controller
                 'imported_count' => 0,
                 'skipped_count' => 0,
             ]);
+            $customFieldMap = $type === 'members'
+                ? $this->resolveCustomFieldMap($parsed['headers'], $rows, $mapping, $tenantId, $customFieldStrategy, $createdCustomFieldIds)
+                : [];
 
             foreach ($rows as $position => $row) {
                 if ($this->isEmptyRow($row)) {
@@ -235,8 +247,11 @@ class ImportController extends Controller
                 if ($type === 'contacts') {
                     Contact::create($this->prepareContactData($data));
                 } else {
+                    $tags = $data['tags'] ?? [];
                     unset($data['tags']);
-                    Member::create($data);
+                    $member = Member::create($this->prepareMemberData($data, $tenantId, $membershipStrategy, $createdMembershipIds));
+                    $this->attachImportedTags($member, $tags, $tenantId);
+                    $this->storeImportedCustomValues($member, $row, $customFieldMap);
                 }
 
                 $importedCount++;
@@ -254,6 +269,14 @@ class ImportController extends Controller
                     'duplicate_strategy' => $duplicateStrategy,
                     'duplicate_strategy_label' => $this->duplicateStrategyLabel($duplicateStrategy),
                     'duplicate_count' => $duplicateAnalysisBeforeImport['duplicate_count'],
+                    'membership_strategy' => $type === 'members' ? $membershipStrategy : null,
+                    'membership_strategy_label' => $type === 'members' ? $this->membershipStrategyLabel($membershipStrategy) : null,
+                    'created_membership_ids' => array_values(array_unique($createdMembershipIds)),
+                    'created_membership_count' => count(array_unique($createdMembershipIds)),
+                    'custom_field_strategy' => $type === 'members' ? $customFieldStrategy : null,
+                    'custom_field_strategy_label' => $type === 'members' ? $this->customFieldStrategyLabel($customFieldStrategy) : null,
+                    'created_custom_field_ids' => array_values(array_unique($createdCustomFieldIds)),
+                    'created_custom_field_count' => count(array_unique($createdCustomFieldIds)),
                     'mapped_fields' => $this->mappedFieldLabels($mapping, $type),
                     'readiness' => $this->buildReadiness($parsed['headers'], $rows, $mapping, $type),
                     'skipped_rows' => array_slice($skippedRows, 0, 50),
@@ -298,6 +321,8 @@ class ImportController extends Controller
                 $member->delete();
             }
 
+            $this->deleteUnusedImportedMemberships($importRun);
+            $this->deleteUnusedImportedCustomFields($importRun);
             $this->markImportUndone($importRun);
         });
 
@@ -423,9 +448,9 @@ class ImportController extends Controller
             $field = $this->normalizeFieldName((string) $field, $type);
             $value = $this->normalizeValue($field, $row[$index], $type);
 
-            if ($value !== null && $field !== 'tags') {
-                $data[$field] = $value;
-            } elseif ($field === 'tags' && $value !== null) {
+            if ($field === 'tags' && $value !== null) {
+                $data[$field] = array_values(array_merge($data[$field] ?? [], $value));
+            } elseif ($value !== null) {
                 $data[$field] = $value;
             }
         }
@@ -486,6 +511,14 @@ class ImportController extends Controller
             return $this->normalizeDecimal($value);
         }
 
+        if ($field === 'membership_interval') {
+            return $this->canonicalMembershipInterval($value);
+        }
+
+        if ($field === 'payment_method') {
+            return $this->canonicalPaymentMethod($value);
+        }
+
         if (in_array($field, ['is_active', 'is_favorite', 'consent_email', 'consent_phone', 'consent_post', 'gdpr_consent'], true)) {
             return in_array(Str::lower($value), ['1', 'ja', 'yes', 'true', 'x'], true);
         }
@@ -493,7 +526,15 @@ class ImportController extends Controller
         if ($field === 'contact_type') {
             $normalized = Str::lower($value);
 
-            return in_array($normalized, ['person', 'organization'], true) ? $normalized : 'person';
+            return match ($normalized) {
+                'organisation', 'organization', 'firma', 'unternehmen', 'verein', 'behoerde', 'behörde' => 'organization',
+                'person', 'ansprechpartner', 'kontaktperson', 'privatperson' => 'person',
+                default => in_array($normalized, ['person', 'organization'], true) ? $normalized : 'person',
+            };
+        }
+
+        if ($type === 'contacts' && $field === 'category') {
+            return $this->canonicalContactCategory($value);
         }
 
         if ($field === 'tags') {
@@ -501,6 +542,45 @@ class ImportController extends Controller
         }
 
         return $value;
+    }
+
+    private function canonicalMembershipInterval(string $interval): string
+    {
+        return match (trim(Str::lower($interval))) {
+            'monatlich', 'monat' => 'monatlich',
+            'vierteljaehrlich', 'vierteljährlich', 'quartal', 'quartalsweise', 'quartalsweise zum 15.', 'vierteljährig' => 'vierteljährlich',
+            'halbjaehrlich', 'halbjährlich', 'halbjahr', 'halbjährig' => 'halbjährlich',
+            'jaehrlich', 'jährlich', 'jahr', 'einmal jährlich' => 'jährlich',
+            default => trim($interval),
+        };
+    }
+
+    private function canonicalPaymentMethod(string $paymentMethod): string
+    {
+        return match (trim(Str::lower($paymentMethod))) {
+            'sepa', 'lastschrift', 'sepa-lastschrift', 'sepalastschrift', 'bankeinzug', 'einzug' => 'sepa_lastschrift',
+            'ueberweisung', 'überweisung', 'rechnung' => 'ueberweisung',
+            'bar', 'kasse' => 'bar',
+            default => trim($paymentMethod),
+        };
+    }
+
+    private function canonicalContactCategory(string $category): string
+    {
+        return match (trim(Str::lower($category))) {
+            'sponsor', 'sponsoren', 'sponsoring', 'werbepartner' => 'sponsor',
+            'lieferant', 'lieferanten', 'zulieferer' => 'supplier',
+            'partner', 'kooperationspartner', 'kooperation' => 'partner',
+            'presse', 'medien', 'zeitung' => 'press',
+            'behoerde', 'behörde', 'amt', 'verwaltung', 'stadtverwaltung', 'stadt', 'gemeinde', 'landkreis', 'kommune', 'kommunalverwaltung' => 'authority',
+            'trainer', 'trainerin', 'uebungsleiter', 'übungsleiter', 'coach' => 'trainer',
+            'eltern', 'elternteil', 'mutter', 'vater', 'erziehungsberechtigte' => 'parent',
+            'ehrenamt', 'ehrenamtlich', 'helfer', 'freiwillige' => 'volunteer',
+            'spender', 'spenderin', 'zuwender', 'donator' => 'donor',
+            'dienstleister', 'service', 'agentur', 'handwerker' => 'service',
+            'sonstiges', 'sonstige', 'andere', 'other' => 'other',
+            default => trim($category),
+        };
     }
 
     private function normalizeDecimal(string $value): ?string
@@ -591,7 +671,10 @@ class ImportController extends Controller
 
     private function prepareContactData(array $data): array
     {
-        $data['contact_type'] = $data['contact_type'] ?? (filled($data['organization'] ?? null) && blank($data['first_name'] ?? null) ? 'organization' : 'person');
+        if (blank($data['contact_type'] ?? null) || (($data['contact_type'] ?? null) === 'person' && filled($data['organization'] ?? null) && blank($data['first_name'] ?? null) && blank($data['last_name'] ?? null))) {
+            $data['contact_type'] = filled($data['organization'] ?? null) && blank($data['first_name'] ?? null) && blank($data['last_name'] ?? null) ? 'organization' : 'person';
+        }
+        $data['category'] = filled($data['category'] ?? null) ? $this->canonicalContactCategory((string) $data['category']) : null;
         $data['country'] = $data['country'] ?? 'Deutschland';
         $data['is_active'] = $data['is_active'] ?? true;
         $data['company'] = $data['company'] ?? ($data['organization'] ?? null);
@@ -602,6 +685,216 @@ class ImportController extends Controller
         $data['status'] = $data['status'] ?? 'aktiv';
 
         return $data;
+    }
+
+    private function prepareMemberData(array $data, int $tenantId, string $membershipStrategy, array &$createdMembershipIds): array
+    {
+        $membershipName = trim((string) ($data['membership_name'] ?? ''));
+        unset($data['membership_name']);
+
+        if ($membershipStrategy !== 'create_and_assign') {
+            return $data;
+        }
+
+        $amount = $data['membership_amount'] ?? null;
+        $interval = $data['membership_interval'] ?? null;
+
+        if ($membershipName === '' && blank($amount)) {
+            return $data;
+        }
+
+        [$membership, $created] = $this->resolveImportedMembership($tenantId, $membershipName, $amount, $interval);
+
+        if (! $membership) {
+            return $data;
+        }
+
+        if ($created) {
+            $createdMembershipIds[] = $membership->id;
+        }
+
+        $data['membership_id'] = $membership->id;
+        $data['membership_amount'] = $membership->amount;
+        $data['membership_interval'] = $membership->interval;
+
+        return $data;
+    }
+
+    private function resolveImportedMembership(int $tenantId, string $membershipName, mixed $amount, ?string $interval): array
+    {
+        $normalizedAmount = filled($amount) ? number_format((float) $amount, 2, '.', '') : '0.00';
+        $normalizedInterval = $this->validMembershipInterval($this->canonicalMembershipInterval($interval ?: 'jährlich'));
+        $name = $membershipName !== ''
+            ? $membershipName
+            : 'Importbeitrag ' . number_format((float) $normalizedAmount, 2, ',', '.') . ' EUR / ' . $normalizedInterval;
+
+        $existingByName = Membership::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('name', $name)
+            ->first();
+
+        if ($existingByName) {
+            return [$existingByName, false];
+        }
+
+        $existingByTerms = Membership::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('amount', $normalizedAmount)
+            ->where('interval', $normalizedInterval)
+            ->first();
+
+        if ($existingByTerms && $membershipName === '') {
+            return [$existingByTerms, false];
+        }
+
+        $membership = Membership::withoutGlobalScopes()->create([
+            'tenant_id' => $tenantId,
+            'name' => $name,
+            'amount' => $normalizedAmount,
+            'interval' => $normalizedInterval,
+        ]);
+
+        return [$membership, true];
+    }
+
+    private function validMembershipInterval(string $interval): string
+    {
+        return in_array($interval, ['monatlich', 'vierteljährlich', 'halbjährlich', 'jährlich'], true)
+            ? $interval
+            : 'jährlich';
+    }
+
+    private function deleteUnusedImportedMemberships(ImportRun $importRun): void
+    {
+        $membershipIds = array_filter($importRun->summary['created_membership_ids'] ?? []);
+
+        if ($membershipIds === []) {
+            return;
+        }
+
+        Membership::withoutGlobalScopes()
+            ->where('tenant_id', $importRun->tenant_id)
+            ->whereIn('id', $membershipIds)
+            ->get()
+            ->each(function (Membership $membership) {
+                if ($membership->members()->withoutGlobalScopes()->count() === 0) {
+                    $membership->delete();
+                }
+            });
+    }
+
+    private function attachImportedTags(Member $member, array $tagNames, int $tenantId): void
+    {
+        $tagIds = collect($tagNames)
+            ->map(fn ($tagName) => trim((string) $tagName))
+            ->filter()
+            ->unique(fn ($tagName) => Str::lower($tagName))
+            ->map(function (string $tagName) use ($tenantId) {
+                return Tag::query()->firstOrCreate(
+                    [
+                        'tenant_id' => $tenantId,
+                        'name' => $tagName,
+                    ],
+                    [
+                        'color' => '#2954A3',
+                    ]
+                )->id;
+            })
+            ->values()
+            ->all();
+
+        if ($tagIds !== []) {
+            $member->tags()->syncWithoutDetaching($tagIds);
+        }
+    }
+
+    private function resolveCustomFieldMap(array $headers, array $rows, array $mapping, int $tenantId, string $customFieldStrategy, array &$createdCustomFieldIds): array
+    {
+        if ($customFieldStrategy !== 'create_from_unmapped') {
+            return [];
+        }
+
+        $maxOrder = (int) CustomMemberField::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->max('order');
+        $fieldMap = [];
+
+        foreach ($headers as $index => $header) {
+            if (($mapping[$index] ?? 'skip') !== 'skip') {
+                continue;
+            }
+
+            $label = trim((string) $header);
+
+            if ($label === '') {
+                continue;
+            }
+
+            $hasValues = collect($rows)->contains(fn ($row) => trim((string) ($row[$index] ?? '')) !== '');
+
+            if (! $hasValues) {
+                continue;
+            }
+
+            $slug = Str::slug($label) ?: 'importfeld-' . ($index + 1);
+            $field = CustomMemberField::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('slug', $slug)
+                ->first();
+
+            if (! $field) {
+                $field = CustomMemberField::withoutGlobalScopes()->create([
+                    'tenant_id' => $tenantId,
+                    'name' => $slug,
+                    'label' => $label,
+                    'slug' => $slug,
+                    'type' => 'text',
+                    'required' => false,
+                    'visible' => true,
+                    'order' => ++$maxOrder,
+                ]);
+                $createdCustomFieldIds[] = $field->id;
+            }
+
+            $fieldMap[$index] = $field;
+        }
+
+        return $fieldMap;
+    }
+
+    private function storeImportedCustomValues(Member $member, array $row, array $customFieldMap): void
+    {
+        foreach ($customFieldMap as $index => $field) {
+            $value = trim((string) ($row[$index] ?? ''));
+
+            if ($value === '') {
+                continue;
+            }
+
+            $member->customValues()->create([
+                'custom_member_field_id' => $field->id,
+                'value' => $value,
+            ]);
+        }
+    }
+
+    private function deleteUnusedImportedCustomFields(ImportRun $importRun): void
+    {
+        $fieldIds = array_filter($importRun->summary['created_custom_field_ids'] ?? []);
+
+        if ($fieldIds === []) {
+            return;
+        }
+
+        CustomMemberField::withoutGlobalScopes()
+            ->where('tenant_id', $importRun->tenant_id)
+            ->whereIn('id', $fieldIds)
+            ->get()
+            ->each(function (CustomMemberField $field) {
+                if ($field->values()->count() === 0) {
+                    $field->delete();
+                }
+            });
     }
 
     private function analyzeRows(array $rows, array $mapping, string $type): array
@@ -707,15 +1000,22 @@ class ImportController extends Controller
             'country' => 'country',
             'notizen' => 'notes',
             'tags' => 'tags',
+            'tag' => 'tags',
         ];
 
         if ($type === 'contacts') {
             return $common + [
                 'typ' => 'contact_type',
                 'kontaktart' => 'contact_type',
+                'art' => 'contact_type',
                 'kategorie' => 'category',
+                'kontaktgruppe' => 'category',
+                'gruppe' => 'category',
+                'branche' => 'category',
                 'abteilung' => 'department',
                 'position' => 'position',
+                'funktion' => 'position',
+                'ansprechpartner' => 'last_name',
                 'webseite' => 'website',
                 'website' => 'website',
                 'quelle' => 'source',
@@ -728,6 +1028,18 @@ class ImportController extends Controller
             'mitgliedsnummer' => 'member_id',
             'mitgliednummer' => 'member_id',
             'mitgliedsnr' => 'member_id',
+            'mitgliedschaft' => 'membership_name',
+            'beitragsart' => 'membership_name',
+            'tarif' => 'membership_name',
+            'beitragsmodell' => 'membership_name',
+            'abteilung' => 'tags',
+            'abteilungen' => 'tags',
+            'gruppe' => 'tags',
+            'gruppen' => 'tags',
+            'sparte' => 'tags',
+            'sparten' => 'tags',
+            'mannschaft' => 'tags',
+            'team' => 'tags',
             'eintritt' => 'entry_date',
             'eintrittsdatum' => 'entry_date',
             'austritt' => 'exit_date',
@@ -804,12 +1116,14 @@ class ImportController extends Controller
             ],
             'Mitgliedschaft' => [
                 'member_id' => 'Mitgliedsnummer',
+                'membership_name' => 'Mitgliedschaft / Beitragsart',
                 'entry_date' => 'Eintritt',
                 'exit_date' => 'Austritt',
                 'termination_date' => 'Kündigungsdatum',
                 'membership_amount' => 'Beitrag',
                 'membership_interval' => 'Zahlungsweise',
                 'required_service_hours' => 'Pflichtstunden',
+                'tags' => 'Tags / Abteilungen / Gruppen',
             ],
             'Kommunikation' => [
                 'email' => 'E-Mail',
@@ -1104,6 +1418,20 @@ class ImportController extends Controller
         return $strategy === 'create_new' ? 'Dubletten trotzdem neu anlegen' : 'Dubletten überspringen';
     }
 
+    private function membershipStrategyLabel(string $strategy): string
+    {
+        return $strategy === 'create_and_assign'
+            ? 'Mitgliedschaften aus Import bilden und zuordnen'
+            : 'Beitragswerte nur am Mitglied speichern';
+    }
+
+    private function customFieldStrategyLabel(string $strategy): string
+    {
+        return $strategy === 'create_from_unmapped'
+            ? 'Ignorierte Spalten als eigene Felder sichern'
+            : 'Ignorierte Spalten nicht übernehmen';
+    }
+
     private function skippedRowPayload(int $position, string $reason, array $data, string $type): array
     {
         return [
@@ -1222,6 +1550,10 @@ class ImportController extends Controller
             ['Übersprungen', $importRun->skipped_count],
             ['Dubletten', $summary['duplicate_count'] ?? 0],
             ['Dubletten-Strategie', $summary['duplicate_strategy_label'] ?? 'Dubletten überspringen'],
+            ['Mitgliedschaften', $summary['membership_strategy_label'] ?? ''],
+            ['Neu angelegte Mitgliedschaften', $summary['created_membership_count'] ?? 0],
+            ['Zusatzspalten', $summary['custom_field_strategy_label'] ?? ''],
+            ['Neu angelegte eigene Felder', $summary['created_custom_field_count'] ?? 0],
         ], null, 'A1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
         $sheet->getColumnDimension('A')->setWidth(28);
@@ -1305,6 +1637,7 @@ class ImportController extends Controller
 
         return [[
             'Mitgliedsnummer',
+            'Mitgliedschaft',
             'Anrede',
             'Vorname',
             'Nachname',
@@ -1330,6 +1663,7 @@ class ImportController extends Controller
             'SEPA unterschrieben am',
             'Kontoinhaber',
             'Pflichtstunden',
+            'Tags',
         ]];
     }
 
@@ -1343,8 +1677,8 @@ class ImportController extends Controller
         }
 
         return [
-            ['M-0001', 'Frau', 'Mia', 'Muster', '', '14.03.1992', '01.01.2026', '', '', 'mia@example.test', '015112345678', '050661234', 'Musterstraße 12', '', '12345', 'Demostadt', 'Deutschland', '75,00', 'vierteljährlich', 'SEPA', 'DE02120300000000202051', 'BYLADEM1001', 'M-0001-2026', '01.01.2026', 'Mia Muster', '10'],
-            ['M-0002', 'Herr', 'Tom', 'Test', 'Testfirma GmbH', '20.08.1988', '01.02.2026', '', '', 'tom@example.test', '', '050665555', 'Beispielweg 4', 'c/o Vorstand', '12345', 'Demostadt', 'Deutschland', '120,00', 'jährlich', 'Überweisung', '', '', '', '', '', '0'],
+            ['M-0001', 'Aktiv', 'Frau', 'Mia', 'Muster', '', '14.03.1992', '01.01.2026', '', '', 'mia@example.test', '015112345678', '050661234', 'Musterstraße 12', '', '12345', 'Demostadt', 'Deutschland', '75,00', 'vierteljährlich', 'SEPA', 'DE02120300000000202051', 'BYLADEM1001', 'M-0001-2026', '01.01.2026', 'Mia Muster', '10', 'Vorstand;Aktiv'],
+            ['M-0002', 'Fördermitglied', 'Herr', 'Tom', 'Test', 'Testfirma GmbH', '20.08.1988', '01.02.2026', '', '', 'tom@example.test', '', '050665555', 'Beispielweg 4', 'c/o Vorstand', '12345', 'Demostadt', 'Deutschland', '120,00', 'jährlich', 'Überweisung', '', '', '', '', '', '0', 'Fördermitglied'],
         ];
     }
 }

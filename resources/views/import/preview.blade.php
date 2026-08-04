@@ -183,6 +183,74 @@
             </div>
         </section>
 
+        @if($config['type'] === 'members')
+            <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="grid gap-5 lg:grid-cols-[1fr_22rem] lg:items-start">
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-950">Mitgliedschaften aus Beitragsdaten</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">
+                            Wenn deine Datei Beitragsart, Beitrag oder Zahlungsweise enthält, kann Clubano daraus direkt Mitgliedschaften bilden. So entstehen nach dem Import weniger manuelle Nacharbeiten.
+                        </p>
+                        <div class="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
+                            <div class="rounded-lg bg-slate-50 px-3 py-2">
+                                <span class="font-semibold text-slate-900">Beispiel:</span> Aktiv
+                            </div>
+                            <div class="rounded-lg bg-slate-50 px-3 py-2">
+                                <span class="font-semibold text-slate-900">Beitrag:</span> 75,00 EUR
+                            </div>
+                            <div class="rounded-lg bg-slate-50 px-3 py-2">
+                                <span class="font-semibold text-slate-900">Rhythmus:</span> vierteljährlich
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="membership_strategy" class="text-sm font-semibold text-slate-900">Importverhalten</label>
+                        <select
+                            name="membership_strategy"
+                            id="membership_strategy"
+                            class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:ring-slate-300"
+                        >
+                            <option value="create_and_assign">Mitgliedschaften bilden und zuordnen</option>
+                            <option value="snapshot_only">Nur Beitragswerte am Mitglied speichern</option>
+                        </select>
+                        <p class="mt-2 text-sm leading-6 text-slate-500">
+                            Bestehende passende Mitgliedschaften werden wiederverwendet. Neue entstehen nur, wenn keine passende gefunden wird.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div class="grid gap-5 lg:grid-cols-[1fr_22rem] lg:items-start">
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-950">Zusatzspalten sichern</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">
+                            Manche Vereine bringen eigene Angaben mit, zum Beispiel Trikotgröße, Abteilung, Ehrungen oder interne Merkmale. Unbekannte Spalten können als eigene Mitgliedsfelder übernommen werden.
+                        </p>
+                        <p class="mt-3 text-sm leading-6 text-slate-500">
+                            Das betrifft nur Spalten, die oben auf „Ignorieren“ stehen und mindestens einen Wert enthalten.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label for="custom_field_strategy" class="text-sm font-semibold text-slate-900">Zusatzdaten</label>
+                        <select
+                            name="custom_field_strategy"
+                            id="custom_field_strategy"
+                            class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:ring-slate-300"
+                        >
+                            <option value="ignore">Ignorierte Spalten nicht übernehmen</option>
+                            <option value="create_from_unmapped">Ignorierte Spalten als eigene Felder sichern</option>
+                        </select>
+                        <p class="mt-2 text-sm leading-6 text-slate-500">
+                            Bestehende eigene Felder mit gleichem Namen werden wiederverwendet.
+                        </p>
+                    </div>
+                </div>
+            </section>
+        @endif
+
         <section class="rounded-xl border {{ $duplicateAnalysis['duplicate_count'] > 0 ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white' }} p-5 shadow-sm">
             <div class="grid gap-5 lg:grid-cols-[1fr_22rem] lg:items-start">
                 <div>
