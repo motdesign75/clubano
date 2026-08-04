@@ -25,8 +25,11 @@ class ImportController extends Controller
     public function index()
     {
         $recentImportRuns = $this->recentImportRuns();
+        $qualitySummaries = $recentImportRuns
+            ->mapWithKeys(fn (ImportRun $run) => [$run->id => $this->qualitySummaryFor($run)])
+            ->all();
 
-        return view('import.index', compact('recentImportRuns'));
+        return view('import.index', compact('recentImportRuns', 'qualitySummaries'));
     }
 
     public function showUploadForm()
@@ -83,7 +86,52 @@ class ImportController extends Controller
             'importRun' => $importRun->load('creator'),
             'config' => $this->importConfig($importRun->import_type),
             'nextSteps' => $this->nextStepsFor($importRun),
+            'qualityChecks' => $this->qualityChecksFor($importRun),
+            'releaseChecks' => $this->releaseChecksFor($importRun),
         ]);
+    }
+
+    public function qualityIssue(Request $request, ImportRun $importRun, string $issue)
+    {
+        abort_unless((int) $importRun->tenant_id === (int) auth()->user()->tenant_id, 403);
+
+        $check = collect($this->qualityChecksFor($importRun))->firstWhere('key', $issue);
+        abort_unless($check, 404);
+
+        $search = trim((string) $request->query('q', ''));
+
+        $records = $this->qualityIssueQuery($importRun, $issue, $search)
+            ->paginate(25)
+            ->withQueryString();
+
+        return view('import.quality-issue', [
+            'importRun' => $importRun,
+            'config' => $this->importConfig($importRun->import_type),
+            'check' => $check,
+            'records' => $records,
+            'search' => $search,
+        ]);
+    }
+
+    public function qualityIssueExport(Request $request, ImportRun $importRun, string $issue)
+    {
+        abort_unless((int) $importRun->tenant_id === (int) auth()->user()->tenant_id, 403);
+
+        $check = collect($this->qualityChecksFor($importRun))->firstWhere('key', $issue);
+        abort_unless($check, 404);
+
+        $search = trim((string) $request->query('q', ''));
+        $spreadsheet = $this->buildQualityIssueSpreadsheet($importRun, $issue, $check, $search);
+        $filename = 'clubano-korrekturliste-' . $issue . '-' . $importRun->id . '.xlsx';
+        $path = storage_path('app/temp/' . Str::uuid() . '-' . $filename);
+
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0755, true);
+        }
+
+        (new Xlsx($spreadsheet))->save($path);
+
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
     }
 
     public function template(string $type)
@@ -110,6 +158,23 @@ class ImportController extends Controller
 
         $spreadsheet = $this->buildReportSpreadsheet($importRun);
         $filename = 'clubano-importbericht-' . $importRun->id . '.xlsx';
+        $path = storage_path('app/temp/' . Str::uuid() . '-' . $filename);
+
+        if (! is_dir(dirname($path))) {
+            mkdir(dirname($path), 0755, true);
+        }
+
+        (new Xlsx($spreadsheet))->save($path);
+
+        return response()->download($path, $filename)->deleteFileAfterSend(true);
+    }
+
+    public function correctionsExport(ImportRun $importRun)
+    {
+        abort_unless((int) $importRun->tenant_id === (int) auth()->user()->tenant_id, 403);
+
+        $spreadsheet = $this->buildCorrectionsWorkbook($importRun);
+        $filename = 'clubano-korrekturmappe-import-' . $importRun->id . '.xlsx';
         $path = storage_path('app/temp/' . Str::uuid() . '-' . $filename);
 
         if (! is_dir(dirname($path))) {
@@ -1483,6 +1548,605 @@ class ImportController extends Controller
         ];
     }
 
+    private function qualityChecksFor(ImportRun $importRun): array
+    {
+        if ($importRun->import_type === 'contacts') {
+            return $this->contactQualityChecks($importRun);
+        }
+
+        return $this->memberQualityChecks($importRun);
+    }
+
+    private function qualitySummaryFor(ImportRun $importRun): array
+    {
+        if ($importRun->status === 'undone') {
+            return [
+                'required_open' => 0,
+                'optional_open' => 0,
+                'checks' => [],
+                'state' => 'undone',
+            ];
+        }
+
+        $checks = collect($this->qualityChecksFor($importRun));
+        $openChecks = $checks
+            ->filter(fn ($check) => ($check['count'] ?? 0) > 0)
+            ->sortBy(fn ($check) => ($check['weight'] ?? 'required') === 'required' ? 0 : 1)
+            ->values();
+
+        return [
+            'required_open' => $openChecks
+                ->filter(fn ($check) => ($check['weight'] ?? 'required') === 'required')
+                ->sum('count'),
+            'optional_open' => $openChecks
+                ->filter(fn ($check) => ($check['weight'] ?? 'required') !== 'required')
+                ->sum('count'),
+            'checks' => $openChecks->take(3)->all(),
+            'state' => $openChecks->isEmpty() ? 'ready' : 'needs_work',
+        ];
+    }
+
+    private function memberQualityChecks(ImportRun $importRun): array
+    {
+        $members = $importRun->members();
+        $withoutEmail = (clone $members)->where(fn ($query) => $query->whereNull('email')->orWhere('email', ''));
+        $withoutEntryDate = (clone $members)->whereNull('entry_date');
+        $withoutAmount = (clone $members)->whereNull('membership_amount');
+        $withoutPaymentMethod = (clone $members)->where(fn ($query) => $query->whereNull('payment_method')->orWhere('payment_method', ''));
+        $sepaWithoutIban = (clone $members)
+            ->where('payment_method', 'sepa_lastschrift')
+            ->where(fn ($query) => $query->whereNull('iban')->orWhere('iban', ''));
+        $withoutTags = (clone $members)->doesntHave('tags');
+
+        return [
+            $this->qualityCheck(
+                $importRun,
+                'members_without_email',
+                'communication',
+                'E-Mail-Adressen',
+                'Für Einladungen, Newsletter und Rückfragen.',
+                (clone $withoutEmail)->count(),
+                'Mitglieder ohne E-Mail prüfen.',
+                'required',
+                $this->memberCorrectionSamples($withoutEmail)
+            ),
+            $this->qualityCheck(
+                $importRun,
+                'members_without_entry_date',
+                'membership',
+                'Eintrittsdaten',
+                'Wichtig für Status, Jubiläen und Auswertungen.',
+                (clone $withoutEntryDate)->count(),
+                'Eintrittsdaten nachtragen.',
+                'required',
+                $this->memberCorrectionSamples($withoutEntryDate)
+            ),
+            $this->qualityCheck(
+                $importRun,
+                'members_without_amount',
+                'billing',
+                'Beitragsdaten',
+                'Grundlage für Beitragsrechnungen.',
+                (clone $withoutAmount)->count(),
+                'Mitglieder ohne Beitrag kontrollieren.',
+                'required',
+                $this->memberCorrectionSamples($withoutAmount)
+            ),
+            $this->qualityCheck(
+                $importRun,
+                'members_without_payment_method',
+                'billing',
+                'Zahlungsart',
+                'Wichtig für Rechnung, Barzahlung oder SEPA.',
+                (clone $withoutPaymentMethod)->count(),
+                'Zahlungsart ergänzen.',
+                'required',
+                $this->memberCorrectionSamples($withoutPaymentMethod)
+            ),
+            $this->qualityCheck(
+                $importRun,
+                'members_sepa_without_iban',
+                'sepa',
+                'SEPA-Mandate',
+                'SEPA-Lastschriften brauchen eine IBAN.',
+                (clone $sepaWithoutIban)->count(),
+                'IBAN bei SEPA-Mitgliedern prüfen.',
+                'required',
+                $this->memberCorrectionSamples($sepaWithoutIban)
+            ),
+            $this->qualityCheck(
+                $importRun,
+                'members_without_tags',
+                'structure',
+                'Gruppen und Tags',
+                'Hilft bei Zielgruppen, Abteilungen und Filtern.',
+                (clone $withoutTags)->count(),
+                'Mitglieder ohne Gruppe oder Tag prüfen.',
+                'optional',
+                $this->memberCorrectionSamples($withoutTags)
+            ),
+        ];
+    }
+
+    private function contactQualityChecks(ImportRun $importRun): array
+    {
+        $contacts = $importRun->contacts();
+        $withoutCategory = (clone $contacts)->where(fn ($query) => $query->whereNull('category')->orWhere('category', ''));
+        $withoutEmail = (clone $contacts)->where(fn ($query) => $query->whereNull('email')->orWhere('email', ''));
+        $organizationsWithoutPerson = (clone $contacts)
+            ->where('contact_type', 'organization')
+            ->where(fn ($query) => $query
+                ->where(fn ($inner) => $inner->whereNull('first_name')->orWhere('first_name', ''))
+                ->where(fn ($inner) => $inner->whereNull('last_name')->orWhere('last_name', '')));
+        $withoutCity = (clone $contacts)->where(fn ($query) => $query->whereNull('city')->orWhere('city', ''));
+
+        return [
+            $this->qualityCheck(
+                $importRun,
+                'contacts_without_category',
+                'structure',
+                'Kategorien',
+                'Sponsoren, Lieferanten, Presse und Behörden sauber filtern.',
+                (clone $withoutCategory)->count(),
+                'Kontakte ohne Kategorie prüfen.',
+                'required',
+                $this->contactCorrectionSamples($withoutCategory)
+            ),
+            $this->qualityCheck(
+                $importRun,
+                'contacts_without_email',
+                'communication',
+                'E-Mail-Adressen',
+                'Für Serienmails und schnelle Rückfragen.',
+                (clone $withoutEmail)->count(),
+                'Kontakte ohne E-Mail ergänzen.',
+                'optional',
+                $this->contactCorrectionSamples($withoutEmail)
+            ),
+            $this->qualityCheck(
+                $importRun,
+                'contacts_organizations_without_person',
+                'relationship',
+                'Organisationen mit Ansprechpartner',
+                'Bei Firmen, Behörden und Sponsoren ist eine Person oft entscheidend.',
+                (clone $organizationsWithoutPerson)->count(),
+                'Ansprechpartner bei Organisationen ergänzen.',
+                'optional',
+                $this->contactCorrectionSamples($organizationsWithoutPerson)
+            ),
+            $this->qualityCheck(
+                $importRun,
+                'contacts_without_city',
+                'address',
+                'Orte',
+                'Hilft bei Suche, regionaler Zuordnung und Briefen.',
+                (clone $withoutCity)->count(),
+                'Ort nachtragen.',
+                'optional',
+                $this->contactCorrectionSamples($withoutCity)
+            ),
+        ];
+    }
+
+    private function qualityCheck(ImportRun $importRun, string $key, string $area, string $label, string $description, int $count, string $action, string $weight = 'required', array $samples = []): array
+    {
+        return [
+            'key' => $key,
+            'area' => $area,
+            'label' => $label,
+            'description' => $description,
+            'count' => $count,
+            'action' => $action,
+            'weight' => $weight,
+            'state' => $count === 0 ? 'ready' : ($weight === 'required' ? 'needs_work' : 'notice'),
+            'samples' => $samples,
+            'url' => route('import.quality-issue', [$importRun, $key]),
+        ];
+    }
+
+    private function memberCorrectionSamples($query): array
+    {
+        return (clone $query)
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->take(5)
+            ->get()
+            ->map(fn (Member $member) => [
+                'label' => $member->full_name ?: 'Mitglied #' . $member->id,
+                'meta' => collect([$member->member_id, $member->email, $member->city])->filter()->implode(' · '),
+                'url' => route('members.edit', $member),
+            ])
+            ->all();
+    }
+
+    private function contactCorrectionSamples($query): array
+    {
+        return (clone $query)
+            ->orderByRaw("
+                COALESCE(
+                    NULLIF(organization, ''),
+                    NULLIF(company, ''),
+                    NULLIF(last_name, ''),
+                    NULLIF(first_name, ''),
+                    email
+                ) asc
+            ")
+            ->take(5)
+            ->get()
+            ->map(fn (Contact $contact) => [
+                'label' => $contact->display_name,
+                'meta' => collect([$contact->email, $contact->city])->filter()->implode(' · '),
+                'url' => route('contacts.edit', $contact),
+            ])
+            ->all();
+    }
+
+    private function qualityIssueQuery(ImportRun $importRun, string $issue, string $search = '')
+    {
+        $query = $importRun->import_type === 'contacts'
+            ? $importRun->contacts()
+            : $importRun->members();
+
+        $query = match ($issue) {
+            'members_without_email' => $this->memberQualityBase($importRun)
+                ->where(fn ($query) => $query->whereNull('email')->orWhere('email', ''))
+                ->orderBy('last_name')
+                ->orderBy('first_name'),
+            'members_without_entry_date' => $this->memberQualityBase($importRun)
+                ->whereNull('entry_date')
+                ->orderBy('last_name')
+                ->orderBy('first_name'),
+            'members_without_amount' => $this->memberQualityBase($importRun)
+                ->whereNull('membership_amount')
+                ->orderBy('last_name')
+                ->orderBy('first_name'),
+            'members_without_payment_method' => $this->memberQualityBase($importRun)
+                ->where(fn ($query) => $query->whereNull('payment_method')->orWhere('payment_method', ''))
+                ->orderBy('last_name')
+                ->orderBy('first_name'),
+            'members_sepa_without_iban' => $this->memberQualityBase($importRun)
+                ->where('payment_method', 'sepa_lastschrift')
+                ->where(fn ($query) => $query->whereNull('iban')->orWhere('iban', ''))
+                ->orderBy('last_name')
+                ->orderBy('first_name'),
+            'members_without_tags' => $this->memberQualityBase($importRun)
+                ->doesntHave('tags')
+                ->orderBy('last_name')
+                ->orderBy('first_name'),
+            'contacts_without_category' => $this->contactQualityBase($importRun)
+                ->where(fn ($query) => $query->whereNull('category')->orWhere('category', ''))
+                ->orderByRaw($this->contactQualityOrderSql()),
+            'contacts_without_email' => $this->contactQualityBase($importRun)
+                ->where(fn ($query) => $query->whereNull('email')->orWhere('email', ''))
+                ->orderByRaw($this->contactQualityOrderSql()),
+            'contacts_organizations_without_person' => $this->contactQualityBase($importRun)
+                ->where('contact_type', 'organization')
+                ->where(fn ($query) => $query
+                    ->where(fn ($inner) => $inner->whereNull('first_name')->orWhere('first_name', ''))
+                    ->where(fn ($inner) => $inner->whereNull('last_name')->orWhere('last_name', '')))
+                ->orderByRaw($this->contactQualityOrderSql()),
+            'contacts_without_city' => $this->contactQualityBase($importRun)
+                ->where(fn ($query) => $query->whereNull('city')->orWhere('city', ''))
+                ->orderByRaw($this->contactQualityOrderSql()),
+            default => $query->whereRaw('1 = 0'),
+        };
+
+        return $this->applyQualityIssueSearch($query, $importRun->import_type, $search);
+    }
+
+    private function applyQualityIssueSearch($query, string $type, string $search)
+    {
+        if ($search === '') {
+            return $query;
+        }
+
+        return $query->where(function ($inner) use ($type, $search) {
+            if ($type === 'contacts') {
+                $inner->where('organization', 'like', '%' . $search . '%')
+                    ->orWhere('company', 'like', '%' . $search . '%')
+                    ->orWhere('first_name', 'like', '%' . $search . '%')
+                    ->orWhere('last_name', 'like', '%' . $search . '%')
+                    ->orWhere('email', 'like', '%' . $search . '%')
+                    ->orWhere('city', 'like', '%' . $search . '%')
+                    ->orWhere('phone', 'like', '%' . $search . '%')
+                    ->orWhere('mobile', 'like', '%' . $search . '%');
+
+                return;
+            }
+
+            $inner->where('first_name', 'like', '%' . $search . '%')
+                ->orWhere('last_name', 'like', '%' . $search . '%')
+                ->orWhere('email', 'like', '%' . $search . '%')
+                ->orWhere('member_id', 'like', '%' . $search . '%')
+                ->orWhere('city', 'like', '%' . $search . '%');
+        });
+    }
+
+    private function memberQualityBase(ImportRun $importRun)
+    {
+        return $importRun->members()->with(['membership', 'tags']);
+    }
+
+    private function contactQualityBase(ImportRun $importRun)
+    {
+        return $importRun->contacts();
+    }
+
+    private function contactQualityOrderSql(): string
+    {
+        return "
+            COALESCE(
+                NULLIF(organization, ''),
+                NULLIF(company, ''),
+                NULLIF(last_name, ''),
+                NULLIF(first_name, ''),
+                email
+            ) asc
+        ";
+    }
+
+    private function buildQualityIssueSpreadsheet(ImportRun $importRun, string $issue, array $check, string $search = ''): Spreadsheet
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Korrekturliste');
+        $records = $this->qualityIssueQuery($importRun, $issue, $search)->get();
+
+        $sheet->fromArray([
+            ['Clubano Korrekturliste'],
+            ['Import-ID', $importRun->id],
+            ['Bereich', $importRun->type_label],
+            ['Prüfung', $check['label']],
+            ['Aktion', $check['action']],
+            ['Suche', $search ?: 'Keine'],
+            ['Offen', $records->count()],
+            ['Erstellt am', now()->format('d.m.Y H:i')],
+        ], null, 'A1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+        $sheet->getColumnDimension('A')->setWidth(24);
+        $sheet->getColumnDimension('B')->setWidth(60);
+
+        $tableStartRow = 10;
+        $headers = $importRun->import_type === 'members'
+            ? ['Name', 'Mitgliedsnummer', 'E-Mail', 'Ort', 'Mitgliedschaft', 'Beitrag', 'Zahlungsart', 'IBAN']
+            : ['Name', 'Typ', 'Kategorie', 'E-Mail', 'Telefon', 'Ort', 'Organisation', 'Ansprechpartner'];
+
+        $sheet->fromArray([$headers], null, 'A' . $tableStartRow);
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle('A' . $tableStartRow . ':' . $lastColumn . $tableStartRow)->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '0F172A'],
+            ],
+        ]);
+
+        foreach ($records as $index => $record) {
+            $row = $importRun->import_type === 'members'
+                ? [
+                    $record->full_name,
+                    $record->member_id,
+                    $record->email,
+                    $record->city,
+                    $record->membership?->name,
+                    $record->membership_amount ? number_format((float) $record->membership_amount, 2, ',', '.') . ' EUR' : '',
+                    $record->paymentMethodLabel(),
+                    $record->iban,
+                ]
+                : [
+                    $record->display_name,
+                    $record->contact_type === 'organization' ? 'Organisation' : 'Person',
+                    $record->category,
+                    $record->email,
+                    $record->phone ?: $record->mobile,
+                    $record->city,
+                    $record->organization ?: $record->company,
+                    trim(($record->first_name ?? '') . ' ' . ($record->last_name ?? '')),
+                ];
+
+            $sheet->fromArray([$row], null, 'A' . ($tableStartRow + $index + 1));
+        }
+
+        $highestColumnIndex = Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        for ($columnIndex = 1; $columnIndex <= $highestColumnIndex; $columnIndex++) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($columnIndex))->setAutoSize(true);
+        }
+
+        $sheet->setAutoFilter('A' . $tableStartRow . ':' . $lastColumn . max($tableStartRow, $tableStartRow + $records->count()));
+        $sheet->freezePane('A' . ($tableStartRow + 1));
+
+        return $spreadsheet;
+    }
+
+    private function buildCorrectionsWorkbook(ImportRun $importRun): Spreadsheet
+    {
+        $spreadsheet = new Spreadsheet();
+        $summarySheet = $spreadsheet->getActiveSheet();
+        $summarySheet->setTitle('Übersicht');
+        $openChecks = collect($this->qualityChecksFor($importRun))
+            ->filter(fn ($check) => ($check['count'] ?? 0) > 0)
+            ->values();
+
+        $summarySheet->fromArray([
+            ['Clubano Korrekturmappe'],
+            ['Import-ID', $importRun->id],
+            ['Bereich', $importRun->type_label],
+            ['Datei', $importRun->filename],
+            ['Offene Prüfpunkte', $openChecks->count()],
+            ['Erstellt am', now()->format('d.m.Y H:i')],
+        ], null, 'A1');
+        $summarySheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+        $summarySheet->getColumnDimension('A')->setWidth(28);
+        $summarySheet->getColumnDimension('B')->setWidth(58);
+
+        $summaryRow = 8;
+        $summarySheet->fromArray([['Prüfung', 'Status', 'Offen', 'Aktion']], null, 'A' . $summaryRow);
+        $summarySheet->getStyle('A' . $summaryRow . ':D' . $summaryRow)->applyFromArray($this->spreadsheetHeaderStyle());
+
+        if ($openChecks->isEmpty()) {
+            $summarySheet->fromArray([['Keine offenen Nacharbeiten', 'OK', 0, '']], null, 'A' . ($summaryRow + 1));
+            $spreadsheet->setActiveSheetIndex(0);
+
+            return $spreadsheet;
+        }
+
+        foreach ($openChecks as $index => $check) {
+            $summarySheet->fromArray([[
+                $check['label'],
+                ($check['weight'] ?? 'required') === 'required' ? 'Pflicht' : 'Hinweis',
+                $check['count'],
+                $check['action'],
+            ]], null, 'A' . ($summaryRow + $index + 1));
+
+            $sheet = $spreadsheet->createSheet();
+            $sheet->setTitle($this->correctionSheetTitle($check['label'], $index + 1));
+            $this->fillQualityIssueSheet($sheet, $importRun, $check['key'], $check);
+        }
+
+        foreach (['A' => 34, 'B' => 16, 'C' => 10, 'D' => 52] as $column => $width) {
+            $summarySheet->getColumnDimension($column)->setWidth($width);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        return $spreadsheet;
+    }
+
+    private function fillQualityIssueSheet($sheet, ImportRun $importRun, string $issue, array $check, string $search = ''): void
+    {
+        $records = $this->qualityIssueQuery($importRun, $issue, $search)->get();
+
+        $sheet->fromArray([
+            ['Clubano Korrekturliste'],
+            ['Import-ID', $importRun->id],
+            ['Bereich', $importRun->type_label],
+            ['Prüfung', $check['label']],
+            ['Aktion', $check['action']],
+            ['Suche', $search ?: 'Keine'],
+            ['Offen', $records->count()],
+            ['Erstellt am', now()->format('d.m.Y H:i')],
+        ], null, 'A1');
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+        $sheet->getColumnDimension('A')->setWidth(24);
+        $sheet->getColumnDimension('B')->setWidth(60);
+
+        $tableStartRow = 10;
+        $headers = $importRun->import_type === 'members'
+            ? ['Name', 'Mitgliedsnummer', 'E-Mail', 'Ort', 'Mitgliedschaft', 'Beitrag', 'Zahlungsart', 'IBAN']
+            : ['Name', 'Typ', 'Kategorie', 'E-Mail', 'Telefon', 'Ort', 'Organisation', 'Ansprechpartner'];
+
+        $sheet->fromArray([$headers], null, 'A' . $tableStartRow);
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle('A' . $tableStartRow . ':' . $lastColumn . $tableStartRow)->applyFromArray($this->spreadsheetHeaderStyle());
+
+        foreach ($records as $index => $record) {
+            $row = $importRun->import_type === 'members'
+                ? $this->qualityIssueMemberRow($record)
+                : $this->qualityIssueContactRow($record);
+
+            $sheet->fromArray([$row], null, 'A' . ($tableStartRow + $index + 1));
+        }
+
+        $highestColumnIndex = Coordinate::columnIndexFromString($sheet->getHighestColumn());
+
+        for ($columnIndex = 1; $columnIndex <= $highestColumnIndex; $columnIndex++) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($columnIndex))->setAutoSize(true);
+        }
+
+        $sheet->setAutoFilter('A' . $tableStartRow . ':' . $lastColumn . max($tableStartRow, $tableStartRow + $records->count()));
+        $sheet->freezePane('A' . ($tableStartRow + 1));
+    }
+
+    private function correctionSheetTitle(string $label, int $position): string
+    {
+        $title = preg_replace('/[\\\\\\/\\?\\*\\[\\]:]/', '', $label) ?: 'Liste';
+
+        return Str::limit($position . ' ' . $title, 31, '');
+    }
+
+    private function qualityIssueMemberRow(Member $record): array
+    {
+        return [
+            $record->full_name,
+            $record->member_id,
+            $record->email,
+            $record->city,
+            $record->membership?->name,
+            $record->membership_amount ? number_format((float) $record->membership_amount, 2, ',', '.') . ' EUR' : '',
+            $record->paymentMethodLabel(),
+            $record->iban,
+        ];
+    }
+
+    private function qualityIssueContactRow(Contact $record): array
+    {
+        return [
+            $record->display_name,
+            $record->contact_type === 'organization' ? 'Organisation' : 'Person',
+            $record->category,
+            $record->email,
+            $record->phone ?: $record->mobile,
+            $record->city,
+            $record->organization ?: $record->company,
+            trim(($record->first_name ?? '') . ' ' . ($record->last_name ?? '')),
+        ];
+    }
+
+    private function spreadsheetHeaderStyle(): array
+    {
+        return [
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '0F172A'],
+            ],
+        ];
+    }
+
+    private function releaseChecksFor(ImportRun $importRun): array
+    {
+        $checks = $this->qualityChecksFor($importRun);
+
+        if ($importRun->import_type === 'contacts') {
+            return [
+                $this->releaseCheck('Kontaktverwaltung', 'Kontakte können gesucht und gefiltert werden.', $this->missingRequiredCount($checks, ['structure']) === 0),
+                $this->releaseCheck('Kommunikation', 'Kontaktverteiler sind nutzbar, einzelne E-Mail-Adressen können fehlen.', $this->missingRequiredCount($checks, ['structure']) === 0),
+                $this->releaseCheck('Sponsoren & Partner', 'Organisationen sollten später noch Ansprechpartner bekommen.', true, 'notice'),
+            ];
+        }
+
+        return [
+            $this->releaseCheck('Mitgliederverwaltung', 'Grunddaten sind importiert und nutzbar.', $this->missingRequiredCount($checks, ['membership']) === 0),
+            $this->releaseCheck('Beitragsrechnung', 'Beiträge und Zahlungsarten müssen vollständig sein.', $this->missingRequiredCount($checks, ['billing']) === 0),
+            $this->releaseCheck('SEPA', 'SEPA-Mitglieder brauchen vollständige Mandatsdaten.', $this->missingRequiredCount($checks, ['sepa']) === 0),
+            $this->releaseCheck('Kommunikation', 'E-Mail-Adressen sollten für Versandaktionen vollständig sein.', $this->missingRequiredCount($checks, ['communication']) === 0),
+        ];
+    }
+
+    private function releaseCheck(string $label, string $description, bool $ready, string $stateWhenReady = 'ready'): array
+    {
+        return [
+            'label' => $label,
+            'description' => $description,
+            'state' => $ready ? $stateWhenReady : 'blocked',
+        ];
+    }
+
+    private function missingRequiredCount(array $checks, array $areas): int
+    {
+        return collect($checks)
+            ->filter(fn ($check) => in_array($check['area'], $areas, true))
+            ->filter(fn ($check) => ($check['weight'] ?? 'required') === 'required')
+            ->sum('count');
+    }
+
     private function buildTemplateSpreadsheet(string $type): Spreadsheet
     {
         $spreadsheet = new Spreadsheet();
@@ -1598,7 +2262,37 @@ class ImportController extends Controller
         }
 
         foreach (['A' => 12, 'B' => 34, 'C' => 34, 'D' => 90] as $column => $width) {
-            $skippedSheet->getColumnDimension($column)->setWidth($width);
+        $skippedSheet->getColumnDimension($column)->setWidth($width);
+        }
+
+        $qualitySheet = $spreadsheet->createSheet();
+        $qualitySheet->setTitle('Qualitätsprüfung');
+        $qualitySheet->fromArray([['Bereich', 'Status', 'Offen', 'Prüfung', 'Hinweis', 'Aktion', 'Beispiele']], null, 'A1');
+        $qualitySheet->getStyle('A1:G1')->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '0F172A'],
+            ],
+        ]);
+
+        foreach ($this->qualityChecksFor($importRun) as $index => $check) {
+            $qualitySheet->fromArray([[
+                $check['area'],
+                $check['state'] === 'ready' ? 'OK' : ($check['state'] === 'notice' ? 'Hinweis' : 'Prüfen'),
+                $check['count'],
+                $check['label'],
+                $check['description'],
+                $check['count'] > 0 ? $check['action'] : '',
+                collect($check['samples'] ?? [])->map(fn ($sample) => trim($sample['label'] . (($sample['meta'] ?? '') ? ' (' . $sample['meta'] . ')' : '')))->implode(' | '),
+            ]], null, 'A' . ($index + 2));
+        }
+
+        foreach (['A' => 18, 'B' => 14, 'C' => 10, 'D' => 32, 'E' => 58, 'F' => 42, 'G' => 70] as $column => $width) {
+            $qualitySheet->getColumnDimension($column)->setWidth($width);
         }
 
         $spreadsheet->setActiveSheetIndex(0);

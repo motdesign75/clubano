@@ -277,9 +277,21 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             ->middleware('tenant.role:Admin')
             ->name('import.report');
 
+        Route::get('/import/{importRun}/bericht/qualitaet/{issue}', [$cls, 'qualityIssue'])
+            ->middleware('tenant.role:Admin')
+            ->name('import.quality-issue');
+
+        Route::get('/import/{importRun}/bericht/qualitaet/{issue}/export', [$cls, 'qualityIssueExport'])
+            ->middleware('tenant.role:Admin')
+            ->name('import.quality-issue.export');
+
         Route::get('/import/{importRun}/bericht/export', [$cls, 'reportExport'])
             ->middleware('tenant.role:Admin')
             ->name('import.report.export');
+
+        Route::get('/import/{importRun}/bericht/korrekturmappe', [$cls, 'correctionsExport'])
+            ->middleware('tenant.role:Admin')
+            ->name('import.corrections-export');
 
         Route::get('/import/kontakte', [$cls, 'showContactUploadForm'])
             ->middleware('tenant.role:Admin')

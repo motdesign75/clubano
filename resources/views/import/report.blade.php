@@ -27,6 +27,10 @@
                     <x-heroicon-o-arrow-down-tray class="h-5 w-5" />
                     Bericht laden
                 </a>
+                <a href="{{ route('import.corrections-export', $importRun) }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-amber-50 px-4 text-sm font-semibold text-amber-950 hover:bg-amber-100">
+                    <x-heroicon-o-clipboard-document-check class="h-5 w-5" />
+                    Korrekturmappe laden
+                </a>
                 <a href="{{ route($config['index_route']) }}" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/20 px-4 text-sm font-semibold text-white hover:bg-white/10">
                     Weiteren Import starten
                 </a>
@@ -58,6 +62,112 @@
             <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Bereitschaft</div>
             <div class="mt-2 text-3xl font-semibold text-slate-950">{{ $readiness['score'] ?? '-' }}{{ isset($readiness['score']) ? '%' : '' }}</div>
             <div class="mt-1 text-sm text-slate-500">vor dem Import</div>
+        </div>
+    </section>
+
+    <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-200 px-5 py-4">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-950">Import-Freigabe</h2>
+                    <p class="mt-1 text-sm text-slate-500">Clubano bewertet, wofür dieser Import bereits bereit ist.</p>
+                </div>
+                <div class="text-sm font-semibold text-slate-500">{{ collect($releaseChecks)->where('state', 'ready')->count() }} von {{ count($releaseChecks) }} bereit</div>
+            </div>
+        </div>
+
+        <div class="grid gap-3 p-5 md:grid-cols-2">
+            @foreach($releaseChecks as $check)
+                @php
+                    $classes = match($check['state']) {
+                        'ready' => 'border-emerald-200 bg-emerald-50 text-emerald-900',
+                        'notice' => 'border-sky-200 bg-sky-50 text-sky-900',
+                        default => 'border-amber-200 bg-amber-50 text-amber-950',
+                    };
+                    $iconColor = match($check['state']) {
+                        'ready' => 'text-emerald-600',
+                        'notice' => 'text-sky-600',
+                        default => 'text-amber-600',
+                    };
+                @endphp
+                <div class="rounded-lg border {{ $classes }} p-4">
+                    <div class="flex items-start gap-3">
+                        @if($check['state'] === 'ready')
+                            <x-heroicon-o-check-circle class="mt-0.5 h-5 w-5 shrink-0 {{ $iconColor }}" />
+                        @elseif($check['state'] === 'notice')
+                            <x-heroicon-o-information-circle class="mt-0.5 h-5 w-5 shrink-0 {{ $iconColor }}" />
+                        @else
+                            <x-heroicon-o-exclamation-triangle class="mt-0.5 h-5 w-5 shrink-0 {{ $iconColor }}" />
+                        @endif
+                        <div>
+                            <div class="font-semibold">{{ $check['label'] }}</div>
+                            <p class="mt-1 text-sm leading-6 opacity-80">{{ $check['description'] }}</p>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </section>
+
+    <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-200 px-5 py-4">
+            <h2 class="text-lg font-semibold text-slate-950">Qualitätsprüfung</h2>
+            <p class="mt-1 text-sm text-slate-500">Diese Punkte solltest du nach dem Import kurz kontrollieren.</p>
+        </div>
+
+        <div class="divide-y divide-slate-100">
+            @foreach($qualityChecks as $check)
+                @php
+                    $badgeClasses = match($check['state']) {
+                        'ready' => 'bg-emerald-50 text-emerald-700',
+                        'notice' => 'bg-sky-50 text-sky-700',
+                        default => 'bg-amber-50 text-amber-700',
+                    };
+                    $statusText = match($check['state']) {
+                        'ready' => 'OK',
+                        'notice' => 'Hinweis',
+                        default => 'Prüfen',
+                    };
+                @endphp
+                <div class="grid gap-3 px-5 py-4 md:grid-cols-[1fr_auto] md:items-center">
+                    <div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h3 class="font-semibold text-slate-950">{{ $check['label'] }}</h3>
+                            <span class="rounded-md px-2 py-1 text-xs font-semibold {{ $badgeClasses }}">{{ $statusText }}</span>
+                        </div>
+                        <p class="mt-1 text-sm leading-6 text-slate-500">{{ $check['description'] }}</p>
+                        @if($check['count'] > 0)
+                            <p class="mt-2 text-sm font-semibold text-slate-700">{{ $check['action'] }}</p>
+                            @if(!empty($check['samples']))
+                                <div class="mt-3 grid gap-2">
+                                    @foreach($check['samples'] as $sample)
+                                        <a href="{{ $sample['url'] }}" class="flex flex-col gap-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm transition hover:border-slate-300 hover:bg-white sm:flex-row sm:items-center sm:justify-between">
+                                            <span class="font-semibold text-slate-800">{{ $sample['label'] }}</span>
+                                            @if($sample['meta'])
+                                                <span class="text-slate-500">{{ $sample['meta'] }}</span>
+                                            @endif
+                                        </a>
+                                    @endforeach
+                                    @if($check['count'] > count($check['samples']))
+                                        <div class="text-xs font-semibold text-slate-500">
+                                            plus {{ $check['count'] - count($check['samples']) }} weitere
+                                        </div>
+                                    @endif
+                                </div>
+                            @endif
+                            <div class="mt-3">
+                                <a href="{{ $check['url'] }}" class="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                    Alle betroffenen Datensätze anzeigen
+                                </a>
+                            </div>
+                        @endif
+                    </div>
+                    <div class="flex items-baseline gap-2 md:justify-end">
+                        <span class="text-2xl font-semibold tabular-nums text-slate-950">{{ $check['count'] }}</span>
+                        <span class="text-sm text-slate-500">offen</span>
+                    </div>
+                </div>
+            @endforeach
         </div>
     </section>
 

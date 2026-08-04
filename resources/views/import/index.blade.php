@@ -58,6 +58,60 @@
         </a>
     </section>
 
+    @php
+        $runsWithOpenWork = $recentImportRuns->filter(fn ($run) => ($qualitySummaries[$run->id]['state'] ?? 'ready') === 'needs_work');
+    @endphp
+
+    <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-200 px-5 py-4">
+            <h2 class="text-lg font-semibold text-slate-950">Offene Nacharbeiten</h2>
+            <p class="mt-1 text-sm text-slate-500">Hier siehst du, welche importierten Daten noch geprüft werden sollten.</p>
+        </div>
+
+        <div class="divide-y divide-slate-100">
+            @forelse($runsWithOpenWork as $run)
+                @php($summary = $qualitySummaries[$run->id])
+                <div class="px-5 py-4">
+                    <div class="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="text-sm font-semibold text-slate-950">{{ $run->type_label }}</span>
+                                <span class="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                                    {{ $summary['required_open'] }} Pflichtangaben offen
+                                </span>
+                                @if($summary['optional_open'] > 0)
+                                    <span class="rounded-md bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700">
+                                        {{ $summary['optional_open'] }} Hinweise
+                                    </span>
+                                @endif
+                            </div>
+                            <div class="mt-1 text-sm text-slate-500">
+                                {{ $run->filename ?: 'Importdatei' }} · {{ $run->created_at->format('d.m.Y H:i') }}
+                            </div>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                @foreach($summary['checks'] as $check)
+                                    <a href="{{ $check['url'] }}" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-white">
+                                        {{ $check['label'] }} · {{ $check['count'] }}
+                                    </a>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2 lg:justify-end">
+                            <a href="{{ route('import.report', $run) }}" class="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                Bericht öffnen
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            @empty
+                <div class="px-5 py-8 text-sm text-slate-500">
+                    Keine offenen Nacharbeiten in den letzten Importen.
+                </div>
+            @endforelse
+        </div>
+    </section>
+
     <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div class="border-b border-slate-200 px-5 py-4">
             <h2 class="text-lg font-semibold text-slate-950">Letzte Importe</h2>

@@ -78,8 +78,85 @@ test('admin can preview and import members from semicolon csv', function () {
     $this->actingAs($admin)->get(route('import.report', $run))
         ->assertOk()
         ->assertSee('Importbericht')
+        ->assertSee('Import-Freigabe')
+        ->assertSee('Qualitätsprüfung')
+        ->assertSee('Beitragsrechnung')
         ->assertSee('WISO MeinVerein')
         ->assertSee('Nächste Schritte');
+});
+
+test('member import report shows actionable quality checks', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake();
+
+    [$tenant, $admin] = createImportTenant('quality-members');
+
+    $csv = "Vorname;Nachname;Zahlungsmethode\nMia;Muster;SEPA\nTom;Test;Überweisung\n";
+    $file = UploadedFile::fake()->createWithContent('mitglieder.csv', $csv);
+
+    $this->actingAs($admin)->post(route('import.mitglieder.preview'), [
+        'csv_file' => $file,
+    ])->assertOk();
+
+    $path = collect(Storage::files('temp'))->first();
+
+    $response = $this->actingAs($admin)->post(route('import.mitglieder.confirm'), [
+        'path' => $path,
+        'mapping' => [
+            0 => 'first_name',
+            1 => 'last_name',
+            2 => 'payment_method',
+        ],
+    ]);
+
+    $run = ImportRun::where('tenant_id', $tenant->id)->where('import_type', 'members')->firstOrFail();
+
+    $response->assertRedirect(route('import.report', $run));
+
+    $this->actingAs($admin)->get(route('import.report', $run))
+        ->assertOk()
+        ->assertSee('Import-Freigabe')
+        ->assertSee('Qualitätsprüfung')
+        ->assertSee('SEPA')
+        ->assertSee('IBAN bei SEPA-Mitgliedern prüfen.')
+        ->assertSee('Mitglieder ohne Beitrag kontrollieren.')
+        ->assertSee('Alle betroffenen Datensätze anzeigen')
+        ->assertSee('Korrekturmappe laden')
+        ->assertSee('Mia Muster')
+        ->assertSee('Tom Test');
+
+    $this->actingAs($admin)->get(route('import.quality-issue', [$run, 'members_without_amount']))
+        ->assertOk()
+        ->assertSee('Korrekturliste')
+        ->assertSee('Beitragsdaten')
+        ->assertSee('Excel herunterladen')
+        ->assertSee('Korrekturliste durchsuchen')
+        ->assertSee('Mia Muster')
+        ->assertSee('Tom Test')
+        ->assertSee('Bearbeiten');
+
+    $this->actingAs($admin)->get(route('import.quality-issue', [$run, 'members_without_amount', 'q' => 'Mia']))
+        ->assertOk()
+        ->assertSee('Mia Muster')
+        ->assertDontSee('Tom Test');
+
+    $this->actingAs($admin)->get(route('import.quality-issue.export', [$run, 'members_without_amount']))
+        ->assertOk()
+        ->assertDownload('clubano-korrekturliste-members_without_amount-' . $run->id . '.xlsx');
+
+    $this->actingAs($admin)->get(route('import.quality-issue.export', [$run, 'members_without_amount', 'q' => 'Mia']))
+        ->assertOk()
+        ->assertDownload('clubano-korrekturliste-members_without_amount-' . $run->id . '.xlsx');
+
+    $this->actingAs($admin)->get(route('import.corrections-export', $run))
+        ->assertOk()
+        ->assertDownload('clubano-korrekturmappe-import-' . $run->id . '.xlsx');
+
+    $this->actingAs($admin)->get(route('import.index'))
+        ->assertOk()
+        ->assertSee('Offene Nacharbeiten')
+        ->assertSee('Pflichtangaben offen')
+        ->assertSee('Beitragsdaten');
 });
 
 test('admin can import contacts and undo the import', function () {
@@ -233,6 +310,64 @@ test('contact import normalizes categories and organization types', function () 
     expect($authority->category)->toBe('authority');
     expect($trainer->contact_type)->toBe('person');
     expect($trainer->category)->toBe('trainer');
+});
+
+test('contact import report shows quality checks for categories and organization contacts', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake();
+
+    [$tenant, $admin] = createImportTenant('quality-contacts');
+
+    $csv = "Organisation;E-Mail;Ort\nDemo Sponsor GmbH;sponsor@example.test;\nKontakt ohne Kategorie;kontakt@example.test;Demostadt\n";
+    $file = UploadedFile::fake()->createWithContent('kontakte.csv', $csv);
+
+    $this->actingAs($admin)->post(route('import.kontakte.preview'), [
+        'csv_file' => $file,
+    ])->assertOk();
+
+    $path = collect(Storage::files('temp'))->first();
+
+    $response = $this->actingAs($admin)->post(route('import.kontakte.confirm'), [
+        'path' => $path,
+        'mapping' => [
+            0 => 'organization',
+            1 => 'email',
+            2 => 'city',
+        ],
+    ]);
+
+    $run = ImportRun::where('tenant_id', $tenant->id)->where('import_type', 'contacts')->firstOrFail();
+
+    $response->assertRedirect(route('import.report', $run));
+
+    $this->actingAs($admin)->get(route('import.report', $run))
+        ->assertOk()
+        ->assertSee('Import-Freigabe')
+        ->assertSee('Qualitätsprüfung')
+        ->assertSee('Kontakte ohne Kategorie prüfen.')
+        ->assertSee('Ansprechpartner bei Organisationen ergänzen.')
+        ->assertSee('Alle betroffenen Datensätze anzeigen')
+        ->assertSee('Demo Sponsor GmbH')
+        ->assertSee('Kontakt ohne Kategorie');
+
+    $this->actingAs($admin)->get(route('import.quality-issue', [$run, 'contacts_without_category']))
+        ->assertOk()
+        ->assertSee('Korrekturliste')
+        ->assertSee('Kategorien')
+        ->assertSee('Excel herunterladen')
+        ->assertSee('Korrekturliste durchsuchen')
+        ->assertSee('Demo Sponsor GmbH')
+        ->assertSee('Kontakt ohne Kategorie')
+        ->assertSee('Bearbeiten');
+
+    $this->actingAs($admin)->get(route('import.quality-issue', [$run, 'contacts_without_category', 'q' => 'Sponsor']))
+        ->assertOk()
+        ->assertSee('Demo Sponsor GmbH')
+        ->assertDontSee('Kontakt ohne Kategorie');
+
+    $this->actingAs($admin)->get(route('import.quality-issue.export', [$run, 'contacts_without_category']))
+        ->assertOk()
+        ->assertDownload('clubano-korrekturliste-contacts_without_category-' . $run->id . '.xlsx');
 });
 
 test('admin can preview and import members from xlsx', function () {
