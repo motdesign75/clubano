@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -30,6 +31,8 @@ class AdminDashboardController extends Controller
             'new_tenants_30_days' => Tenant::where('created_at', '>=', now()->subDays(30))->count(),
             'licensed' => Tenant::whereIn('license_mode', ['beta', 'gifted'])->count(),
             'expired_trials' => Tenant::whereNotNull('trial_ends_at')->where('trial_ends_at', '<', now())->count(),
+            'verification_pending' => Tenant::where('verification_status', 'pending')->count(),
+            'verification_risk' => Tenant::whereIn('verification_status', ['suspicious', 'rejected'])->count(),
         ];
 
         $tenantMetrics = [
@@ -72,6 +75,7 @@ class AdminDashboardController extends Controller
                 $tenant->admin_health = $this->tenantHealth($tenant);
                 $tenant->admin_profile = $this->tenantProfile($tenant);
                 $tenant->admin_feature_state = $this->tenantFeatureState($tenant);
+                $tenant->admin_registration_review = $this->tenantRegistrationReview($tenant);
 
                 return $tenant;
             });
@@ -79,7 +83,7 @@ class AdminDashboardController extends Controller
         $latestTenants = $allTenants->take(12);
 
         $attentionTenants = $allTenants
-            ->filter(fn (Tenant $tenant) => ($tenant->admin_health['level'] ?? 'ok') !== 'ok')
+            ->filter(fn (Tenant $tenant) => ($tenant->admin_health['level'] ?? 'ok') !== 'ok' || ($tenant->admin_registration_review['level'] ?? 'ok') !== 'ok')
             ->take(8)
             ->values();
 
@@ -178,6 +182,7 @@ class AdminDashboardController extends Controller
         $recentImports = $this->tenantRows('import_runs', $tenant, ['id', 'import_type', 'filename', 'imported_count', 'skipped_count', 'created_at'], 'created_at', 6);
         $tenantProfile = $this->tenantProfile($tenant);
         $featureState = $this->tenantFeatureStateFromStats($tenant, $stats);
+        $registrationReview = $this->tenantRegistrationReview($tenant, $stats);
         $lastActivity = $this->lastActivityByTenant([$tenant->id])[(int) $tenant->id] ?? null;
 
         return view('admin.tenants.show', compact(
@@ -189,8 +194,28 @@ class AdminDashboardController extends Controller
             'recentImports',
             'tenantProfile',
             'featureState',
+            'registrationReview',
             'lastActivity'
         ));
+    }
+
+    public function updateVerification(Request $request, Tenant $tenant): RedirectResponse
+    {
+        $validated = $request->validate([
+            'verification_status' => ['required', Rule::in(['pending', 'verified', 'suspicious', 'rejected'])],
+            'verification_notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $tenant->update([
+            'verification_status' => $validated['verification_status'],
+            'verification_notes' => $validated['verification_notes'] ?? null,
+            'verified_at' => $validated['verification_status'] === 'verified' ? now() : null,
+            'verified_by_user_id' => $validated['verification_status'] === 'verified' ? $request->user()->id : null,
+        ]);
+
+        return redirect()
+            ->route('admin.tenants.show', $tenant)
+            ->with('success', 'Vereinsprüfung wurde gespeichert.');
     }
 
     public function updateLicense(Request $request, Tenant $tenant): RedirectResponse
@@ -402,6 +427,14 @@ class AdminDashboardController extends Controller
             || $tenant->subscribed('default')
             || $tenant->trial_ends_at?->isFuture();
 
+        if (in_array($tenant->verification_status, ['suspicious', 'rejected'], true)) {
+            return [
+                'level' => 'risk',
+                'label' => $tenant->verification_status_label,
+                'reason' => 'Diese Registrierung wurde vom Betreiber markiert.',
+            ];
+        }
+
         if (! $hasAccess) {
             return [
                 'level' => 'risk',
@@ -415,6 +448,14 @@ class AdminDashboardController extends Controller
                 'level' => 'risk',
                 'label' => 'Kein Benutzer',
                 'reason' => 'Der Verein hat noch keinen Login.',
+            ];
+        }
+
+        if (($tenant->verification_status ?? 'pending') === 'pending') {
+            return [
+                'level' => 'watch',
+                'label' => 'Prüfung offen',
+                'reason' => 'Der Verein wurde noch nicht als echter Verein bestätigt.',
             ];
         }
 
@@ -506,6 +547,93 @@ class AdminDashboardController extends Controller
                 'value' => $tenant->donation_certificates_enabled ? 'aktiv' : 'aus',
                 'state' => $tenant->donation_certificates_enabled ? 'ok' : 'muted',
             ],
+        ];
+    }
+
+    /**
+     * @param array<string, int>|null $stats
+     * @return array{level: string, label: string, score: int, reasons: array<int, string>, positive: array<int, string>}
+     */
+    private function tenantRegistrationReview(Tenant $tenant, ?array $stats = null): array
+    {
+        $stats ??= $tenant->admin_metrics ?? [];
+        $score = 0;
+        $reasons = [];
+        $positive = [];
+
+        if (($tenant->verification_status ?? 'pending') === 'verified') {
+            $positive[] = 'Vom Betreiber geprüft.';
+        } elseif (in_array($tenant->verification_status, ['suspicious', 'rejected'], true)) {
+            $score += 80;
+            $reasons[] = 'Vom Betreiber als ' . Str::lower($tenant->verification_status_label) . ' markiert.';
+        } else {
+            $score += 15;
+            $reasons[] = 'Prüfung durch Betreiber noch offen.';
+        }
+
+        if (blank($tenant->registration_contact_name)) {
+            $score += 15;
+            $reasons[] = 'Ansprechpartner fehlt.';
+        } else {
+            $positive[] = 'Ansprechpartner: ' . $tenant->registration_contact_name;
+        }
+
+        if (blank($tenant->registration_role)) {
+            $score += 15;
+            $reasons[] = 'Funktion im Verein fehlt.';
+        } else {
+            $positive[] = 'Funktion: ' . $tenant->registration_role;
+        }
+
+        if (blank($tenant->city) && blank($tenant->zip)) {
+            $score += 12;
+            $reasons[] = 'Ort fehlt.';
+        } else {
+            $positive[] = 'Ort vorhanden.';
+        }
+
+        if (blank($tenant->registration_website) && blank($tenant->register_number)) {
+            $score += 12;
+            $reasons[] = 'Kein externer Vereinsnachweis hinterlegt.';
+        } else {
+            $positive[] = 'Externer Nachweis vorhanden.';
+        }
+
+        if (($stats['members'] ?? 0) === 0 && ($stats['imports'] ?? 0) === 0 && $tenant->created_at?->lt(now()->subDays(3))) {
+            $score += 10;
+            $reasons[] = 'Nach drei Tagen noch keine Mitglieder oder Importe.';
+        }
+
+        if (($stats['tasks'] ?? 0) > 0 && ($stats['members'] ?? 0) === 0) {
+            $score += 12;
+            $reasons[] = 'Aufgaben angelegt, aber keine Mitglieder.';
+        }
+
+        if (($stats['accounts'] ?? 0) > 0 && ($stats['members'] ?? 0) === 0) {
+            $score += 12;
+            $reasons[] = 'Finanzen genutzt, aber keine Mitgliederbasis.';
+        }
+
+        if (($stats['members'] ?? 0) > 0 || ($stats['imports'] ?? 0) > 0) {
+            $positive[] = 'Vereinsdaten wurden angelegt oder importiert.';
+        }
+
+        $level = match (true) {
+            $score >= 55 => 'risk',
+            $score >= 20 => 'watch',
+            default => 'ok',
+        };
+
+        return [
+            'level' => $level,
+            'label' => match ($level) {
+                'risk' => 'Genau prüfen',
+                'watch' => 'Prüfung offen',
+                default => 'Plausibel',
+            },
+            'score' => min(100, $score),
+            'reasons' => $reasons,
+            'positive' => $positive,
         ];
     }
 }

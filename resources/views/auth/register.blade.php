@@ -16,19 +16,79 @@
         <form method="POST" action="{{ route('register') }}" class="space-y-5">
             @csrf
 
-            <input type="text" name="website" value="{{ old('website') }}" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true">
+            <input type="text" name="nickname" value="{{ old('nickname') }}" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true">
 
-            <!-- Name -->
+            <!-- Verein -->
             <div class="space-y-1">
-                <label for="name" class="text-xs font-medium text-gray-500">
-                    Name
+                <label for="tenant_name" class="text-xs font-medium text-gray-500">
+                    Vereinsname
                 </label>
-                <input id="name" name="name" type="text" required autofocus
-                    value="{{ old('name') }}"
-                    placeholder="Max Mustermann"
+                <input id="tenant_name" name="tenant_name" type="text" required autofocus
+                    value="{{ old('tenant_name') }}"
+                    placeholder="z. B. SV Musterstadt e.V."
                     class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm" />
-                <x-input-error :messages="$errors->get('name')" class="mt-1 text-xs" />
+                <x-input-error :messages="$errors->get('tenant_name')" class="mt-1 text-xs" />
             </div>
+
+            <!-- Kontaktperson -->
+            <div class="space-y-1">
+                <label for="contact_name" class="text-xs font-medium text-gray-500">
+                    Ansprechpartner
+                </label>
+                <input id="contact_name" name="contact_name" type="text" required
+                    value="{{ old('contact_name') }}"
+                    placeholder="Vorname Nachname"
+                    class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm" />
+                <x-input-error :messages="$errors->get('contact_name')" class="mt-1 text-xs" />
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div class="space-y-1">
+                    <label for="role_in_club" class="text-xs font-medium text-gray-500">
+                        Funktion im Verein
+                    </label>
+                    <input id="role_in_club" name="role_in_club" type="text" required
+                        value="{{ old('role_in_club') }}"
+                        placeholder="z. B. Vorstand, Kasse"
+                        class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm" />
+                    <x-input-error :messages="$errors->get('role_in_club')" class="mt-1 text-xs" />
+                </div>
+
+                <div class="space-y-1">
+                    <label for="club_city" class="text-xs font-medium text-gray-500">
+                        Ort des Vereins
+                    </label>
+                    <input id="club_city" name="club_city" type="text"
+                        value="{{ old('club_city') }}"
+                        placeholder="z. B. Musterstadt"
+                        class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm" />
+                    <x-input-error :messages="$errors->get('club_city')" class="mt-1 text-xs" />
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <label for="club_website" class="text-xs font-medium text-gray-500">
+                    Vereinswebsite oder Social-Media-Seite
+                </label>
+                <input id="club_website" name="club_website" type="url"
+                    value="{{ old('club_website') }}"
+                    placeholder="https://www.verein.de"
+                    class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm" />
+                <x-input-error :messages="$errors->get('club_website')" class="mt-1 text-xs" />
+            </div>
+
+            <fieldset class="space-y-2">
+                <legend class="text-xs font-medium text-gray-500">Wofür interessiert sich der Verein?</legend>
+                <div class="grid gap-2 sm:grid-cols-2">
+                    @foreach(['Mitgliederverwaltung', 'Finanzen', 'Termine', 'Protokolle', 'Import/Umstieg', 'Kommunikation'] as $option)
+                        <label class="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-600">
+                            <input type="checkbox" name="intended_use[]" value="{{ $option }}" class="rounded border-gray-300 text-blue-600" @checked(in_array($option, old('intended_use', []), true))>
+                            <span>{{ $option }}</span>
+                        </label>
+                    @endforeach
+                </div>
+                <x-input-error :messages="$errors->get('intended_use')" class="mt-1 text-xs" />
+            </fieldset>
 
             <!-- E-Mail -->
             <div class="space-y-1">

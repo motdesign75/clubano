@@ -32,9 +32,9 @@
         @foreach([
             ['label' => 'Vereine', 'value' => $platformStats['tenants'], 'hint' => $lifecycleStats['new_30_days'].' neu in 30 Tagen'],
             ['label' => 'Aktiv', 'value' => $lifecycleStats['active_30_days'], 'hint' => 'Aktivität in 30 Tagen'],
-            ['label' => 'Still', 'value' => $lifecycleStats['silent_30_days'], 'hint' => 'ohne aktuelle Nutzung'],
+            ['label' => 'Prüfung offen', 'value' => $platformStats['verification_pending'], 'hint' => 'neue Vereine prüfen'],
+            ['label' => 'Risiko', 'value' => $platformStats['verification_risk'], 'hint' => 'markiert oder abgelehnt'],
             ['label' => 'Mit Ort', 'value' => $lifecycleStats['with_location'], 'hint' => 'Vereinsprofil gepflegt'],
-            ['label' => 'Mitglieder', 'value' => $platformStats['members'], 'hint' => 'plattformweit'],
             ['label' => 'Importe', 'value' => $lifecycleStats['with_imports'], 'hint' => 'Umstieg begonnen'],
         ] as $stat)
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -137,11 +137,13 @@
                             $health = $tenant->admin_health;
                             $profile = $tenant->admin_profile;
                             $features = $tenant->admin_feature_state;
+                            $review = $tenant->admin_registration_review;
                         @endphp
                         <tr class="align-top">
                             <td class="px-5 py-4">
                                 <a href="{{ route('admin.tenants.show', $tenant) }}" class="font-semibold text-slate-950 hover:text-blue-700">{{ $tenant->name ?: 'Unbenannter Verein' }}</a>
                                 <div class="mt-1 text-sm text-slate-500">{{ $profile['age'] }} registriert</div>
+                                <div class="mt-1 text-xs text-slate-500">{{ $tenant->registration_contact_name ?: 'Ansprechpartner fehlt' }}</div>
                                 <div class="mt-1 text-xs text-slate-400">seit {{ optional($tenant->created_at)->format('d.m.Y') }}</div>
                             </td>
                             <td class="px-5 py-4">
@@ -155,7 +157,13 @@
                                 <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $health['level'] === 'ok' ? 'bg-emerald-50 text-emerald-700' : ($health['level'] === 'risk' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700') }}">
                                     {{ $health['label'] }}
                                 </span>
+                                <span class="ml-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $review['level'] === 'ok' ? 'bg-emerald-50 text-emerald-700' : ($review['level'] === 'risk' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700') }}">
+                                    {{ $tenant->verification_status_label }}
+                                </span>
                                 <div class="mt-2 max-w-xs text-xs leading-5 text-slate-500">{{ $health['reason'] }}</div>
+                                @if(!empty($review['reasons']))
+                                    <div class="mt-1 max-w-xs text-xs leading-5 text-slate-500">{{ $review['reasons'][0] }}</div>
+                                @endif
                             </td>
                             <td class="px-5 py-4">
                                 <div class="grid min-w-[300px] grid-cols-3 gap-2">
@@ -174,6 +182,9 @@
                                     @endforeach
                                 </div>
                                 <div class="mt-3 flex min-w-[300px] flex-wrap gap-1.5">
+                                    <span class="rounded-md px-2 py-1 text-[11px] font-semibold {{ $tenant->verification_status_tone === 'ok' ? 'bg-emerald-50 text-emerald-700' : ($tenant->verification_status_tone === 'risk' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700') }}">
+                                        {{ $tenant->verification_status_label }}
+                                    </span>
                                     @foreach($features as $feature)
                                         <span class="rounded-md px-2 py-1 text-[11px] font-semibold {{ $feature['state'] === 'ok' ? 'bg-emerald-50 text-emerald-700' : ($feature['state'] === 'watch' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500') }}">
                                             {{ $feature['label'] }} {{ $feature['value'] }}
@@ -227,6 +238,7 @@
                         <div class="min-w-0">
                             <div class="truncate font-semibold text-slate-950">{{ $tenant->name ?: 'Unbenannter Verein' }}</div>
                             <div class="mt-1 text-sm text-slate-500">{{ $tenant->admin_profile['location'] }} · {{ optional($tenant->created_at)->format('d.m.Y H:i') }}</div>
+                            <div class="mt-1 text-xs text-slate-400">{{ $tenant->verification_status_label }} · {{ $tenant->registration_contact_name ?: 'Ansprechpartner fehlt' }}</div>
                         </div>
                         <span class="text-sm font-semibold text-slate-500">{{ ($tenant->admin_metrics['members'] ?? 0) }} Mitglieder</span>
                     </a>

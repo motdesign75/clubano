@@ -31,29 +31,42 @@ class RegisteredUserController extends Controller
         $this->guardAgainstSpamRegistration($request);
 
         // 🛡️ Eingaben validieren
-        $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+        $validated = $request->validate([
+            'tenant_name' => ['required', 'string', 'min:3', 'max:255'],
+            'contact_name' => ['required', 'string', 'min:3', 'max:255'],
+            'role_in_club' => ['required', 'string', 'max:120'],
+            'club_city' => ['nullable', 'string', 'max:120'],
+            'club_website' => ['nullable', 'url', 'max:255'],
+            'intended_use' => ['nullable', 'array'],
+            'intended_use.*' => ['string', 'max:80'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'terms' => ['accepted'],
-            'website' => ['nullable', 'max:0'],
+            'nickname' => ['nullable', 'max:0'],
         ]);
 
         // 🧩 Neuen Verein (Tenant) automatisch erstellen
         $tenant = Tenant::create([
-            'name' => $request->name,
-            'slug' => Str::slug($request->name) . '-' . Str::random(4),
-            'email' => $request->email,
+            'name' => $validated['tenant_name'],
+            'slug' => Str::slug($validated['tenant_name']) . '-' . Str::random(4),
+            'email' => $validated['email'],
+            'city' => $validated['club_city'] ?? null,
             'invite_code' => Str::uuid(),
+            'verification_status' => 'pending',
+            'registration_contact_name' => $validated['contact_name'],
+            'registration_role' => $validated['role_in_club'],
+            'registration_website' => $validated['club_website'] ?? null,
+            'registration_intent' => collect($validated['intended_use'] ?? [])->filter()->implode(', '),
+            'registration_ip' => $request->ip(),
         ]);
 
         // 👤 Neuen Benutzer anlegen und Tenant zuweisen
         $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
+            'name' => $validated['contact_name'],
+            'email' => $validated['email'],
             'tenant_id' => $tenant->id,
             'role' => User::ROLE_ADMIN,
-            'password' => Hash::make($request->password),
+            'password' => Hash::make($validated['password']),
         ]);
 
         // 📣 Event & Login
@@ -72,7 +85,7 @@ class RegisteredUserController extends Controller
 
     private function guardAgainstSpamRegistration(Request $request): void
     {
-        if (filled((string) $request->input('website'))) {
+        if (filled((string) $request->input('nickname'))) {
             throw ValidationException::withMessages([
                 'email' => 'Die Registrierung konnte nicht verarbeitet werden.',
             ]);
@@ -98,7 +111,7 @@ class RegisteredUserController extends Controller
             ]);
         }
 
-        $name = Str::lower((string) $request->input('name'));
+        $name = Str::lower((string) $request->input('tenant_name'));
         $blockedFragments = collect(config('clubano.registration.blocked_name_fragments', []))
             ->map(fn ($fragment) => Str::lower((string) $fragment))
             ->filter()
@@ -110,6 +123,15 @@ class RegisteredUserController extends Controller
                     'name' => 'Der Name sieht nicht nach einer echten Registrierung aus. Bitte pruefe deine Angaben.',
                 ]);
             }
+        }
+
+        $tenantName = trim((string) $request->input('tenant_name'));
+        $contactName = trim((string) $request->input('contact_name'));
+
+        if ($tenantName !== '' && $contactName !== '' && Str::lower($tenantName) === Str::lower($contactName)) {
+            throw ValidationException::withMessages([
+                'tenant_name' => 'Bitte trage den Vereinsnamen ein, nicht nur den Namen der Kontaktperson.',
+            ]);
         }
     }
 }

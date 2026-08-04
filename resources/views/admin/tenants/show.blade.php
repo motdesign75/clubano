@@ -29,6 +29,44 @@
                     </span>
                 </div>
 
+                <div class="mt-5 rounded-2xl border {{ $registrationReview['level'] === 'risk' ? 'border-rose-200 bg-rose-50' : ($registrationReview['level'] === 'watch' ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50') }} p-4">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <div class="text-sm font-semibold {{ $registrationReview['level'] === 'risk' ? 'text-rose-950' : ($registrationReview['level'] === 'watch' ? 'text-amber-950' : 'text-emerald-950') }}">
+                                Vereinsprüfung: {{ $tenant->verification_status_label }}
+                            </div>
+                            <div class="mt-1 text-sm {{ $registrationReview['level'] === 'risk' ? 'text-rose-800' : ($registrationReview['level'] === 'watch' ? 'text-amber-800' : 'text-emerald-800') }}">
+                                Plausibilitätswert {{ $registrationReview['score'] }} von 100 · {{ $registrationReview['label'] }}
+                            </div>
+                        </div>
+                        @if($tenant->verified_at)
+                            <div class="text-xs font-semibold text-slate-500">geprüft {{ $tenant->verified_at->format('d.m.Y H:i') }}</div>
+                        @endif
+                    </div>
+                    <div class="mt-3 grid gap-3 md:grid-cols-2">
+                        <div>
+                            <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Warnsignale</div>
+                            <ul class="mt-2 space-y-1 text-sm text-slate-700">
+                                @forelse($registrationReview['reasons'] as $reason)
+                                    <li>{{ $reason }}</li>
+                                @empty
+                                    <li>Keine auffälligen Signale.</li>
+                                @endforelse
+                            </ul>
+                        </div>
+                        <div>
+                            <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Plausible Signale</div>
+                            <ul class="mt-2 space-y-1 text-sm text-slate-700">
+                                @forelse($registrationReview['positive'] as $positive)
+                                    <li>{{ $positive }}</li>
+                                @empty
+                                    <li>Noch keine starken Plausibilitätssignale.</li>
+                                @endforelse
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
                 <dl class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     @foreach([
                         'Mitglieder aktiv' => $stats['active_members'],
@@ -49,10 +87,14 @@
                     <h2 class="text-lg font-semibold text-slate-950">Vereinsprofil</h2>
                     <div class="mt-5 divide-y divide-slate-100 text-sm">
                         @foreach([
+                            'Ansprechpartner' => $tenant->registration_contact_name ?: 'fehlt',
+                            'Funktion' => $tenant->registration_role ?: 'fehlt',
                             'Ort' => $tenantProfile['location'],
                             'Adresse' => $tenantProfile['address'],
                             'E-Mail' => $tenantProfile['contact'],
                             'Telefon' => $tenantProfile['phone'],
+                            'Website/Nachweis' => $tenant->registration_website ?: 'fehlt',
+                            'Interesse' => $tenant->registration_intent ?: 'fehlt',
                             'Vereinsregister' => $tenant->register_number ?: 'fehlt',
                         ] as $label => $value)
                             <div class="grid gap-1 py-3 sm:grid-cols-[9rem_1fr]">
@@ -173,6 +215,39 @@
         </main>
 
         <aside class="space-y-6">
+            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 class="text-lg font-semibold text-slate-950">Vereinsprüfung</h2>
+                <div class="mt-3 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <div class="font-semibold text-slate-950">{{ $tenant->verification_status_label }}</div>
+                    <div class="mt-1">Score: {{ $registrationReview['score'] }} von 100</div>
+                    <div class="mt-1">IP: {{ $tenant->registration_ip ?: 'nicht gespeichert' }}</div>
+                </div>
+
+                <form method="POST" action="{{ route('admin.tenants.verification', $tenant) }}" class="mt-4 space-y-3">
+                    @csrf
+                    @method('PATCH')
+
+                    <div>
+                        <label class="text-sm font-medium text-slate-700">Status</label>
+                        <select name="verification_status" class="mt-1 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option value="pending" @selected(($tenant->verification_status ?? 'pending') === 'pending')>Prüfung offen</option>
+                            <option value="verified" @selected($tenant->verification_status === 'verified')>Geprüft</option>
+                            <option value="suspicious" @selected($tenant->verification_status === 'suspicious')>Verdächtig</option>
+                            <option value="rejected" @selected($tenant->verification_status === 'rejected')>Abgelehnt</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="text-sm font-medium text-slate-700">Interne Notiz</label>
+                        <textarea name="verification_notes" rows="4" class="mt-1 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="z. B. Website geprüft, Vorstand angeschrieben, kein Vereinsbezug erkennbar.">{{ old('verification_notes', $tenant->verification_notes) }}</textarea>
+                    </div>
+
+                    <button type="submit" class="w-full rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800">
+                        Prüfung speichern
+                    </button>
+                </form>
+            </section>
+
             <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 class="text-lg font-semibold text-slate-950">Lizenz</h2>
                 <div class="mt-3 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">

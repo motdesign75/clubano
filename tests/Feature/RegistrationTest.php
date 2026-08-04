@@ -21,7 +21,10 @@ test('registration screen cannot be rendered if support is disabled', function (
 
 test('new users can register', function () {
     $response = $this->post('/register', [
-        'name' => 'Test User',
+        'tenant_name' => 'Test Verein e.V.',
+        'contact_name' => 'Test User',
+        'role_in_club' => 'Vorstand',
+        'club_city' => 'Demostadt',
         'email' => 'test@example.com',
         'password' => 'password',
         'password_confirmation' => 'password',

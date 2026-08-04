@@ -68,6 +68,15 @@ class Tenant extends Model
         'license_mode',
         'license_expires_at',
         'is_demo',
+        'verification_status',
+        'verification_notes',
+        'verified_at',
+        'verified_by_user_id',
+        'registration_contact_name',
+        'registration_role',
+        'registration_website',
+        'registration_intent',
+        'registration_ip',
 
         // (Optional / Legacy)
         'stripe_subscription_id',
@@ -77,6 +86,7 @@ class Tenant extends Model
         'trial_ends_at'   => 'datetime',
         'license_expires_at' => 'datetime',
         'is_demo' => 'boolean',
+        'verified_at' => 'datetime',
         'use_letterhead'  => 'boolean',
         'member_exit_mail_enabled' => 'boolean',
         'donation_certificates_enabled' => 'boolean',
@@ -118,6 +128,11 @@ class Tenant extends Model
     public function users()
     {
         return $this->hasMany(User::class);
+    }
+
+    public function verifiedBy()
+    {
+        return $this->belongsTo(User::class, 'verified_by_user_id');
     }
 
     public function donationFreistellungDocument()
@@ -249,6 +264,25 @@ class Tenant extends Model
     public function isDemo(): bool
     {
         return (bool) $this->is_demo;
+    }
+
+    public function getVerificationStatusLabelAttribute(): string
+    {
+        return match ($this->verification_status) {
+            'verified' => 'Geprüft',
+            'suspicious' => 'Verdächtig',
+            'rejected' => 'Abgelehnt',
+            default => 'Prüfung offen',
+        };
+    }
+
+    public function getVerificationStatusToneAttribute(): string
+    {
+        return match ($this->verification_status) {
+            'verified' => 'ok',
+            'suspicious', 'rejected' => 'risk',
+            default => 'watch',
+        };
     }
 
     public function startSelfServeTrialIfEligible(?int $days = null): bool

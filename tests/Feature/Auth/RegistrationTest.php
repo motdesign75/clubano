@@ -14,7 +14,12 @@ test('new users can register', function () {
     $this->travel(5)->seconds();
 
     $response = $this->post('/register', [
-        'name' => 'Test User',
+        'tenant_name' => 'Test Verein e.V.',
+        'contact_name' => 'Test User',
+        'role_in_club' => 'Vorstand',
+        'club_city' => 'Demostadt',
+        'club_website' => 'https://www.testverein.example',
+        'intended_use' => ['Mitgliederverwaltung', 'Finanzen'],
         'email' => 'test@example.com',
         'password' => 'password',
         'password_confirmation' => 'password',
@@ -29,6 +34,13 @@ test('new users can register', function () {
 
     expect($user->role)->toBe(User::ROLE_ADMIN);
     expect($user->isSuperAdmin())->toBeFalse();
+    expect($user->name)->toBe('Test User');
+    expect($tenant->name)->toBe('Test Verein e.V.');
+    expect($tenant->city)->toBe('Demostadt');
+    expect($tenant->verification_status)->toBe('pending');
+    expect($tenant->registration_contact_name)->toBe('Test User');
+    expect($tenant->registration_role)->toBe('Vorstand');
+    expect($tenant->registration_website)->toBe('https://www.testverein.example');
     expect($tenant->license_mode)->toBe('standard');
 });
 

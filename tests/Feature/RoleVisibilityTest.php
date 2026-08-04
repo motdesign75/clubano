@@ -738,10 +738,20 @@ test('superadmin can use the platform cockpit without opening a club dashboard',
     $detail->assertSee($clubTenant->name);
     $detail->assertSee('Vereinsprofil');
     $detail->assertSee('Clubano-Reifegrad');
+    $detail->assertSee('Vereinsprüfung');
     $detail->assertSee('Hauptstraße 12');
     $detail->assertSee('Mitglieder aktiv');
     $detail->assertSee('Probetraining');
     $detail->assertSee($clubAdmin->email);
+
+    $this->actingAs($superadmin)
+        ->patch(route('admin.tenants.verification', $clubTenant), [
+            'verification_status' => 'verified',
+            'verification_notes' => 'Website und Vereinsprofil geprüft.',
+        ])
+        ->assertRedirect(route('admin.tenants.show', $clubTenant));
+
+    expect($clubTenant->fresh()->verification_status)->toBe('verified');
 });
 
 test('operator superadmin is not tied to a club account', function () {

@@ -616,6 +616,7 @@ Route::middleware(['auth', 'superadmin'])->prefix('admin')->group(function () {
     Route::patch('/konto', [AdminDashboardController::class, 'updateAccount'])->name('admin.account.update');
     Route::get('/tenants/{tenant}', [AdminDashboardController::class, 'showTenant'])->name('admin.tenants.show');
     Route::patch('/tenants/{tenant}/license', [AdminDashboardController::class, 'updateLicense'])->name('admin.tenants.license');
+    Route::patch('/tenants/{tenant}/verification', [AdminDashboardController::class, 'updateVerification'])->name('admin.tenants.verification');
     Route::delete('/tenants/{tenant}', [AdminDashboardController::class, 'destroyTenant'])->name('admin.tenants.destroy');
 });
 
