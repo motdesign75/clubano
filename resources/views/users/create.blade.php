@@ -20,6 +20,12 @@
             </div>
         @endif
 
+        @if(session('error'))
+            <div class="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                {{ session('error') }}
+            </div>
+        @endif
+
         <form method="POST" action="{{ route('users.store') }}" class="mt-6 space-y-5">
             @csrf
 

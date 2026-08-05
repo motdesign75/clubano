@@ -152,13 +152,13 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     // Dokumentenzentrale
     $when($C.'DocumentController', function($cls){
         Route::get('/dokumente', [$cls, 'index'])->middleware('tenant.role:Lesen')->name('documents.index');
-        Route::get('/dokumente/neu', [$cls, 'create'])->middleware('tenant.role:Mitarbeiter')->name('documents.create');
-        Route::post('/dokumente', [$cls, 'store'])->middleware('tenant.role:Mitarbeiter')->name('documents.store');
+        Route::get('/dokumente/neu', [$cls, 'create'])->middleware('tenant.role:documents')->name('documents.create');
+        Route::post('/dokumente', [$cls, 'store'])->middleware('tenant.role:documents')->name('documents.store');
         Route::get('/dokumente/{document}', [$cls, 'show'])->middleware('tenant.role:Lesen')->name('documents.show');
         Route::get('/dokumente/{document}/download', [$cls, 'download'])->middleware('tenant.role:Lesen')->name('documents.download');
-        Route::get('/dokumente/{document}/bearbeiten', [$cls, 'edit'])->middleware('tenant.role:Mitarbeiter')->name('documents.edit');
-        Route::put('/dokumente/{document}', [$cls, 'update'])->middleware('tenant.role:Mitarbeiter')->name('documents.update');
-        Route::patch('/dokumente/{document}/archivieren', [$cls, 'archive'])->middleware('tenant.role:Mitarbeiter')->name('documents.archive');
+        Route::get('/dokumente/{document}/bearbeiten', [$cls, 'edit'])->middleware('tenant.role:documents')->name('documents.edit');
+        Route::put('/dokumente/{document}', [$cls, 'update'])->middleware('tenant.role:documents')->name('documents.update');
+        Route::patch('/dokumente/{document}/archivieren', [$cls, 'archive'])->middleware('tenant.role:documents')->name('documents.archive');
         Route::delete('/dokumente/{document}', [$cls, 'destroy'])->middleware('tenant.role:Admin')->name('documents.destroy');
     });
 
@@ -192,6 +192,8 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::middleware('tenant.role:Admin')->group(function () use ($cls) {
             Route::get('/users', [$cls, 'index'])->name('users.index');
             Route::get('/users/create', [$cls, 'create'])->name('users.create');
+            Route::get('/users/invite-members', [$cls, 'inviteMembers'])->name('users.invite-members');
+            Route::post('/users/invite-members', [$cls, 'storeMemberInvites'])->name('users.invite-members.store');
             Route::get('/users/{user}/edit', [$cls, 'edit'])->name('users.edit');
             Route::post('/users', [$cls, 'store'])->name('users.store');
             Route::put('/users/{user}', [$cls, 'update'])->name('users.update');
@@ -319,34 +321,39 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
 
     // Veranstaltungen
     $when($C.'EventController', function($cls){
-        Route::get('/events/aushang', [$cls, 'poster'])->middleware('tenant.role:Mitarbeiter')->name('events.poster');
-        Route::post('/events/aushang/druck', [$cls, 'posterPrint'])->middleware('tenant.role:Mitarbeiter')->name('events.poster.print');
-        Route::post('/events/aushang/pdf', [$cls, 'posterPdf'])->middleware('tenant.role:Mitarbeiter')->name('events.poster.pdf');
-        Route::get('/events/anwesenheit/auswertung', [$cls, 'attendanceReport'])->middleware('tenant.role:Mitarbeiter')->name('events.attendance.report');
-        Route::resource('events', $cls)->except(['show'])->middleware('tenant.role:Lesen')->where(['event' => '[0-9]+']);
+        Route::get('/events/aushang', [$cls, 'poster'])->middleware('tenant.role:events')->name('events.poster');
+        Route::post('/events/aushang/druck', [$cls, 'posterPrint'])->middleware('tenant.role:events')->name('events.poster.print');
+        Route::post('/events/aushang/pdf', [$cls, 'posterPdf'])->middleware('tenant.role:events')->name('events.poster.pdf');
+        Route::get('/events/anwesenheit/auswertung', [$cls, 'attendanceReport'])->middleware('tenant.role:events')->name('events.attendance.report');
+        Route::get('/events', [$cls, 'index'])->middleware('tenant.role:Lesen')->name('events.index');
+        Route::get('/events/create', [$cls, 'create'])->middleware('tenant.role:events')->name('events.create');
+        Route::post('/events', [$cls, 'store'])->middleware('tenant.role:events')->name('events.store');
+        Route::get('/events/{event}/edit', [$cls, 'edit'])->middleware('tenant.role:events')->whereNumber('event')->name('events.edit');
+        Route::match(['put', 'patch'], '/events/{event}', [$cls, 'update'])->middleware('tenant.role:events')->whereNumber('event')->name('events.update');
+        Route::delete('/events/{event}', [$cls, 'destroy'])->middleware('tenant.role:events')->whereNumber('event')->name('events.destroy');
         Route::get('/events/{event}', [$cls, 'show'])->whereNumber('event')->name('events.show');
-        Route::get('/events/{event}/teilnehmer', [$cls, 'participants'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.manage');
-        Route::get('/events/{event}/teilnehmer/export', [$cls, 'participantsExport'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.export');
-        Route::get('/events/{event}/teilnehmer/drucken', [$cls, 'participantsPrint'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.print');
-        Route::get('/events/{event}/teilnehmer/pdf', [$cls, 'participantsPdf'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.pdf');
-        Route::patch('/events/{event}/buchungen/{booking}', [$cls, 'updateBooking'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.bookings.update');
-        Route::patch('/events/{event}/buchungen/{booking}/teilnehmer/{participant}', [$cls, 'updateParticipant'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.update');
-        Route::patch('/events/{event}/teilnehmer/kostenfrei', [$cls, 'markParticipantsFree'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.participants.mark-free');
-        Route::post('/events/{event}/teilnehmer/nachtragen', [$cls, 'storeManualParticipant'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.manual-participants.store');
-        Route::get('/events/{event}/dienstplan', [$cls, 'schedule'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.manage');
-        Route::get('/events/{event}/dienstplan/druck', [$cls, 'schedulePrint'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.print');
-        Route::get('/events/{event}/dienstplan/pdf', [$cls, 'schedulePdf'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.pdf');
-        Route::get('/events/{event}/dienstplan/mitglieder-pdf', [$cls, 'scheduleMemberPdf'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.member-pdf');
-        Route::get('/events/{event}/dienstplan/export', [$cls, 'scheduleExport'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.schedule.export');
-        Route::post('/events/{event}/einladungen/synchronisieren', [$cls, 'syncInvitations'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.invitations.sync');
-        Route::post('/events/{event}/einladungen/mail', [$cls, 'sendInvitationMails'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.invitations.mail');
-        Route::put('/events/{event}/einladungen', [$cls, 'updateInvitations'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.invitations.update');
-        Route::put('/events/{event}/anwesenheit', [$cls, 'updateAttendance'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.attendance.update');
-        Route::post('/events/{event}/shifts', [$cls, 'storeShift'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.shifts.store');
-        Route::put('/events/{event}/shifts/{shift}', [$cls, 'updateShift'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.shifts.update');
-        Route::delete('/events/{event}/shifts/{shift}', [$cls, 'destroyShift'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.shifts.destroy');
-        Route::post('/events/{event}/shifts/{shift}/assignments', [$cls, 'storeShiftAssignment'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.shifts.assignments.store');
-        Route::delete('/events/{event}/shifts/{shift}/assignments/{assignment}', [$cls, 'destroyShiftAssignment'])->middleware('tenant.role:Mitarbeiter')->whereNumber('event')->name('events.shifts.assignments.destroy');
+        Route::get('/events/{event}/teilnehmer', [$cls, 'participants'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.manage');
+        Route::get('/events/{event}/teilnehmer/export', [$cls, 'participantsExport'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.export');
+        Route::get('/events/{event}/teilnehmer/drucken', [$cls, 'participantsPrint'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.print');
+        Route::get('/events/{event}/teilnehmer/pdf', [$cls, 'participantsPdf'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.pdf');
+        Route::patch('/events/{event}/buchungen/{booking}', [$cls, 'updateBooking'])->middleware('tenant.role:events')->whereNumber('event')->name('events.bookings.update');
+        Route::patch('/events/{event}/buchungen/{booking}/teilnehmer/{participant}', [$cls, 'updateParticipant'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.update');
+        Route::patch('/events/{event}/teilnehmer/kostenfrei', [$cls, 'markParticipantsFree'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.mark-free');
+        Route::post('/events/{event}/teilnehmer/nachtragen', [$cls, 'storeManualParticipant'])->middleware('tenant.role:events')->whereNumber('event')->name('events.manual-participants.store');
+        Route::get('/events/{event}/dienstplan', [$cls, 'schedule'])->middleware('tenant.role:events')->whereNumber('event')->name('events.schedule.manage');
+        Route::get('/events/{event}/dienstplan/druck', [$cls, 'schedulePrint'])->middleware('tenant.role:events')->whereNumber('event')->name('events.schedule.print');
+        Route::get('/events/{event}/dienstplan/pdf', [$cls, 'schedulePdf'])->middleware('tenant.role:events')->whereNumber('event')->name('events.schedule.pdf');
+        Route::get('/events/{event}/dienstplan/mitglieder-pdf', [$cls, 'scheduleMemberPdf'])->middleware('tenant.role:events')->whereNumber('event')->name('events.schedule.member-pdf');
+        Route::get('/events/{event}/dienstplan/export', [$cls, 'scheduleExport'])->middleware('tenant.role:events')->whereNumber('event')->name('events.schedule.export');
+        Route::post('/events/{event}/einladungen/synchronisieren', [$cls, 'syncInvitations'])->middleware('tenant.role:events')->whereNumber('event')->name('events.invitations.sync');
+        Route::post('/events/{event}/einladungen/mail', [$cls, 'sendInvitationMails'])->middleware('tenant.role:events')->whereNumber('event')->name('events.invitations.mail');
+        Route::put('/events/{event}/einladungen', [$cls, 'updateInvitations'])->middleware('tenant.role:events')->whereNumber('event')->name('events.invitations.update');
+        Route::put('/events/{event}/anwesenheit', [$cls, 'updateAttendance'])->middleware('tenant.role:events')->whereNumber('event')->name('events.attendance.update');
+        Route::post('/events/{event}/shifts', [$cls, 'storeShift'])->middleware('tenant.role:events')->whereNumber('event')->name('events.shifts.store');
+        Route::put('/events/{event}/shifts/{shift}', [$cls, 'updateShift'])->middleware('tenant.role:events')->whereNumber('event')->name('events.shifts.update');
+        Route::delete('/events/{event}/shifts/{shift}', [$cls, 'destroyShift'])->middleware('tenant.role:events')->whereNumber('event')->name('events.shifts.destroy');
+        Route::post('/events/{event}/shifts/{shift}/assignments', [$cls, 'storeShiftAssignment'])->middleware('tenant.role:events')->whereNumber('event')->name('events.shifts.assignments.store');
+        Route::delete('/events/{event}/shifts/{shift}/assignments/{assignment}', [$cls, 'destroyShiftAssignment'])->middleware('tenant.role:events')->whereNumber('event')->name('events.shifts.assignments.destroy');
     });
 
     $when($C.'EventCategoryController', function($cls){
@@ -380,13 +387,13 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
 
     // Finanzen – Konten und Buchungen
     $when($C.'AccountController', function($cls){
-        Route::middleware('tenant.role:Admin')->group(function () use ($cls) {
+        Route::middleware('tenant.role:finance')->group(function () use ($cls) {
             Route::resource('accounts', $cls)->except(['show']);
         });
     });
 
     $when($C.'TransactionController', function($cls){
-        Route::middleware('tenant.role:Admin')->group(function () use ($cls) {
+        Route::middleware('tenant.role:finance')->group(function () use ($cls) {
             Route::resource('transactions', $cls)->except(['show', 'destroy']);
             Route::get('/kassenbuch', [$cls, 'cashbook'])->name('transactions.cashbook');
             Route::get('/kassenbuch/drucken', [$cls, 'cashbookPrint'])->name('transactions.cashbook.print');
@@ -401,7 +408,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         });
     });
 
-    Route::middleware('tenant.role:Admin')->group(function () {
+    Route::middleware('tenant.role:finance')->group(function () {
         Route::get('/spenden/einstellungen', [DonationController::class, 'settings'])->name('donations.settings');
         Route::put('/spenden/einstellungen', [DonationController::class, 'updateSettings'])->name('donations.settings.update');
         Route::get('/spenden', [DonationController::class, 'index'])->name('donations.index');
@@ -417,14 +424,14 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     // Belege
     $when($C.'ReceiptController', function($cls){
         Route::get('/beleg/{path}', [$cls, 'show'])
-            ->middleware('tenant.role:Admin')
+            ->middleware('tenant.role:finance')
             ->where('path', '.*')
             ->name('receipts.show');
 		 });
 
     // Beitragsrechnungen
     $when($C.'InvoiceController', function($cls){
-        Route::middleware('tenant.role:Admin')->group(function () use ($cls) {
+        Route::middleware('tenant.role:finance')->group(function () use ($cls) {
             Route::resource('invoices', $cls)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
             Route::get('/invoices/{invoice}/pdf', [$cls, 'pdf'])->name('invoices.pdf');
             Route::post('/invoices/{invoice}/send', [$cls, 'sendMail'])->name('invoices.send');
@@ -438,7 +445,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     });
 
     $when($C.'BudgetPlanController', function($cls){
-        Route::middleware('tenant.role:Admin')->group(function () use ($cls) {
+        Route::middleware('tenant.role:finance')->group(function () use ($cls) {
             Route::get('/haushaltsplan', [$cls, 'index'])->name('budgets.index');
             Route::get('/haushaltsplan/neu', [$cls, 'create'])->name('budgets.create');
             Route::post('/haushaltsplan', [$cls, 'store'])->name('budgets.store');
@@ -460,16 +467,16 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     // Protokolle
     $when($C.'ProtocolController', function($cls){
         Route::get('/protokolle', [$cls, 'index'])->name('protocols.index');
-        Route::get('/protokolle/neu', [$cls, 'create'])->middleware('tenant.role:Mitarbeiter')->name('protocols.create');
-        Route::post('/protokolle', [$cls, 'store'])->middleware('tenant.role:Mitarbeiter')->name('protocols.store');
+        Route::get('/protokolle/neu', [$cls, 'create'])->middleware('tenant.role:protocols')->name('protocols.create');
+        Route::post('/protokolle', [$cls, 'store'])->middleware('tenant.role:protocols')->name('protocols.store');
         Route::get('/protokolle/{protocol}', [$cls, 'show'])->name('protocols.show');
         Route::get('/protokolle/{protocol}/anhaenge/{index}', [$cls, 'attachment'])->middleware('tenant.role:Lesen')->name('protocols.attachments.show');
-        Route::get('/protokolle/{protocol}/bearbeiten', [$cls, 'edit'])->middleware('tenant.role:Mitarbeiter')->name('protocols.edit');
-        Route::put('/protokolle/{protocol}', [$cls, 'update'])->middleware('tenant.role:Mitarbeiter')->name('protocols.update');
-        Route::patch('/protokolle/{protocol}/archivieren', [$cls, 'archive'])->middleware('tenant.role:Mitarbeiter')->name('protocols.archive');
-        Route::delete('/protokolle/{protocol}', [$cls, 'destroy'])->middleware('tenant.role:Mitarbeiter')->name('protocols.destroy');
-        Route::get('/protokolle/{protocol}/mail', [$cls, 'mailForm'])->middleware('tenant.role:Mitarbeiter')->name('protocols.mail.form');
-        Route::post('/protokolle/{protocol}/mail', [$cls, 'sendMail'])->middleware('tenant.role:Mitarbeiter')->name('protocols.mail.send');
+        Route::get('/protokolle/{protocol}/bearbeiten', [$cls, 'edit'])->middleware('tenant.role:protocols')->name('protocols.edit');
+        Route::put('/protokolle/{protocol}', [$cls, 'update'])->middleware('tenant.role:protocols')->name('protocols.update');
+        Route::patch('/protokolle/{protocol}/archivieren', [$cls, 'archive'])->middleware('tenant.role:protocols')->name('protocols.archive');
+        Route::delete('/protokolle/{protocol}', [$cls, 'destroy'])->middleware('tenant.role:protocols')->name('protocols.destroy');
+        Route::get('/protokolle/{protocol}/mail', [$cls, 'mailForm'])->middleware('tenant.role:protocols')->name('protocols.mail.form');
+        Route::post('/protokolle/{protocol}/mail', [$cls, 'sendMail'])->middleware('tenant.role:protocols')->name('protocols.mail.send');
     });
 
     // SMTP-Einstellungen
@@ -504,19 +511,19 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
 
     // Oeffentliche Formulare
     Route::get('/formulare', [PublicFormController::class, 'index'])->name('forms.index');
-    Route::get('/formulare/neu', [PublicFormController::class, 'create'])->middleware('tenant.role:Mitarbeiter')->name('forms.create');
-    Route::post('/formulare', [PublicFormController::class, 'store'])->middleware('tenant.role:Mitarbeiter')->name('forms.store');
-    Route::get('/formulare/{form}/bearbeiten', [PublicFormController::class, 'edit'])->middleware('tenant.role:Mitarbeiter')->name('forms.edit');
-    Route::put('/formulare/{form}', [PublicFormController::class, 'update'])->middleware('tenant.role:Mitarbeiter')->name('forms.update');
-    Route::delete('/formulare/{form}', [PublicFormController::class, 'destroy'])->middleware('tenant.role:Mitarbeiter')->name('forms.destroy');
+    Route::get('/formulare/neu', [PublicFormController::class, 'create'])->middleware('tenant.role:forms')->name('forms.create');
+    Route::post('/formulare', [PublicFormController::class, 'store'])->middleware('tenant.role:forms')->name('forms.store');
+    Route::get('/formulare/{form}/bearbeiten', [PublicFormController::class, 'edit'])->middleware('tenant.role:forms')->name('forms.edit');
+    Route::put('/formulare/{form}', [PublicFormController::class, 'update'])->middleware('tenant.role:forms')->name('forms.update');
+    Route::delete('/formulare/{form}', [PublicFormController::class, 'destroy'])->middleware('tenant.role:forms')->name('forms.destroy');
     Route::get('/formulare/{form}/antworten', [PublicFormController::class, 'submissions'])->name('forms.submissions');
-    Route::get('/formulare/{form}/antworten/export', [PublicFormController::class, 'export'])->middleware('tenant.role:Mitarbeiter')->name('forms.export');
-    Route::patch('/formulare/{form}/antworten/{submission}/stornieren', [PublicFormController::class, 'cancelSubmission'])->middleware('tenant.role:Mitarbeiter')->name('forms.submissions.cancel');
-    Route::delete('/formulare/{form}/antworten/{submission}', [PublicFormController::class, 'destroySubmission'])->middleware('tenant.role:Mitarbeiter')->name('forms.submissions.destroy');
-    Route::post('/formulare/{form}/felder', [PublicFormController::class, 'storeField'])->middleware('tenant.role:Mitarbeiter')->name('forms.fields.store');
-    Route::put('/formulare/{form}/felder/{field}', [PublicFormController::class, 'updateField'])->middleware('tenant.role:Mitarbeiter')->name('forms.fields.update');
-    Route::patch('/formulare/{form}/felder/{field}/move', [PublicFormController::class, 'moveField'])->middleware('tenant.role:Mitarbeiter')->name('forms.fields.move');
-    Route::delete('/formulare/{form}/felder/{field}', [PublicFormController::class, 'destroyField'])->middleware('tenant.role:Mitarbeiter')->name('forms.fields.destroy');
+    Route::get('/formulare/{form}/antworten/export', [PublicFormController::class, 'export'])->middleware('tenant.role:forms')->name('forms.export');
+    Route::patch('/formulare/{form}/antworten/{submission}/stornieren', [PublicFormController::class, 'cancelSubmission'])->middleware('tenant.role:forms')->name('forms.submissions.cancel');
+    Route::delete('/formulare/{form}/antworten/{submission}', [PublicFormController::class, 'destroySubmission'])->middleware('tenant.role:forms')->name('forms.submissions.destroy');
+    Route::post('/formulare/{form}/felder', [PublicFormController::class, 'storeField'])->middleware('tenant.role:forms')->name('forms.fields.store');
+    Route::put('/formulare/{form}/felder/{field}', [PublicFormController::class, 'updateField'])->middleware('tenant.role:forms')->name('forms.fields.update');
+    Route::patch('/formulare/{form}/felder/{field}/move', [PublicFormController::class, 'moveField'])->middleware('tenant.role:forms')->name('forms.fields.move');
+    Route::delete('/formulare/{form}/felder/{field}', [PublicFormController::class, 'destroyField'])->middleware('tenant.role:forms')->name('forms.fields.destroy');
 });
 
 Route::get('/f/{slug}', [PublicFormController::class, 'publicShow'])->name('forms.public.show');
@@ -565,49 +572,49 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () {
 // Buchungsjournal
 Route::middleware(['auth', 'tenant.subscribed'])->group(function () {
     Route::get('/sepa', [SepaExportController::class, 'create'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('sepa.create');
 
     Route::post('/sepa/export', [SepaExportController::class, 'export'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('sepa.export');
 
     Route::get('/sepa/{sepaRun}/download', [SepaExportController::class, 'download'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('sepa.download');
 
     Route::get('/transactions/journal', [TransactionController::class, 'journal'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('transactions.journal');
 
     Route::patch('/transactions/{transaction}/journal-check', [TransactionController::class, 'updateJournalCheck'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('transactions.journal-check');
 
     Route::get('/transactions/journal/pdf', [TransactionController::class, 'journalPdf'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('transactions.journal.pdf');
 
     Route::get('/transactions/eur', [TransactionController::class, 'eur'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('transactions.eur');
 
     Route::get('/transactions/koerperschaftsteuer', [TransactionController::class, 'corporationTax'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('transactions.corporation-tax');
 
     // Payment
     Route::get('/invoices/{invoice}/payment', [PaymentController::class, 'create'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('payments.create');
 
     Route::post('/invoices/{invoice}/payment', [PaymentController::class, 'store'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('payments.store');
 
     // Mitgliederabrechnung
     Route::post('/invoices/generate-memberships', [InvoiceController::class, 'generateMembershipInvoices'])
-        ->middleware('tenant.role:Admin')
+        ->middleware('tenant.role:finance')
         ->name('invoices.generateMemberships');
 });
 

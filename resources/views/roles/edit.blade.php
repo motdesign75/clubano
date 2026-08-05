@@ -9,10 +9,10 @@
             Rollenmodell
         </span>
         <div class="space-y-2">
-            <h1 class="text-3xl font-semibold tracking-tight text-slate-900">So einfach wie moeglich</h1>
+            <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Klar wie ein Vorstandsposten</h1>
             <p class="max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
-                Clubano arbeitet bewusst mit drei festen Vereinsrollen. Keine Checkbox-Matrix, keine versteckten Sonderfaelle.
-                Jede Rolle ist sofort verstaendlich und laesst sich in der Benutzerverwaltung direkt zuweisen.
+                Clubano arbeitet mit festen, verständlichen Rollen. Keine Checkbox-Matrix, keine versteckten Sonderfälle:
+                Kasse sieht Finanzen, Schriftführung arbeitet an Protokollen und Dokumenten, Veranstaltungen plant Termine.
             </p>
         </div>
     </div>
@@ -29,7 +29,14 @@
                 <div class="space-y-3">
                     <div class="flex items-center justify-between gap-3">
                         <h2 class="text-xl font-semibold text-slate-900">{{ $profile['label'] }}</h2>
-                        <span class="rounded-full px-3 py-1 text-xs font-semibold {{ $profile['role'] === \App\Models\User::ROLE_ADMIN ? 'bg-indigo-100 text-indigo-700' : ($profile['role'] === \App\Models\User::ROLE_STAFF ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700') }}">
+                        <span class="rounded-full px-3 py-1 text-xs font-semibold {{ match($profile['role']) {
+                            \App\Models\User::ROLE_ADMIN => 'bg-indigo-100 text-indigo-700',
+                            \App\Models\User::ROLE_STAFF => 'bg-amber-100 text-amber-700',
+                            \App\Models\User::ROLE_TREASURER => 'bg-emerald-100 text-emerald-700',
+                            \App\Models\User::ROLE_SECRETARY => 'bg-sky-100 text-sky-700',
+                            \App\Models\User::ROLE_EVENT_MANAGER => 'bg-violet-100 text-violet-700',
+                            default => 'bg-slate-100 text-slate-700',
+                        } }}">
                             {{ $profile['role'] }}
                         </span>
                     </div>
@@ -63,10 +70,11 @@
     <section class="rounded-3xl border border-slate-200 bg-slate-950 p-6 text-white shadow-sm">
         <div class="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-start">
             <div class="space-y-3">
-                <h2 class="text-xl font-semibold">Empfohlener Standard fuer Vereine</h2>
+                <h2 class="text-xl font-semibold">Empfohlener Standard für Vereine</h2>
                 <p class="max-w-3xl text-sm leading-6 text-slate-300">
                     In den meisten Vereinen reicht dieses Modell vollkommen:
-                    ein oder zwei Admins fuer Leitung und Finanzen, mehrere Bearbeiten-Nutzer fuer den Alltag und Lesen fuer Vorstand, Beirat oder Kassenpruefung.
+                    ein oder zwei Admins für Leitung und Einstellungen, Kasse für Finanzen, Schriftführung für Protokolle,
+                    Veranstaltungen für Termine und Lesen für Vorstand, Beirat oder Kassenprüfung.
                 </p>
             </div>
 
@@ -74,7 +82,9 @@
                 <div class="text-sm font-semibold text-white">Merksatz</div>
                 <ul class="mt-3 space-y-2 text-sm text-slate-300">
                     <li>`Admin` verwaltet den Verein.</li>
-                    <li>`Bearbeiten` erledigt die Arbeit.</li>
+                    <li>`Kasse` verwaltet Geld, Rechnungen und SEPA.</li>
+                    <li>`Schriftführung` verwaltet Protokolle und Dokumente.</li>
+                    <li>`Veranstaltungen` verwaltet Termine, Dienstpläne und Anwesenheiten.</li>
                     <li>`Lesen` schaut nur hinein.</li>
                 </ul>
             </div>

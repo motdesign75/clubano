@@ -16,6 +16,9 @@ class User extends Authenticatable implements MustVerifyEmail
     public const ROLE_SUPERADMIN = 'SAdmin';
     public const ROLE_ADMIN = 'Admin';
     public const ROLE_STAFF = 'Bearbeiten';
+    public const ROLE_TREASURER = 'Kasse';
+    public const ROLE_SECRETARY = 'Schriftführung';
+    public const ROLE_EVENT_MANAGER = 'Veranstaltungen';
     public const ROLE_VIEWER = 'Lesen';
 
     /**
@@ -29,6 +32,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'password',
         'tenant_id',
         'role',
+        'email_verified_at',
         'last_login_at',
         'last_login_ip',
         'update_notice_dismissed_version',
@@ -108,6 +112,9 @@ class User extends Authenticatable implements MustVerifyEmail
                 self::ROLE_SUPERADMIN,
                 self::ROLE_ADMIN,
                 self::ROLE_STAFF,
+                self::ROLE_TREASURER,
+                self::ROLE_SECRETARY,
+                self::ROLE_EVENT_MANAGER,
                 self::ROLE_VIEWER,
             ];
         }
@@ -116,6 +123,9 @@ class User extends Authenticatable implements MustVerifyEmail
             return [
                 self::ROLE_ADMIN,
                 self::ROLE_STAFF,
+                self::ROLE_TREASURER,
+                self::ROLE_SECRETARY,
+                self::ROLE_EVENT_MANAGER,
                 self::ROLE_VIEWER,
             ];
         }
@@ -146,6 +156,9 @@ class User extends Authenticatable implements MustVerifyEmail
             self::ROLE_SUPERADMIN => self::ROLE_SUPERADMIN,
             self::ROLE_ADMIN => self::ROLE_ADMIN,
             self::ROLE_STAFF, 'Mitarbeiter', 'User' => self::ROLE_STAFF,
+            self::ROLE_TREASURER, 'Kassierer', 'Kassenwart', 'Schatzmeister', 'Schatzmeisterin' => self::ROLE_TREASURER,
+            self::ROLE_SECRETARY, 'Schriftführer', 'Schriftführerin', 'Schriftwart' => self::ROLE_SECRETARY,
+            self::ROLE_EVENT_MANAGER, 'Eventmanager', 'Veranstaltungsleitung' => self::ROLE_EVENT_MANAGER,
             self::ROLE_VIEWER => self::ROLE_VIEWER,
             default => self::ROLE_VIEWER,
         };
@@ -157,6 +170,9 @@ class User extends Authenticatable implements MustVerifyEmail
             self::ROLE_SUPERADMIN => 'Superadmin',
             self::ROLE_ADMIN => 'Admin',
             self::ROLE_STAFF => 'Bearbeiten',
+            self::ROLE_TREASURER => 'Kasse',
+            self::ROLE_SECRETARY => 'Schriftführung',
+            self::ROLE_EVENT_MANAGER => 'Veranstaltungen',
             self::ROLE_VIEWER => 'Lesen',
             default => 'Unbekannt',
         };
@@ -165,10 +181,13 @@ class User extends Authenticatable implements MustVerifyEmail
     public static function roleDescriptionFor(?string $role): string
     {
         return match (self::normalizeRole($role)) {
-            self::ROLE_SUPERADMIN => 'Plattformweite Vollrechte fuer Systembetrieb und Sonderfaelle.',
+            self::ROLE_SUPERADMIN => 'Plattformweite Vollrechte für Systembetrieb und Sonderfälle.',
             self::ROLE_ADMIN => 'Verwaltet Verein, Benutzer, Finanzen und alle sensiblen Einstellungen.',
             self::ROLE_STAFF => 'Arbeitet operativ mit Mitgliedern, Veranstaltungen, Formularen, Vorlagen und Protokollen.',
-            self::ROLE_VIEWER => 'Darf Inhalte ansehen, aber nichts aendern.',
+            self::ROLE_TREASURER => 'Verwaltet Finanzen, Rechnungen, Beiträge, SEPA, Spenden und Auswertungen.',
+            self::ROLE_SECRETARY => 'Erstellt und verwaltet Protokolle, Dokumente und schriftliche Vereinsarbeit.',
+            self::ROLE_EVENT_MANAGER => 'Plant Veranstaltungen, Dienstpläne, Teilnehmerlisten und Anwesenheiten.',
+            self::ROLE_VIEWER => 'Darf Inhalte ansehen, aber nichts ändern.',
             default => 'Keine Beschreibung hinterlegt.',
         };
     }
@@ -201,12 +220,45 @@ class User extends Authenticatable implements MustVerifyEmail
                 ],
             ],
             [
+                'role' => self::ROLE_TREASURER,
+                'label' => self::roleLabelFor(self::ROLE_TREASURER),
+                'description' => self::roleDescriptionFor(self::ROLE_TREASURER),
+                'access' => [
+                    ['area' => 'Finanzen, Rechnungen, SEPA, Spenden, Haushaltsplan', 'level' => 'voll'],
+                    ['area' => 'Mitglieder und Kontakte', 'level' => 'lesen'],
+                    ['area' => 'Veranstaltungen, Protokolle, Dokumente', 'level' => 'lesen'],
+                    ['area' => 'Benutzer, Verein und Einstellungen', 'level' => 'kein_zugriff'],
+                ],
+            ],
+            [
+                'role' => self::ROLE_SECRETARY,
+                'label' => self::roleLabelFor(self::ROLE_SECRETARY),
+                'description' => self::roleDescriptionFor(self::ROLE_SECRETARY),
+                'access' => [
+                    ['area' => 'Protokolle und Dokumente', 'level' => 'bearbeiten'],
+                    ['area' => 'Mitglieder, Kontakte und Veranstaltungen', 'level' => 'lesen'],
+                    ['area' => 'Finanzen, Rechnungen, SEPA', 'level' => 'kein_zugriff'],
+                    ['area' => 'Benutzer, Verein und Einstellungen', 'level' => 'kein_zugriff'],
+                ],
+            ],
+            [
+                'role' => self::ROLE_EVENT_MANAGER,
+                'label' => self::roleLabelFor(self::ROLE_EVENT_MANAGER),
+                'description' => self::roleDescriptionFor(self::ROLE_EVENT_MANAGER),
+                'access' => [
+                    ['area' => 'Veranstaltungen, Dienstpläne, Teilnehmer und Anwesenheit', 'level' => 'bearbeiten'],
+                    ['area' => 'Mitglieder und Kontakte', 'level' => 'lesen'],
+                    ['area' => 'Finanzen, Rechnungen, SEPA', 'level' => 'kein_zugriff'],
+                    ['area' => 'Benutzer, Verein und Einstellungen', 'level' => 'kein_zugriff'],
+                ],
+            ],
+            [
                 'role' => self::ROLE_VIEWER,
                 'label' => self::roleLabelFor(self::ROLE_VIEWER),
                 'description' => self::roleDescriptionFor(self::ROLE_VIEWER),
                 'access' => [
                     ['area' => 'Inhalte im Verein', 'level' => 'lesen'],
-                    ['area' => 'Aenderungen, Versand, Finanzen, Einstellungen', 'level' => 'kein_zugriff'],
+                    ['area' => 'Änderungen, Versand, Finanzen, Einstellungen', 'level' => 'kein_zugriff'],
                 ],
             ],
         ];
@@ -220,6 +272,9 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             self::ROLE_VIEWER => 10,
             self::ROLE_STAFF => 20,
+            self::ROLE_TREASURER => 20,
+            self::ROLE_SECRETARY => 20,
+            self::ROLE_EVENT_MANAGER => 20,
             self::ROLE_ADMIN => 30,
             self::ROLE_SUPERADMIN => 40,
         ];
@@ -237,42 +292,135 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function isStaff(): bool
     {
-        return $this->hasRoleAtLeast(self::ROLE_STAFF);
+        return in_array(self::normalizeRole($this->role), [
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_STAFF,
+        ], true);
     }
 
     public function canManageMembers(): bool
     {
-        return $this->hasRoleAtLeast(self::ROLE_STAFF);
+        return $this->hasAnyRole([
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_STAFF,
+        ]);
     }
 
     public function canManageForms(): bool
     {
-        return $this->hasRoleAtLeast(self::ROLE_STAFF);
+        return $this->hasAnyRole([
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_STAFF,
+            self::ROLE_EVENT_MANAGER,
+        ]);
     }
 
     public function canManageProjects(): bool
     {
-        return $this->hasRoleAtLeast(self::ROLE_STAFF);
+        return $this->hasAnyRole([
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_STAFF,
+        ]);
     }
 
     public function canManageContacts(): bool
     {
-        return $this->hasRoleAtLeast(self::ROLE_STAFF);
+        return $this->hasAnyRole([
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_STAFF,
+        ]);
     }
 
     public function canManageProtocols(): bool
     {
-        return $this->hasRoleAtLeast(self::ROLE_STAFF);
+        return $this->hasAnyRole([
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_STAFF,
+            self::ROLE_SECRETARY,
+        ]);
+    }
+
+    public function canManageDocuments(): bool
+    {
+        return $this->hasAnyRole([
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_STAFF,
+            self::ROLE_SECRETARY,
+        ]);
     }
 
     public function canManageFinance(): bool
     {
-        return $this->hasRoleAtLeast(self::ROLE_ADMIN);
+        return $this->hasAnyRole([
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_TREASURER,
+        ]);
     }
 
     public function canManageTenantSettings(): bool
     {
-        return $this->hasRoleAtLeast(self::ROLE_ADMIN);
+        return $this->hasAnyRole([
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+        ]);
+    }
+
+    public function canManageEvents(): bool
+    {
+        return $this->hasAnyRole([
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_STAFF,
+            self::ROLE_EVENT_MANAGER,
+        ]);
+    }
+
+    public function hasPermission(string $permission): bool
+    {
+        return match ($permission) {
+            'members' => $this->canManageMembers(),
+            'contacts' => $this->canManageContacts(),
+            'forms' => $this->canManageForms(),
+            'projects' => $this->canManageProjects(),
+            'protocols' => $this->canManageProtocols(),
+            'documents' => $this->canManageDocuments(),
+            'events' => $this->canManageEvents(),
+            'finance' => $this->canManageFinance(),
+            'settings' => $this->canManageTenantSettings(),
+            default => self::isKnownRole($permission) && $this->hasRoleAtLeast($permission),
+        };
+    }
+
+    public static function isKnownRole(?string $role): bool
+    {
+        return in_array($role, [
+            self::ROLE_SUPERADMIN,
+            self::ROLE_ADMIN,
+            self::ROLE_STAFF,
+            'Mitarbeiter',
+            'User',
+            self::ROLE_TREASURER,
+            'Kassierer',
+            'Kassenwart',
+            'Schatzmeister',
+            'Schatzmeisterin',
+            self::ROLE_SECRETARY,
+            'Schriftführer',
+            'Schriftführerin',
+            'Schriftwart',
+            self::ROLE_EVENT_MANAGER,
+            'Eventmanager',
+            'Veranstaltungsleitung',
+            self::ROLE_VIEWER,
+        ], true);
     }
 
     public function roleLabel(): string
@@ -287,5 +435,13 @@ class User extends Authenticatable implements MustVerifyEmail
         $hierarchy = self::roleHierarchy();
 
         return ($hierarchy[$currentRole] ?? 0) >= ($hierarchy[$requiredRole] ?? PHP_INT_MAX);
+    }
+
+    /**
+     * @param array<int, string> $roles
+     */
+    public function hasAnyRole(array $roles): bool
+    {
+        return in_array(self::normalizeRole($this->role), $roles, true);
     }
 }

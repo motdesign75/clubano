@@ -804,3 +804,35 @@ test('authenticated users can dismiss the update notice', function () {
         ->assertOk()
         ->assertDontSee('Clubano wurde aktualisiert');
 });
+
+test('specialist board roles only access their own work areas', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [, $treasurer] = createTenantWithUser(User::ROLE_TREASURER, 'role-treasurer');
+    [, $secretary] = createTenantWithUser(User::ROLE_SECRETARY, 'role-secretary');
+    [, $eventManager] = createTenantWithUser(User::ROLE_EVENT_MANAGER, 'role-event-manager');
+
+    $this->actingAs($treasurer)
+        ->get(route('transactions.index'))
+        ->assertOk();
+
+    $this->actingAs($treasurer)
+        ->get(route('protocols.create'))
+        ->assertForbidden();
+
+    $this->actingAs($secretary)
+        ->get(route('protocols.create'))
+        ->assertOk();
+
+    $this->actingAs($secretary)
+        ->get(route('transactions.index'))
+        ->assertForbidden();
+
+    $this->actingAs($eventManager)
+        ->get(route('events.create'))
+        ->assertOk();
+
+    $this->actingAs($eventManager)
+        ->get(route('transactions.index'))
+        ->assertForbidden();
+});

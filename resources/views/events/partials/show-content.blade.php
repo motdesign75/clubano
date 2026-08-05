@@ -1,5 +1,5 @@
 @php
-    $canManageEvents = ! $isPublicPreview && (auth()->user()?->isStaff() ?? false);
+    $canManageEvents = ! $isPublicPreview && (auth()->user()?->canManageEvents() ?? false);
     $eventHasEnded = $event->end?->isPast() ?? false;
 @endphp
 

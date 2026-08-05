@@ -22,8 +22,8 @@ class EnsureTenantRole
                 ->with('error', 'Betreiberkonten arbeiten nicht in einem Vereinsbereich.');
         }
 
-        if (! $user->hasRoleAtLeast($requiredRole)) {
-            abort(403, 'Deine Rolle reicht fuer diesen Bereich nicht aus.');
+        if (! $user->hasPermission($requiredRole)) {
+            abort(403, 'Deine Rolle reicht für diesen Bereich nicht aus.');
         }
 
         return $next($request);

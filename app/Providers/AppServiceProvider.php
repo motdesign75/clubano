@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\ServiceProvider;
@@ -35,6 +36,26 @@ class AppServiceProvider extends ServiceProvider
                 ->action('E-Mail-Adresse bestätigen', $url)
                 ->line('Erst danach kannst du Clubano vollständig nutzen.')
                 ->line('Falls du diese Registrierung nicht selbst vorgenommen hast, musst du nichts weiter tun.');
+        });
+
+        ResetPassword::toMailUsing(function (object $notifiable, string $token) {
+            $email = $notifiable->getEmailForPasswordReset();
+            $tenantName = $notifiable->tenant?->name;
+            $url = url(route('password.reset', [
+                'token' => $token,
+                'email' => $email,
+            ], false));
+
+            return (new MailMessage)
+                ->subject('Dein Zugang zu Clubano')
+                ->greeting('Willkommen bei Clubano!')
+                ->line($tenantName
+                    ? "du wurdest eingeladen, in Clubano für {$tenantName} mitzuarbeiten."
+                    : 'du kannst jetzt deinen Clubano-Zugang einrichten.')
+                ->line('Lege über den folgenden Button dein persönliches Passwort fest. Danach kannst du dich direkt anmelden.')
+                ->action('Passwort festlegen', $url)
+                ->line('Der Link ist aus Sicherheitsgründen zeitlich begrenzt.')
+                ->line('Falls du diese Nachricht nicht erwartet hast, kannst du sie einfach ignorieren.');
         });
 
         /**

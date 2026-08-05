@@ -33,7 +33,7 @@
                 || request()->routeIs('invoices.*')
                 || request()->routeIs('payments.*'),
             'icon' => 'banknotes',
-            'minRole' => 'Admin',
+            'minRole' => 'finance',
         ],
     ];
 
@@ -96,15 +96,15 @@
             'route' => route('accounts.index'),
             'active' => request()->routeIs('accounts.*'),
             'icon' => 'clipboard-document-list',
-            'minRole' => 'Admin',
+            'minRole' => 'finance',
         ],
         [
             'label' => 'Kassenbuch',
-            'hint' => 'Barbewegungen erfassen und pruefen',
+            'hint' => 'Barbewegungen erfassen und prüfen',
             'route' => route('transactions.cashbook'),
             'active' => request()->routeIs('transactions.cashbook'),
             'icon' => 'banknotes',
-            'minRole' => 'Admin',
+            'minRole' => 'finance',
         ],
         [
             'label' => 'Geldbewegungen',
@@ -112,7 +112,7 @@
             'route' => route('transactions.index'),
             'active' => request()->routeIs('transactions.index') || request()->routeIs('transactions.create') || request()->routeIs('transactions.edit') || request()->routeIs('transactions.cancel*'),
             'icon' => 'document-text',
-            'minRole' => 'Admin',
+            'minRole' => 'finance',
         ],
         [
             'label' => 'Auswertungen',
@@ -120,7 +120,7 @@
             'route' => route('transactions.corporation-tax'),
             'active' => request()->routeIs('transactions.summary') || request()->routeIs('transactions.eur') || request()->routeIs('transactions.journal*') || request()->routeIs('transactions.corporation-tax'),
             'icon' => 'chart-bar',
-            'minRole' => 'Admin',
+            'minRole' => 'finance',
         ],
         [
             'label' => 'Spenden',
@@ -128,7 +128,7 @@
             'route' => route('donations.index'),
             'active' => request()->routeIs('donations.*'),
             'icon' => 'gift',
-            'minRole' => 'Admin',
+            'minRole' => 'finance',
         ],
         [
             'label' => 'Rechnungen',
@@ -136,7 +136,7 @@
             'route' => route('invoices.index'),
             'active' => request()->routeIs('invoices.*'),
             'icon' => 'receipt-percent',
-            'minRole' => 'Admin',
+            'minRole' => 'finance',
         ],
         [
             'label' => 'Haushaltsplan',
@@ -144,7 +144,7 @@
             'route' => route('budgets.index'),
             'active' => request()->routeIs('budgets.*'),
             'icon' => 'presentation-chart-line',
-            'minRole' => 'Admin',
+            'minRole' => 'finance',
         ],
     ];
 
@@ -163,7 +163,7 @@
             'route' => route('events.create'),
             'active' => request()->routeIs('events.create'),
             'icon' => 'plus',
-            'minRole' => 'Mitarbeiter',
+            'minRole' => 'events',
         ],
         [
             'label' => 'Aktivitätsarten',
@@ -179,7 +179,7 @@
             'route' => route('events.attendance.report'),
             'active' => request()->routeIs('events.attendance.report'),
             'icon' => 'chart-bar',
-            'minRole' => 'Mitarbeiter',
+            'minRole' => 'events',
         ],
         [
             'label' => 'Aushang',
@@ -187,7 +187,7 @@
             'route' => route('events.poster'),
             'active' => request()->routeIs('events.poster') || request()->routeIs('events.poster.print') || request()->routeIs('events.poster.pdf'),
             'icon' => 'printer',
-            'minRole' => 'Mitarbeiter',
+            'minRole' => 'events',
         ],
     ];
 
@@ -290,7 +290,7 @@
     $navGroups = collect($navGroups)
         ->map(function ($items) use ($user) {
             return collect($items)
-                ->filter(fn ($item) => ($user?->hasRoleAtLeast($item['minRole'] ?? 'Lesen')) ?? false)
+                ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
                 ->values()
                 ->all();
         })
@@ -298,12 +298,12 @@
         ->all();
 
     $calendarNav = collect($calendarNav)
-        ->filter(fn ($item) => ($user?->hasRoleAtLeast($item['minRole'] ?? 'Lesen')) ?? false)
+        ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
         ->values()
         ->all();
 
     $personalNav = collect($personalNav)
-        ->filter(fn ($item) => ($user?->hasRoleAtLeast($item['minRole'] ?? 'Lesen')) ?? false)
+        ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
         ->values()
         ->all();
 @endphp

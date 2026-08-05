@@ -6,12 +6,21 @@
 <div class="max-w-6xl mx-auto space-y-6">
 
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 class="text-2xl font-bold text-gray-800">👥 Benutzer</h1>
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">Benutzer</h1>
+            <p class="mt-1 text-sm text-slate-500">Zugänge, Rollen und Verantwortung im Verein.</p>
+        </div>
 
-        <a href="{{ route('users.create') }}"
-           class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700">
-            ➕ Neuer Benutzer
-        </a>
+        <div class="flex flex-col gap-2 sm:flex-row">
+            <a href="{{ route('users.invite-members') }}"
+               class="inline-flex items-center justify-center rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white shadow hover:bg-slate-800">
+                Mitglieder einladen
+            </a>
+            <a href="{{ route('users.create') }}"
+               class="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+                Benutzer manuell anlegen
+            </a>
+        </div>
     </div>
 
     @if(session('success'))

@@ -4,7 +4,7 @@
 
 @section('content')
 @php
-    $canManageDocuments = auth()->user()?->isStaff() ?? false;
+    $canManageDocuments = auth()->user()?->canManageDocuments() ?? false;
     $canDeleteDocuments = auth()->user()?->isAdmin() ?? false;
     $contextLinks = [
         ['label' => 'Mitglied', 'value' => $document->member?->full_name, 'route' => $document->member ? route('members.show', $document->member) : null],

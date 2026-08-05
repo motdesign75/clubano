@@ -50,7 +50,7 @@
     $conflictCount = $events->where('conflict_count', '>', 0)->count();
     $responsibleCount = $events->filter(fn ($event) => filled($event->responsible_name))->count();
     $nextEvent = $events->sortBy('start')->first(fn ($event) => $event->start->greaterThanOrEqualTo(now()));
-    $canManageEvents = auth()->user()?->isStaff() ?? false;
+    $canManageEvents = auth()->user()?->canManageEvents() ?? false;
     $hasActiveFilters = filled($filters['category_id']) || filled($filters['responsible_user_id']) || filled($filters['search']) || $filters['conflicts_only'];
     $availableDayCount = ($availableDays ?? collect())->count();
 @endphp

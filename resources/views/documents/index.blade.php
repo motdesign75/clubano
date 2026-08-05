@@ -4,7 +4,7 @@
 
 @section('content')
 @php
-    $canManageDocuments = auth()->user()?->isStaff() ?? false;
+    $canManageDocuments = auth()->user()?->canManageDocuments() ?? false;
     $hasActiveFilters = filled($search) || filled($category) || filled($status) || filled($due);
     $documentsCollection = $documents->getCollection();
 @endphp

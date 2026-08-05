@@ -10,11 +10,15 @@ class SubscriptionController extends Controller
 {
     public function index()
     {
+        abort_unless(auth()->user()?->canManageTenantSettings(), 403);
+
         return view('subscription.index');
     }
 
     public function checkout(Request $request)
 {
+    abort_unless(auth()->user()?->canManageTenantSettings(), 403);
+
     $request->validate([
         'price_id' => 'required|string',
     ]);
