@@ -73,6 +73,39 @@ test('members index hides management actions for viewers and shows them for staf
     $staffResponse->assertSee('Archivieren');
 });
 
+test('members index search finds organization members without searching their contact person', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'members-organization-search');
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Sabine',
+        'last_name' => 'Ansprechpartner',
+        'organization' => 'Stadt Sarstedt',
+        'email' => 'stadt@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Michael',
+        'last_name' => 'Alves',
+        'organization' => 'Sarstedter Wohnkultur',
+        'email' => 'wohnkultur@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $response = $this->actingAs($staff)->get(route('members.index', [
+        'search' => 'Stadt',
+        'display' => 'organization',
+    ]));
+
+    $response->assertOk();
+    $response->assertSee('Stadt Sarstedt');
+    $response->assertDontSee('Sarstedter Wohnkultur');
+});
+
 test('member detail hides sensitive finance data for viewers and shows it for admins', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

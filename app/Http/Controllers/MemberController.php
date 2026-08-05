@@ -51,9 +51,16 @@ class MemberController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
                   ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('organization', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%")
                   ->orWhere('member_id', 'like', "%{$search}%")
-                  ->orWhere('city', 'like', "%{$search}%");
+                  ->orWhere('street', 'like', "%{$search}%")
+                  ->orWhere('address_addition', 'like', "%{$search}%")
+                  ->orWhere('zip', 'like', "%{$search}%")
+                  ->orWhere('city', 'like', "%{$search}%")
+                  ->orWhere('country', 'like', "%{$search}%")
+                  ->orWhere('care_of', 'like', "%{$search}%")
+                  ->orWhereHas('membership', fn ($membershipQuery) => $membershipQuery->where('name', 'like', "%{$search}%"));
             });
         }
 
