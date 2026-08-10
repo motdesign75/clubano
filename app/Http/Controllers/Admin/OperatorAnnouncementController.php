@@ -7,7 +7,9 @@ use App\Models\OperatorAnnouncement;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -39,7 +41,7 @@ class OperatorAnnouncementController extends Controller
         return view('admin.announcements.create', [
             'tenantOptions' => $tenantOptions,
             'recipientFilters' => $this->recipientFilters(),
-            'previewHtml' => $this->renderBody($body),
+            'previewHtml' => $this->sanitizeBody($body),
             'defaultBody' => $body,
         ]);
     }
@@ -57,7 +59,7 @@ class OperatorAnnouncementController extends Controller
             'tenant_ids.*' => ['integer', Rule::exists('tenants', 'id')],
         ]);
 
-        $bodyHtml = $this->renderBody($validated['body_markdown']);
+        $bodyHtml = $this->sanitizeBody($validated['body_markdown']);
         $recipientQuery = $this->recipientQuery($validated['recipient_filter'], $validated['tenant_ids'] ?? []);
         $recipients = $recipientQuery->get();
 
@@ -132,6 +134,19 @@ class OperatorAnnouncementController extends Controller
             ->with('success', "Betreiber-Mitteilung versendet: {$sent} erfolgreich, {$failed} fehlgeschlagen.");
     }
 
+    public function uploadImage(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'file' => ['required', 'image', 'max:5120'],
+        ]);
+
+        $path = $validated['file']->store('operator-announcements/' . now()->format('Y/m'), 'public');
+
+        return response()->json([
+            'location' => asset(Storage::url($path)),
+        ]);
+    }
+
     /**
      * @return array<string, string>
      */
@@ -196,14 +211,15 @@ class OperatorAnnouncementController extends Controller
             ->orderBy('name');
     }
 
-    private function renderBody(string $body): string
+    private function sanitizeBody(string $body): string
     {
-        $html = Str::markdown(e($body), [
-            'html_input' => 'strip',
-            'allow_unsafe_links' => false,
-        ]);
+        $html = preg_replace('#<(script|style|iframe|object|embed|form|meta|link)\b[^>]*>.*?</\1>#is', '', $body) ?? '';
+        $html = preg_replace('#<(script|style|iframe|object|embed|form|meta|link)\b[^>]*\/?>#is', '', $html) ?? '';
+        $html = preg_replace('/\s+on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $html) ?? '';
+        $html = preg_replace('/(href|src)\s*=\s*([\'"])\s*javascript:[^\'"]*\2/i', '$1="#"', $html) ?? '';
+        $html = preg_replace('/(href|src)\s*=\s*([\'"])\s*data:(?!image\/(?:png|jpeg|jpg|gif|webp);base64,)[^\'"]*\2/i', '$1="#"', $html) ?? '';
 
-        return (string) $html;
+        return strip_tags($html, '<p><br><strong><b><em><i><u><ul><ol><li><a><h2><h3><blockquote><table><thead><tbody><tr><th><td><img><figure><figcaption><span>');
     }
 
     private function sendMail(string $email, ?string $name, ?Tenant $tenant, ?User $recipient, OperatorAnnouncement $announcement): void
@@ -222,20 +238,21 @@ class OperatorAnnouncementController extends Controller
     private function defaultBody(): string
     {
         return <<<MARKDOWN
-Hallo,
+<p>Hallo,</p>
 
-wir haben Clubano verbessert, damit die Arbeit im Verein einfacher und sicherer wird.
+<p>wir haben Clubano verbessert, damit die Arbeit im Verein einfacher und sicherer wird.</p>
 
-## Neu in Clubano
+<h2>Neu in Clubano</h2>
 
-- Punkt eins kurz und klar beschreiben
-- Punkt zwei mit konkretem Nutzen
-- Punkt drei, falls wichtig
+<ul>
+    <li>Punkt eins kurz und klar beschreiben</li>
+    <li>Punkt zwei mit konkretem Nutzen</li>
+    <li>Punkt drei, falls wichtig</li>
+</ul>
 
-**Unser Tipp:** Öffne Clubano und schau dir die neuen Möglichkeiten direkt im Verein an.
+<p><strong>Unser Tipp:</strong> Öffne Clubano und schau dir die neuen Möglichkeiten direkt im Verein an.</p>
 
-Viele Grüße
-Maik-Oliver von Clubano
+<p>Viele Grüße<br>Maik-Oliver von Clubano</p>
 MARKDOWN;
     }
 }

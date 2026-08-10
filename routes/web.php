@@ -633,6 +633,7 @@ Route::middleware(['auth', 'superadmin'])->prefix('admin')->group(function () {
     Route::get('/mitteilungen', [OperatorAnnouncementController::class, 'index'])->name('admin.announcements.index');
     Route::get('/mitteilungen/neu', [OperatorAnnouncementController::class, 'create'])->name('admin.announcements.create');
     Route::post('/mitteilungen', [OperatorAnnouncementController::class, 'store'])->name('admin.announcements.store');
+    Route::post('/mitteilungen/bilder', [OperatorAnnouncementController::class, 'uploadImage'])->name('admin.announcements.images.store');
     Route::get('/tenants/{tenant}', [AdminDashboardController::class, 'showTenant'])->name('admin.tenants.show');
     Route::patch('/tenants/{tenant}/license', [AdminDashboardController::class, 'updateLicense'])->name('admin.tenants.license');
     Route::patch('/tenants/{tenant}/verification', [AdminDashboardController::class, 'updateVerification'])->name('admin.tenants.verification');

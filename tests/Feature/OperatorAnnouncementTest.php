@@ -34,9 +34,9 @@ test('operator superadmin can open the announcement editor', function () {
     $this->actingAs($operator)
         ->get(route('admin.announcements.create'))
         ->assertOk()
-        ->assertSee('Update verfassen')
-        ->assertSee('Fett')
-        ->assertSee('Live-Vorschau')
+        ->assertSee('Update gestalten')
+        ->assertSee('Bilder werden direkt in Clubano gespeichert')
+        ->assertSee('Vorschau')
         ->assertSee('Testmail an mich');
 });
 
@@ -79,7 +79,7 @@ test('operator announcements are sent only to selected club admins', function ()
         ->post(route('admin.announcements.store'), [
             'action' => 'send',
             'subject' => 'Clubano Update',
-            'body_markdown' => "Hallo,\n\n**Wichtiges Update**\n\n- Punkt eins",
+            'body_markdown' => '<p>Hallo,</p><p><strong>Wichtiges Update</strong></p><ul><li>Punkt eins</li></ul>',
             'cta_label' => 'Clubano öffnen',
             'cta_url' => 'https://app.clubano.de',
             'recipient_filter' => 'selected',
