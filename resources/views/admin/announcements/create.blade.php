@@ -2,6 +2,10 @@
 
 @section('title', 'Betreiber-Mitteilung erstellen')
 
+@php
+    $selectedRecipientUserIds = collect(old('recipient_user_ids', []))->map(fn ($id) => (string) $id)->all();
+@endphp
+
 @section('content')
 <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
     <div class="mb-6">
@@ -91,7 +95,7 @@
                 <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Empfänger</p>
                     <h2 class="mt-2 text-xl font-semibold text-slate-950">Versand steuern</h2>
-                    <p class="mt-2 text-sm leading-6 text-slate-500">Nur Vereinsadmins werden angeschrieben. Mitglieder bleiben außen vor.</p>
+                    <p class="mt-2 text-sm leading-6 text-slate-500">Du entscheidest bewusst, ob ein Filter greift oder einzelne Vereinsadmins angeschrieben werden.</p>
 
                     <div class="mt-5">
                         <label for="recipient_filter" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Auswahl</label>
@@ -102,16 +106,52 @@
                         </select>
                     </div>
 
-                    <div class="mt-5">
-                        <label for="tenant_ids" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Manuelle Vereine</label>
-                        <select id="tenant_ids" name="tenant_ids[]" multiple size="8" class="mt-2 w-full rounded-2xl border-slate-200 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                            @foreach($tenantOptions as $tenant)
-                                <option value="{{ $tenant->id }}" @selected(in_array($tenant->id, old('tenant_ids', [])))>
-                                    {{ $tenant->name }}{{ $tenant->city ? ' · '.$tenant->city : '' }}
-                                </option>
+                    <div id="selected-recipient-panel" class="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">Konkrete Empfänger</div>
+                                <p class="mt-1 text-sm leading-5 text-blue-950">Bei manueller Auswahl werden nur angehakte Personen angeschrieben.</p>
+                            </div>
+                            <div class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-800">
+                                <span id="selected-recipient-count">0</span> ausgewählt
+                            </div>
+                        </div>
+
+                        <label for="recipient-search" class="sr-only">Empfänger suchen</label>
+                        <input id="recipient-search" type="search" placeholder="Verein, Name oder E-Mail suchen" class="mt-4 w-full rounded-2xl border-blue-100 bg-white text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+
+                        <div id="recipient-list" class="mt-4 max-h-[34rem] space-y-3 overflow-y-auto pr-1">
+                            @foreach($recipientOptions as $tenant)
+                                <section class="recipient-tenant rounded-2xl border border-slate-200 bg-white p-3" data-search="{{ Str::lower($tenant->name.' '.$tenant->city.' '.$tenant->users->pluck('name')->join(' ').' '.$tenant->users->pluck('email')->join(' ')) }}">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div class="min-w-0">
+                                            <h3 class="truncate text-sm font-semibold text-slate-950">{{ $tenant->name }}</h3>
+                                            <p class="mt-0.5 text-xs text-slate-500">{{ $tenant->city ?: 'Ort nicht hinterlegt' }} · {{ $tenant->users->count() }} Admins</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-3 space-y-2">
+                                        @foreach($tenant->users as $recipient)
+                                            <label class="recipient-row flex cursor-pointer items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 transition hover:border-blue-200 hover:bg-blue-50" data-search="{{ Str::lower($recipient->name.' '.$recipient->email) }}">
+                                                <input type="checkbox"
+                                                       name="recipient_user_ids[]"
+                                                       value="{{ $recipient->id }}"
+                                                       @checked(in_array((string) $recipient->id, $selectedRecipientUserIds, true))
+                                                       class="recipient-checkbox mt-1 rounded border-slate-300 text-blue-700 focus:ring-blue-500">
+                                                <span class="min-w-0">
+                                                    <span class="block truncate text-sm font-semibold text-slate-900">{{ $recipient->name ?: 'Ohne Namen' }}</span>
+                                                    <span class="block truncate text-xs text-slate-500">{{ $recipient->email }}</span>
+                                                </span>
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                </section>
                             @endforeach
-                        </select>
-                        <p class="mt-2 text-xs leading-5 text-slate-500">Nur relevant, wenn „Manuell ausgewählte Vereine“ gewählt ist.</p>
+                        </div>
+
+                        <p class="mt-3 text-xs leading-5 text-blue-900">
+                            Ein Verein kann mehrere Admins haben. Deshalb wählst du hier bewusst die konkrete Person aus.
+                        </p>
                     </div>
                 </section>
 
@@ -142,7 +182,7 @@
                     <button name="action" value="test" class="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50">
                         Testmail an mich
                     </button>
-                    <button name="action" value="send" class="inline-flex min-h-12 items-center justify-center rounded-2xl bg-blue-700 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800" onclick="return confirm('Diese Mitteilung wirklich an die ausgewählten Vereinsadmins senden?')">
+                    <button id="send-announcement-button" name="action" value="send" class="inline-flex min-h-12 items-center justify-center rounded-2xl bg-blue-700 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800">
                         An Vereinsadmins senden
                     </button>
                 </div>
@@ -159,6 +199,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const subjectInput = document.getElementById('subject');
     const ctaLabelInput = document.getElementById('cta_label');
     const ctaUrlInput = document.getElementById('cta_url');
+    const recipientFilter = document.getElementById('recipient_filter');
+    const selectedRecipientPanel = document.getElementById('selected-recipient-panel');
+    const selectedRecipientCount = document.getElementById('selected-recipient-count');
+    const recipientSearch = document.getElementById('recipient-search');
+    const sendButton = document.getElementById('send-announcement-button');
     const previewSubject = document.getElementById('announcement-preview-subject');
     const previewBody = document.getElementById('announcement-preview-body');
     const wordCount = document.getElementById('announcement-word-count');
@@ -182,6 +227,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         wordCount.textContent = countWords(body);
+    };
+
+    const selectedCount = () => document.querySelectorAll('.recipient-checkbox:checked').length;
+
+    const syncRecipients = () => {
+        const manualMode = recipientFilter?.value === 'selected';
+
+        selectedRecipientPanel?.classList.toggle('hidden', !manualMode);
+
+        if (selectedRecipientCount) {
+            selectedRecipientCount.textContent = selectedCount();
+        }
+    };
+
+    const filterRecipients = () => {
+        const query = String(recipientSearch?.value || '').trim().toLowerCase();
+
+        document.querySelectorAll('.recipient-tenant').forEach((tenant) => {
+            const tenantMatches = tenant.dataset.search?.includes(query);
+            tenant.classList.toggle('hidden', query !== '' && !tenantMatches);
+        });
     };
 
     tinymce.init({
@@ -260,11 +326,37 @@ document.addEventListener('DOMContentLoaded', () => {
         input?.addEventListener('input', () => syncPreview(tinymce.get('body_markdown')));
     });
 
+    recipientFilter?.addEventListener('change', syncRecipients);
+    recipientSearch?.addEventListener('input', filterRecipients);
+    document.querySelectorAll('.recipient-checkbox').forEach((checkbox) => {
+        checkbox.addEventListener('change', syncRecipients);
+    });
+
+    sendButton?.addEventListener('click', (event) => {
+        const manualMode = recipientFilter?.value === 'selected';
+        const count = selectedCount();
+
+        if (manualMode && count === 0) {
+            event.preventDefault();
+            alert('Bitte wähle mindestens einen konkreten Empfänger aus.');
+            return;
+        }
+
+        const message = manualMode
+            ? `Diese Mitteilung wirklich an ${count} ausgewählte Empfänger senden?`
+            : 'Diese Mitteilung wirklich an alle Empfänger dieses Filters senden?';
+
+        if (!confirm(message)) {
+            event.preventDefault();
+        }
+    });
+
     document.getElementById('operator-announcement-form')?.addEventListener('submit', () => {
         tinymce.triggerSave();
     });
 
     syncPreview();
+    syncRecipients();
 });
 </script>
 @endpush

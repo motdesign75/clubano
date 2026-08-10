@@ -36,10 +36,27 @@ class OperatorAnnouncementController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'city']);
 
+        $recipientOptions = Tenant::query()
+            ->whereHas('users', function ($query) {
+                $query
+                    ->where('role', User::ROLE_ADMIN)
+                    ->whereNotNull('email');
+            })
+            ->with(['users' => function ($query) {
+                $query
+                    ->where('role', User::ROLE_ADMIN)
+                    ->whereNotNull('email')
+                    ->orderBy('name')
+                    ->select(['id', 'tenant_id', 'name', 'email']);
+            }])
+            ->orderBy('name')
+            ->get(['id', 'name', 'city']);
+
         $body = old('body_markdown', $this->defaultBody());
 
         return view('admin.announcements.create', [
             'tenantOptions' => $tenantOptions,
+            'recipientOptions' => $recipientOptions,
             'recipientFilters' => $this->recipientFilters(),
             'previewHtml' => $this->sanitizeBody($body),
             'defaultBody' => $body,
@@ -57,10 +74,16 @@ class OperatorAnnouncementController extends Controller
             'recipient_filter' => ['required', Rule::in(array_keys($this->recipientFilters()))],
             'tenant_ids' => ['nullable', 'array'],
             'tenant_ids.*' => ['integer', Rule::exists('tenants', 'id')],
+            'recipient_user_ids' => ['nullable', 'array'],
+            'recipient_user_ids.*' => ['integer', Rule::exists('users', 'id')],
         ]);
 
         $bodyHtml = $this->sanitizeBody($validated['body_markdown']);
-        $recipientQuery = $this->recipientQuery($validated['recipient_filter'], $validated['tenant_ids'] ?? []);
+        $recipientQuery = $this->recipientQuery(
+            $validated['recipient_filter'],
+            $validated['tenant_ids'] ?? [],
+            $validated['recipient_user_ids'] ?? []
+        );
         $recipients = $recipientQuery->get();
 
         if ($validated['action'] === 'send' && $recipients->isEmpty()) {
@@ -80,6 +103,7 @@ class OperatorAnnouncementController extends Controller
             'recipient_summary' => [
                 'filter' => $this->recipientFilters()[$validated['recipient_filter']],
                 'tenant_ids' => $validated['tenant_ids'] ?? [],
+                'recipient_user_ids' => $validated['recipient_user_ids'] ?? [],
                 'recipient_count' => $validated['action'] === 'send' ? $recipients->count() : 1,
             ],
             'status' => $validated['action'] === 'send' ? 'sending' : 'test',
@@ -157,11 +181,11 @@ class OperatorAnnouncementController extends Controller
             'complimentary' => 'Pilot- und Freilizenzen',
             'without_members' => 'Vereine ohne Mitglieder',
             'import_issues' => 'Vereine mit Importbedarf',
-            'selected' => 'Manuell ausgewählte Vereine',
+            'selected' => 'Einzelne Empfänger auswählen',
         ];
     }
 
-    private function recipientQuery(string $filter, array $tenantIds)
+    private function recipientQuery(string $filter, array $tenantIds, array $recipientUserIds = [])
     {
         $tenantQuery = Tenant::query()
             ->select('tenants.id')
@@ -200,11 +224,15 @@ class OperatorAnnouncementController extends Controller
                         });
                 });
             })
-            ->when($filter === 'selected', fn ($query) => $query->whereIn('id', $tenantIds));
+            ->when($filter === 'selected', fn ($query) => $query->whereIn('id', [-1]));
 
         return User::query()
             ->with('tenant')
-            ->whereIn('tenant_id', $tenantQuery)
+            ->when(
+                $filter === 'selected',
+                fn ($query) => $query->whereIn('id', $recipientUserIds),
+                fn ($query) => $query->whereIn('tenant_id', $tenantQuery)
+            )
             ->where('role', User::ROLE_ADMIN)
             ->whereNotNull('email')
             ->orderBy('tenant_id')

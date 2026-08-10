@@ -36,11 +36,12 @@ test('operator superadmin can open the announcement editor', function () {
         ->assertOk()
         ->assertSee('Update gestalten')
         ->assertSee('Bilder werden direkt in Clubano gespeichert')
+        ->assertSee('Konkrete Empfänger')
         ->assertSee('Vorschau')
         ->assertSee('Testmail an mich');
 });
 
-test('operator announcements are sent only to selected club admins', function () {
+test('operator announcements are sent only to explicitly selected recipients', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
     Mail::fake();
 
@@ -83,7 +84,7 @@ test('operator announcements are sent only to selected club admins', function ()
             'cta_label' => 'Clubano öffnen',
             'cta_url' => 'https://app.clubano.de',
             'recipient_filter' => 'selected',
-            'tenant_ids' => [$selectedTenant->id],
+            'recipient_user_ids' => [$selectedAdmin->id],
         ])
         ->assertRedirect(route('admin.announcements.index'));
 
@@ -99,4 +100,45 @@ test('operator announcements are sent only to selected club admins', function ()
         ->and($delivery->user_id)->toBe($selectedAdmin->id)
         ->and($delivery->email)->toBe('admin-selected@example.test')
         ->and($delivery->status)->toBe('sent');
+});
+
+test('manual announcement selection does not send to every admin of a selected tenant', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    $operator = User::factory()->create([
+        'tenant_id' => null,
+        'role' => User::ROLE_SUPERADMIN,
+        'email_verified_at' => now(),
+    ]);
+
+    $tenant = createAnnouncementTenant('Mehrere Admins');
+
+    User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+        'email' => 'admin-one@example.test',
+        'email_verified_at' => now(),
+    ]);
+
+    User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+        'email' => 'admin-two@example.test',
+        'email_verified_at' => now(),
+    ]);
+
+    $this->actingAs($operator)
+        ->from(route('admin.announcements.create'))
+        ->post(route('admin.announcements.store'), [
+            'action' => 'send',
+            'subject' => 'Clubano Update',
+            'body_markdown' => '<p>Hallo</p>',
+            'recipient_filter' => 'selected',
+            'tenant_ids' => [$tenant->id],
+        ])
+        ->assertRedirect(route('admin.announcements.create'))
+        ->assertSessionHas('error', 'Für diese Auswahl wurden keine Vereinsadmins gefunden.');
+
+    expect(OperatorAnnouncementDelivery::query()->count())->toBe(0);
 });
