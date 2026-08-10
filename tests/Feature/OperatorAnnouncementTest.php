@@ -6,6 +6,7 @@ use App\Models\OperatorAnnouncementDelivery;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
 function createAnnouncementTenant(string $name, string $licenseMode = 'gifted'): Tenant
@@ -99,7 +100,8 @@ test('operator announcements are sent only to explicitly selected recipients', f
     expect($delivery->tenant_id)->toBe($selectedTenant->id)
         ->and($delivery->user_id)->toBe($selectedAdmin->id)
         ->and($delivery->email)->toBe('admin-selected@example.test')
-        ->and($delivery->status)->toBe('sent');
+        ->and($delivery->status)->toBe('sent')
+        ->and($delivery->tracking_token)->not->toBeNull();
 });
 
 test('manual announcement selection does not send to every admin of a selected tenant', function () {
@@ -141,4 +143,48 @@ test('manual announcement selection does not send to every admin of a selected t
         ->assertSessionHas('error', 'Für diese Auswahl wurden keine Vereinsadmins gefunden.');
 
     expect(OperatorAnnouncementDelivery::query()->count())->toBe(0);
+});
+
+test('operator announcement opens and clicks are tracked', function () {
+    $tenant = createAnnouncementTenant('Tracking Verein');
+
+    $announcement = OperatorAnnouncement::create([
+        'subject' => 'Tracking Update',
+        'body_markdown' => '<p>Hallo</p>',
+        'body_html' => '<p>Hallo</p>',
+        'recipient_filter' => 'selected',
+        'status' => 'sent',
+        'sent_at' => now(),
+    ]);
+
+    $delivery = OperatorAnnouncementDelivery::create([
+        'operator_announcement_id' => $announcement->id,
+        'tenant_id' => $tenant->id,
+        'recipient_name' => 'Admin Tracking',
+        'email' => 'tracking@example.test',
+        'status' => 'sent',
+    ]);
+
+    $this->get(route('operator-announcements.tracking.open', $delivery->tracking_token))
+        ->assertOk()
+        ->assertHeader('Content-Type', 'image/gif');
+
+    $delivery->refresh();
+
+    expect($delivery->open_count)->toBe(1)
+        ->and($delivery->first_opened_at)->not->toBeNull();
+
+    $clickUrl = URL::signedRoute('operator-announcements.tracking.click', [
+        'delivery' => $delivery->id,
+        'target' => 'https://app.clubano.de/dashboard',
+    ]);
+
+    $this->get($clickUrl)
+        ->assertRedirect('https://app.clubano.de/dashboard');
+
+    $delivery->refresh();
+
+    expect($delivery->click_count)->toBe(1)
+        ->and($delivery->first_clicked_at)->not->toBeNull()
+        ->and($delivery->last_clicked_url)->toBe('https://app.clubano.de/dashboard');
 });

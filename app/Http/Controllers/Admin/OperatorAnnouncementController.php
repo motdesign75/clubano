@@ -4,14 +4,18 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\OperatorAnnouncement;
+use App\Models\OperatorAnnouncementDelivery;
 use App\Models\Tenant;
 use App\Models\User;
+use DOMDocument;
+use DOMElement;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Throwable;
@@ -22,6 +26,10 @@ class OperatorAnnouncementController extends Controller
     {
         $announcements = OperatorAnnouncement::query()
             ->withCount('deliveries')
+            ->withCount([
+                'deliveries as opened_count' => fn ($query) => $query->where('open_count', '>', 0),
+                'deliveries as clicked_count' => fn ($query) => $query->where('click_count', '>', 0),
+            ])
             ->latest()
             ->paginate(12);
 
@@ -110,7 +118,7 @@ class OperatorAnnouncementController extends Controller
         ]);
 
         if ($validated['action'] === 'test') {
-            $this->sendMail($request->user()->email, $request->user()->name, null, null, $announcement);
+            $this->sendMail($request->user()->email, $request->user()->name, null, null, $announcement, null);
 
             return redirect()
                 ->route('admin.announcements.index')
@@ -121,22 +129,22 @@ class OperatorAnnouncementController extends Controller
         $failed = 0;
 
         foreach ($recipients as $recipient) {
+            $delivery = $announcement->deliveries()->create([
+                'tenant_id' => $recipient->tenant_id,
+                'user_id' => $recipient->id,
+                'recipient_name' => $recipient->name,
+                'email' => $recipient->email,
+                'status' => 'sending',
+            ]);
+
             try {
-                $this->sendMail($recipient->email, $recipient->name, $recipient->tenant, $recipient, $announcement);
-                $announcement->deliveries()->create([
-                    'tenant_id' => $recipient->tenant_id,
-                    'user_id' => $recipient->id,
-                    'recipient_name' => $recipient->name,
-                    'email' => $recipient->email,
+                $this->sendMail($recipient->email, $recipient->name, $recipient->tenant, $recipient, $announcement, $delivery);
+                $delivery->update([
                     'status' => 'sent',
                 ]);
                 $sent++;
             } catch (Throwable $e) {
-                $announcement->deliveries()->create([
-                    'tenant_id' => $recipient->tenant_id,
-                    'user_id' => $recipient->id,
-                    'recipient_name' => $recipient->name,
-                    'email' => $recipient->email,
+                $delivery->update([
                     'status' => 'failed',
                     'error' => Str::limit($e->getMessage(), 1000),
                 ]);
@@ -250,17 +258,100 @@ class OperatorAnnouncementController extends Controller
         return strip_tags($html, '<p><br><strong><b><em><i><u><ul><ol><li><a><h2><h3><blockquote><table><thead><tbody><tr><th><td><img><figure><figcaption><span>');
     }
 
-    private function sendMail(string $email, ?string $name, ?Tenant $tenant, ?User $recipient, OperatorAnnouncement $announcement): void
+    private function sendMail(string $email, ?string $name, ?Tenant $tenant, ?User $recipient, OperatorAnnouncement $announcement, ?OperatorAnnouncementDelivery $delivery): void
     {
+        $bodyHtml = $delivery
+            ? $this->instrumentBody($announcement->body_html, $delivery)
+            : $announcement->body_html;
+
+        $ctaUrl = $announcement->cta_url;
+
+        if ($delivery && $ctaUrl && $this->shouldTrackHref($ctaUrl)) {
+            $ctaUrl = URL::signedRoute('operator-announcements.tracking.click', [
+                'delivery' => $delivery->id,
+                'target' => $ctaUrl,
+            ]);
+        }
+
         Mail::send('admin.announcements.mail', [
             'announcement' => $announcement,
             'tenant' => $tenant,
             'recipient' => $recipient,
+            'bodyHtml' => $bodyHtml,
+            'ctaUrl' => $ctaUrl,
         ], function ($mail) use ($email, $name, $announcement) {
             $mail->to($email, $name)
                 ->subject($announcement->subject)
                 ->from(config('mail.from.address'), config('mail.from.name', 'Clubano'));
         });
+    }
+
+    private function instrumentBody(string $html, OperatorAnnouncementDelivery $delivery): string
+    {
+        $document = new DOMDocument('1.0', 'UTF-8');
+        $encodedHtml = mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8');
+
+        @$document->loadHTML(
+            '<!DOCTYPE html><html><body><div id="tracked-root">' . $encodedHtml . '</div></body></html>',
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+        );
+
+        $root = $document->getElementById('tracked-root');
+
+        if (! $root instanceof DOMElement) {
+            return $html;
+        }
+
+        foreach ($root->getElementsByTagName('a') as $link) {
+            $href = trim((string) $link->getAttribute('href'));
+
+            if (! $this->shouldTrackHref($href)) {
+                continue;
+            }
+
+            $link->setAttribute('href', URL::signedRoute('operator-announcements.tracking.click', [
+                'delivery' => $delivery->id,
+                'target' => $href,
+            ]));
+        }
+
+        $pixel = $document->createElement('img');
+        $pixel->setAttribute('src', route('operator-announcements.tracking.open', $delivery->tracking_token));
+        $pixel->setAttribute('alt', '');
+        $pixel->setAttribute('width', '1');
+        $pixel->setAttribute('height', '1');
+        $pixel->setAttribute('style', 'display:block;border:0;outline:none;text-decoration:none;width:1px;height:1px;');
+        $pixel->setAttribute('aria-hidden', 'true');
+
+        $root->appendChild($pixel);
+
+        $trackedHtml = '';
+
+        foreach ($root->childNodes as $child) {
+            $trackedHtml .= $document->saveHTML($child);
+        }
+
+        return $trackedHtml;
+    }
+
+    private function shouldTrackHref(string $href): bool
+    {
+        if ($href === '') {
+            return false;
+        }
+
+        if (str_starts_with($href, '#')
+            || str_starts_with($href, 'mailto:')
+            || str_starts_with($href, 'tel:')
+            || str_starts_with($href, 'javascript:')) {
+            return false;
+        }
+
+        if (! filter_var($href, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        return in_array(parse_url($href, PHP_URL_SCHEME), ['http', 'https'], true);
     }
 
     private function defaultBody(): string

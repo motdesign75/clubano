@@ -16,11 +16,11 @@
                 </tr>
                 <tr>
                     <td style="padding:28px; font-size:15px; line-height:24px; color:#334155;">
-                        {!! $announcement->body_html !!}
+                        {!! $bodyHtml ?? $announcement->body_html !!}
 
                         @if($announcement->cta_label && $announcement->cta_url)
                             <p style="margin-top:28px;">
-                                <a href="{{ $announcement->cta_url }}" style="display:inline-block; background:#2563eb; color:#ffffff; text-decoration:none; border-radius:10px; padding:12px 18px; font-weight:bold;">
+                                <a href="{{ $ctaUrl ?? $announcement->cta_url }}" style="display:inline-block; background:#2563eb; color:#ffffff; text-decoration:none; border-radius:10px; padding:12px 18px; font-weight:bold;">
                                     {{ $announcement->cta_label }}
                                 </a>
                             </p>

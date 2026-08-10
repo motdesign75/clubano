@@ -33,7 +33,7 @@
 
         <div class="divide-y divide-slate-100">
             @forelse($announcements as $announcement)
-                <article class="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_180px_160px_140px] lg:items-center">
+                <article class="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_150px_120px_120px_120px_140px] lg:items-center">
                     <div class="min-w-0">
                         <div class="truncate text-base font-semibold text-slate-950">{{ $announcement->subject }}</div>
                         <div class="mt-1 text-sm text-slate-500">
@@ -47,6 +47,14 @@
                     <div>
                         <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Zustellungen</div>
                         <div class="mt-1 text-sm font-semibold text-slate-800">{{ $announcement->deliveries_count }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Geöffnet</div>
+                        <div class="mt-1 text-sm font-semibold text-slate-800">{{ $announcement->opened_count ?? 0 }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Geklickt</div>
+                        <div class="mt-1 text-sm font-semibold text-slate-800">{{ $announcement->clicked_count ?? 0 }}</div>
                     </div>
                     <div class="text-sm text-slate-500">
                         {{ $announcement->sent_at ? $announcement->sent_at->format('d.m.Y H:i') : 'nicht versendet' }}

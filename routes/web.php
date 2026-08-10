@@ -539,6 +539,8 @@ Route::get('/f/{slug}/embed', [PublicFormController::class, 'publicEmbed'])->nam
 Route::post('/f/{slug}/embed', [PublicFormController::class, 'publicEmbedSubmit'])->name('forms.public.embed.submit');
 Route::get('/mail/tracking/open/{token}', [MailTrackingController::class, 'open'])->name('mail.tracking.open');
 Route::get('/mail/tracking/click/{dispatchLog}', [MailTrackingController::class, 'click'])->name('mail.tracking.click');
+Route::get('/betreiber-mitteilungen/tracking/open/{token}', [MailTrackingController::class, 'operatorOpen'])->name('operator-announcements.tracking.open');
+Route::get('/betreiber-mitteilungen/tracking/click/{delivery}', [MailTrackingController::class, 'operatorClick'])->name('operator-announcements.tracking.click');
 
 // Template
 Route::middleware(['auth', 'tenant.subscribed'])->group(function () {
