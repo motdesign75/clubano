@@ -35,7 +35,7 @@
             ['label' => 'Prüfung offen', 'value' => $platformStats['verification_pending'], 'hint' => 'neue Vereine prüfen'],
             ['label' => 'Risiko', 'value' => $platformStats['verification_risk'], 'hint' => 'markiert oder abgelehnt'],
             ['label' => 'Mit Ort', 'value' => $lifecycleStats['with_location'], 'hint' => 'Vereinsprofil gepflegt'],
-            ['label' => 'Importe', 'value' => $lifecycleStats['with_imports'], 'hint' => 'Umstieg begonnen'],
+            ['label' => 'Supportbereit', 'value' => $lifecycleStats['support_ready'], 'hint' => 'geprüft und aktiv'],
         ] as $stat)
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div class="text-sm font-medium text-slate-500">{{ $stat['label'] }}</div>
@@ -62,7 +62,7 @@
                     ['label' => 'Kalendernutzung', 'value' => $lifecycleStats['with_events'], 'hint' => 'Vereine mit Terminen'],
                     ['label' => 'Lizenzen', 'value' => $platformStats['licensed'], 'hint' => 'Pilot- und Freilizenzen'],
                     ['label' => 'Trials prüfen', 'value' => $platformStats['expired_trials'], 'hint' => 'abgelaufene Tests'],
-                    ['label' => 'Benutzer', 'value' => $platformStats['users'], 'hint' => 'alle Betreiber und Vereine'],
+                    ['label' => 'Support-Risiko', 'value' => $lifecycleStats['without_admin_user'], 'hint' => 'Vereine ohne Admin'],
                 ] as $signal)
                     <div class="rounded-xl bg-slate-50 px-4 py-4">
                         <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{{ $signal['label'] }}</div>

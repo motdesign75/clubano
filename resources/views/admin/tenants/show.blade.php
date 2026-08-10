@@ -119,6 +119,46 @@
                 </div>
             </section>
 
+            <section class="rounded-2xl border border-blue-200 bg-blue-50/50 p-6 shadow-sm">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700">DSGVO-konformer Supportblick</p>
+                        <h2 class="mt-2 text-xl font-semibold text-slate-950">Support-Dossier</h2>
+                        <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                            {{ $supportDossier['privacy_note'] }}
+                        </p>
+                    </div>
+                    <span class="inline-flex w-fit rounded-full px-3 py-1 text-sm font-semibold {{ $supportDossier['readiness']['level'] === 'ok' ? 'bg-emerald-100 text-emerald-800' : ($supportDossier['readiness']['level'] === 'risk' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800') }}">
+                        {{ $supportDossier['readiness']['label'] }}
+                    </span>
+                </div>
+
+                <div class="mt-5 rounded-2xl bg-white/80 p-4">
+                    <div class="text-sm font-semibold text-slate-950">{{ $supportDossier['readiness']['reason'] }}</div>
+                    <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        @foreach($supportDossier['checklist'] as $item)
+                            <div class="rounded-xl border px-4 py-3 {{ $item['state'] === 'ok' ? 'border-emerald-100 bg-emerald-50' : ($item['state'] === 'risk' ? 'border-rose-100 bg-rose-50' : 'border-amber-100 bg-amber-50') }}">
+                                <div class="text-xs font-semibold uppercase tracking-[0.14em] {{ $item['state'] === 'ok' ? 'text-emerald-700' : ($item['state'] === 'risk' ? 'text-rose-700' : 'text-amber-700') }}">
+                                    {{ $item['label'] }}
+                                </div>
+                                <div class="mt-2 text-lg font-semibold text-slate-950">{{ $item['value'] }}</div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+
+                <div class="mt-4 grid gap-3 lg:grid-cols-2">
+                    @foreach($supportDossier['signals'] as $signal)
+                        <div class="rounded-xl border bg-white px-4 py-3 {{ $signal['state'] === 'ok' ? 'border-emerald-100' : ($signal['state'] === 'risk' ? 'border-rose-100' : 'border-amber-100') }}">
+                            <div class="text-sm font-semibold {{ $signal['state'] === 'ok' ? 'text-emerald-800' : ($signal['state'] === 'risk' ? 'text-rose-800' : 'text-amber-800') }}">
+                                {{ $signal['label'] }}
+                            </div>
+                            <div class="mt-1 text-sm leading-6 text-slate-600">{{ $signal['text'] }}</div>
+                        </div>
+                    @endforeach
+                </div>
+            </section>
+
             <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div class="flex items-center justify-between gap-4">
                     <div>
