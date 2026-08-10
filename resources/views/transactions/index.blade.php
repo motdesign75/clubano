@@ -93,6 +93,54 @@
         </div>
     </div>
 
+    @if(session('success'))
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800 shadow-sm">
+            {{ session('success') }}
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800 shadow-sm">
+            {{ session('error') }}
+        </div>
+    @endif
+
+    @if($errors->any())
+        <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800 shadow-sm">
+            <div class="font-semibold">Der Import konnte nicht verarbeitet werden.</div>
+            <ul class="mt-2 list-disc pl-5">
+                @foreach($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div class="max-w-2xl">
+                <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">DATEV-Import</div>
+                <h2 class="mt-2 text-lg font-semibold text-slate-950">Buchungsstapel importieren</h2>
+                <p class="mt-1 text-sm leading-6 text-slate-500">
+                    Clubano ordnet Konto und Gegenkonto anhand der Kontonummer zu. Fehlende Konten werden als Importkonten angelegt und können danach sauber benannt werden.
+                </p>
+            </div>
+
+            <form method="POST" action="{{ route('transactions.datev-import') }}" enctype="multipart/form-data" class="grid w-full gap-3 lg:grid-cols-[minmax(0,1fr)_180px_auto] xl:max-w-3xl">
+                @csrf
+                <input type="file" name="datev_file" accept=".csv,.txt"
+                       class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 file:mr-4 file:rounded-full file:border-0 file:bg-white file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-800">
+                <select name="status" class="rounded-2xl border-slate-200 text-sm shadow-sm focus:border-slate-400 focus:ring-slate-300">
+                    <option value="entwurf">Als Entwurf prüfen</option>
+                    <option value="abgeschlossen">Direkt abschließen</option>
+                </select>
+                <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-full bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800">
+                    Importieren
+                </button>
+            </form>
+        </div>
+    </section>
+
     <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div class="space-y-5">
             <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">

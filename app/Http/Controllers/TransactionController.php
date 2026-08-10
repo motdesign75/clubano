@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Validation\Rule;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Str;
 
 class TransactionController extends Controller
 {
@@ -122,6 +123,121 @@ class TransactionController extends Controller
         return view('transactions.index', compact('transactions', 'filter', 'year', 'month', 'search', 'summary'));
     }
 
+    public function importDatev(Request $request)
+    {
+        $validated = $request->validate([
+            'datev_file' => ['required', 'file', 'mimes:csv,txt', 'max:8192'],
+            'status' => ['required', Rule::in(['entwurf', 'abgeschlossen'])],
+        ]);
+
+        $path = $request->file('datev_file')->getRealPath();
+        $handle = fopen($path, 'rb');
+
+        if ($handle === false) {
+            return back()->with('error', 'Der Buchungsstapel konnte nicht gelesen werden.');
+        }
+
+        $meta = fgetcsv($handle, 0, ';');
+        $header = fgetcsv($handle, 0, ';');
+
+        $format = trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) ($meta[0] ?? '')) ?? '', "\" \t\n\r\0\x0B");
+
+        if (! $meta || ! $header || $format !== 'EXTF') {
+            fclose($handle);
+
+            return back()->with('error', 'Bitte lade einen DATEV-EXTF-Buchungsstapel hoch.');
+        }
+
+        $header = array_map(fn ($value) => $this->normalizeDatevHeader((string) $value), $header);
+        $required = ['umsatz', 'sollhabenkennzeichen', 'konto', 'gegenkonto', 'belegdatum', 'buchungstext'];
+
+        if (count(array_intersect($required, $header)) !== count($required)) {
+            fclose($handle);
+
+            return back()->with('error', 'Der Buchungsstapel enthält nicht alle benötigten DATEV-Spalten.');
+        }
+
+        $tenantId = auth()->user()->tenant_id;
+        $sourceStamp = preg_replace('/\D+/', '', (string) ($meta[5] ?? '')) ?: now()->format('YmdHis');
+        $fiscalYear = $this->datevFiscalYear($meta);
+        $imported = 0;
+        $skipped = 0;
+        $createdAccounts = 0;
+        $rowNumber = 2;
+
+        while (($row = fgetcsv($handle, 0, ';')) !== false) {
+            $rowNumber++;
+            $data = $this->mapDatevRow($header, $row);
+            $receiptNumber = 'DATEV-' . $sourceStamp . '-' . str_pad((string) $rowNumber, 5, '0', STR_PAD_LEFT);
+
+            if (Transaction::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('receipt_number', $receiptNumber)->exists()) {
+                $skipped++;
+                continue;
+            }
+
+            $amount = $this->parseDatevAmount((string) ($data['umsatz'] ?? ''));
+            $debitCredit = Str::of((string) ($data['sollhabenkennzeichen'] ?? ''))->upper()->trim()->toString();
+            $accountNumber = trim((string) ($data['konto'] ?? ''));
+            $contraNumber = trim((string) ($data['gegenkonto'] ?? ''));
+
+            if ($amount <= 0 || ! in_array($debitCredit, ['S', 'H'], true) || $accountNumber === '' || $contraNumber === '') {
+                $skipped++;
+                continue;
+            }
+
+            [$account, $accountCreated] = $this->resolveDatevAccount($tenantId, $accountNumber);
+            [$contraAccount, $contraCreated] = $this->resolveDatevAccount($tenantId, $contraNumber);
+            $createdAccounts += (int) $accountCreated + (int) $contraCreated;
+
+            $accountFrom = $debitCredit === 'S' ? $contraAccount : $account;
+            $accountTo = $debitCredit === 'S' ? $account : $contraAccount;
+            $date = $this->parseDatevDate((string) ($data['belegdatum'] ?? ''), $fiscalYear);
+            $status = $validated['status'];
+
+            $transaction = Transaction::create([
+                'tenant_id' => $tenantId,
+                'created_by' => auth()->id(),
+                'updated_by' => auth()->id(),
+                'date' => $date,
+                'description' => trim((string) ($data['buchungstext'] ?? 'DATEV-Import')),
+                'amount' => $amount,
+                'account_from_id' => $accountFrom->id,
+                'account_to_id' => $accountTo->id,
+                'tax_area' => $accountTo->tax_area ?: $accountFrom->tax_area ?: 'ideell',
+                'receipt_number' => $receiptNumber,
+                'status' => $status,
+                'finalized_at' => $status === 'abgeschlossen' ? now() : null,
+                'finalized_by' => $status === 'abgeschlossen' ? auth()->id() : null,
+                'receipt_meta' => [
+                    'source' => 'DATEV EXTF',
+                    'file' => $request->file('datev_file')->getClientOriginalName(),
+                    'row' => $rowNumber,
+                    'belegfeld_1' => $data['belegfeld1'] ?? null,
+                    'buchung_guid' => $data['buchungsguid'] ?? null,
+                    'soll_haben' => $debitCredit,
+                    'konto' => $accountNumber,
+                    'gegenkonto' => $contraNumber,
+                    'bu_schluessel' => $data['buschluessel'] ?? null,
+                ],
+            ]);
+
+            if ($transaction->isFinalized()) {
+                $this->recalculateAccountBalances($tenantId, [
+                    $transaction->account_from_id,
+                    $transaction->account_to_id,
+                ]);
+            }
+
+            $imported++;
+        }
+
+        fclose($handle);
+
+        return redirect()
+            ->route('transactions.index')
+            ->with('success', "{$imported} Buchungen importiert, {$skipped} Zeilen übersprungen. {$createdAccounts} fehlende Konten wurden als Importkonten angelegt.");
+    }
+
     public function finalize(Transaction $transaction)
     {
         $this->authorizeTransaction($transaction);
@@ -141,8 +257,10 @@ class TransactionController extends Controller
             'updated_by' => auth()->id(),
         ])->save();
 
-        $transaction->account_from?->updateBalance();
-        $transaction->account_to?->updateBalance();
+        $this->recalculateAccountBalances(auth()->user()->tenant_id, [
+            $transaction->account_from_id,
+            $transaction->account_to_id,
+        ]);
 
         return back()->with('success', 'Die Buchung wurde abgeschlossen.');
     }
@@ -176,8 +294,10 @@ class TransactionController extends Controller
                 'updated_by' => auth()->id(),
             ])->save();
 
-            $transaction->account_from?->updateBalance();
-            $transaction->account_to?->updateBalance();
+            $this->recalculateAccountBalances(auth()->user()->tenant_id, [
+                $transaction->account_from_id,
+                $transaction->account_to_id,
+            ]);
 
             $finalizedCount++;
         }
@@ -336,6 +456,13 @@ class TransactionController extends Controller
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
         ]);
 
+        $affectedAccountIds = collect([
+            $transaction->account_from_id,
+            $transaction->account_to_id,
+            $validated['account_from_id'],
+            $validated['account_to_id'],
+        ])->filter()->unique()->values();
+
         $transaction->update([
             'date' => $validated['date'],
             'description' => $validated['description'],
@@ -364,8 +491,7 @@ class TransactionController extends Controller
             ]);
         }
 
-        $transaction->account_from?->updateBalance();
-        $transaction->account_to?->updateBalance();
+        $this->recalculateAccountBalances($tenantId, $affectedAccountIds);
 
         return redirect()->route('transactions.index')
             ->with('success', 'Buchung erfolgreich aktualisiert.');
@@ -437,8 +563,10 @@ class TransactionController extends Controller
         $storno->receipt_number = $receiptNumber;
         $storno->save();
 
-        $storno->account_from?->updateBalance();
-        $storno->account_to?->updateBalance();
+        $this->recalculateAccountBalances(auth()->user()->tenant_id, [
+            $storno->account_from_id,
+            $storno->account_to_id,
+        ]);
 
         return redirect()->route('transactions.index')
             ->with('success', 'Buchung wurde storniert. Die Gegenbuchung ist jetzt im Journal und im Kassenbuch sichtbar.');
@@ -511,6 +639,121 @@ class TransactionController extends Controller
             'totalExpense',
             'saldo'
         );
+    }
+
+    protected function normalizeDatevHeader(string $value): string
+    {
+        $value = preg_replace('/^\xEF\xBB\xBF/', '', $value) ?? $value;
+        $normalized = Str::of($value)->lower()->ascii()->replaceMatches('/[^a-z0-9]+/', '')->toString();
+
+        return match ($normalized) {
+            'umsatzohnesollhaben kz', 'umsatzohnesollhabenkennzeichen', 'umsatzohnesollhabenkz' => 'umsatz',
+            'sollhabenkennzeichen' => 'sollhabenkennzeichen',
+            'gegenkontoohnebuschlussel', 'gegenkontoohnebuschluessel' => 'gegenkonto',
+            'buschlussel', 'buschluessel' => 'buschluessel',
+            'belegfeld1' => 'belegfeld1',
+            'buchungsguid' => 'buchungsguid',
+            default => $normalized,
+        };
+    }
+
+    /**
+     * @param array<int, string> $header
+     * @param array<int, string|null> $row
+     * @return array<string, string|null>
+     */
+    protected function mapDatevRow(array $header, array $row): array
+    {
+        $mapped = [];
+
+        foreach ($header as $index => $key) {
+            $mapped[$key] = $row[$index] ?? null;
+        }
+
+        return $mapped;
+    }
+
+    protected function datevFiscalYear(array $meta): int
+    {
+        foreach ([14, 12, 15] as $index) {
+            $value = (string) ($meta[$index] ?? '');
+
+            if (preg_match('/^\d{8}$/', $value)) {
+                return (int) substr($value, 0, 4);
+            }
+        }
+
+        return (int) now()->year;
+    }
+
+    protected function parseDatevDate(string $value, int $year): string
+    {
+        $value = preg_replace('/\D+/', '', $value) ?? '';
+
+        if (strlen($value) === 8) {
+            return Carbon::createFromFormat('dmY', $value)->toDateString();
+        }
+
+        if (strlen($value) === 4) {
+            return Carbon::createFromFormat('dmY', $value . $year)->toDateString();
+        }
+
+        return now()->toDateString();
+    }
+
+    protected function parseDatevAmount(string $value): float
+    {
+        $value = trim($value);
+        $value = str_replace('.', '', $value);
+        $value = str_replace(',', '.', $value);
+
+        return round((float) $value, 2);
+    }
+
+    /**
+     * @return array{0: Account, 1: bool}
+     */
+    protected function resolveDatevAccount(string $tenantId, string $number): array
+    {
+        $account = Account::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('number', $number)
+            ->orderByDesc('active')
+            ->orderBy('id')
+            ->first();
+
+        if ($account) {
+            return [$account, false];
+        }
+
+        return [Account::create([
+            'tenant_id' => $tenantId,
+            'number' => $number,
+            'name' => 'Importkonto ' . $number,
+            'type' => $this->inferDatevAccountType($number),
+            'tax_area' => 'ideell',
+            'chart_name' => 'DATEV Import',
+            'is_postable' => true,
+            'datev_automatic' => false,
+            'active' => true,
+            'online' => false,
+            'balance_start' => 0,
+            'balance_current' => 0,
+            'import_source' => 'DATEV Buchungsstapel',
+        ]), true];
+    }
+
+    protected function inferDatevAccountType(string $number): string
+    {
+        if (in_array($number, ['1000', '1200', '1220', '1360', '1361'], true)) {
+            return str_starts_with($number, '12') ? 'bank' : 'kasse';
+        }
+
+        if (str_starts_with($number, '8')) {
+            return 'einnahme';
+        }
+
+        return 'ausgabe';
     }
 
     public function journal(Request $request)
@@ -799,8 +1042,10 @@ class TransactionController extends Controller
         $transaction->save();
 
         if ($transaction->isFinalized()) {
-            $transaction->account_from?->updateBalance();
-            $transaction->account_to?->updateBalance();
+            $this->recalculateAccountBalances($tenantId, [
+                $transaction->account_from_id,
+                $transaction->account_to_id,
+            ]);
         }
 
         return redirect()->route('transactions.index')
@@ -812,6 +1057,24 @@ class TransactionController extends Controller
         if (!$transaction || $transaction->tenant_id != auth()->user()->tenant_id) {
             abort(403, 'Kein Zugriff auf diese Buchung.');
         }
+    }
+
+    protected function recalculateAccountBalances(string $tenantId, iterable $accountIds): void
+    {
+        $ids = collect($accountIds)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        Account::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $ids)
+            ->get()
+            ->each(fn (Account $account) => $account->updateBalance());
     }
 
     private function cashDeltaForAccount(Transaction $transaction, int $cashAccountId): float

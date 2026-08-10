@@ -72,31 +72,25 @@
                 <!-- Kontierung -->
                 <div class="space-y-4 border-t border-slate-200 pt-5">
 
-                    <div>
-                        <label class="text-xs uppercase tracking-wide text-slate-500">Von-Konto</label>
-                        <select name="account_from_id"
-                                class="mt-1 w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500">
-                            @foreach($accounts as $account)
-                                <option value="{{ $account->id }}"
-                                    {{ old('account_from_id', $transaction->account_from_id) == $account->id ? 'selected' : '' }}>
-                                    {{ $account->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
+                    @include('transactions.partials.account-search-select', [
+                        'name' => 'account_from_id',
+                        'id' => 'account_from_id',
+                        'label' => 'Von-Konto',
+                        'labelClass' => 'text-xs uppercase tracking-wide text-slate-500',
+                        'accounts' => $accounts,
+                        'selectedId' => $transaction->account_from_id,
+                        'placeholder' => 'Von-Konto suchen, z. B. 1200 oder Bank',
+                    ])
 
-                    <div>
-                        <label class="text-xs uppercase tracking-wide text-slate-500">Nach-Konto</label>
-                        <select name="account_to_id"
-                                class="mt-1 w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500">
-                            @foreach($accounts as $account)
-                                <option value="{{ $account->id }}"
-                                    {{ old('account_to_id', $transaction->account_to_id) == $account->id ? 'selected' : '' }}>
-                                    {{ $account->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
+                    @include('transactions.partials.account-search-select', [
+                        'name' => 'account_to_id',
+                        'id' => 'account_to_id',
+                        'label' => 'Nach-Konto',
+                        'labelClass' => 'text-xs uppercase tracking-wide text-slate-500',
+                        'accounts' => $accounts,
+                        'selectedId' => $transaction->account_to_id,
+                        'placeholder' => 'Nach-Konto suchen, z. B. 8006 oder Beitrag',
+                    ])
 
                     <div>
                         <label class="text-xs uppercase tracking-wide text-slate-500">Steuerbereich</label>

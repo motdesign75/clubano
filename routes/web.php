@@ -388,12 +388,18 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     // Finanzen – Konten und Buchungen
     $when($C.'AccountController', function($cls){
         Route::middleware('tenant.role:finance')->group(function () use ($cls) {
+            Route::post('/accounts/simple-chart', [$cls, 'useSimpleChart'])->name('accounts.simple-chart');
+            Route::post('/accounts/import-chart', [$cls, 'importChart'])->name('accounts.import-chart');
+            Route::patch('/accounts/bulk-visibility', [$cls, 'bulkVisibility'])->name('accounts.bulk-visibility');
+            Route::patch('/accounts/{account}/hide', [$cls, 'hide'])->name('accounts.hide');
+            Route::patch('/accounts/{account}/restore', [$cls, 'restore'])->name('accounts.restore');
             Route::resource('accounts', $cls)->except(['show']);
         });
     });
 
     $when($C.'TransactionController', function($cls){
         Route::middleware('tenant.role:finance')->group(function () use ($cls) {
+            Route::post('/transactions/datev-import', [$cls, 'importDatev'])->name('transactions.datev-import');
             Route::resource('transactions', $cls)->except(['show', 'destroy']);
             Route::get('/kassenbuch', [$cls, 'cashbook'])->name('transactions.cashbook');
             Route::get('/kassenbuch/drucken', [$cls, 'cashbookPrint'])->name('transactions.cashbook.print');

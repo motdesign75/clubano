@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Account;
+use App\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\DemoVereinSeeder;
 use App\Services\TenantDemoDataGenerator;
@@ -71,3 +73,35 @@ Artisan::command('clubano:demo-reset', function () {
     $this->line('E-Mail: ' . DemoVereinSeeder::USER_EMAIL);
     $this->line('Passwort: ' . DemoVereinSeeder::USER_PASSWORD);
 })->purpose('Setzt den öffentlichen Demo-Verein mit geschützten Beispieldaten zurück');
+
+Artisan::command('clubano:recalculate-account-balances {tenantId?}', function (?int $tenantId = null) {
+    $tenants = Tenant::withoutGlobalScopes()
+        ->when($tenantId, fn ($query) => $query->whereKey($tenantId))
+        ->orderBy('id')
+        ->get(['id', 'name']);
+
+    if ($tenants->isEmpty()) {
+        $this->components->error('Kein passender Verein gefunden.');
+
+        return 1;
+    }
+
+    $totalAccounts = 0;
+
+    foreach ($tenants as $tenant) {
+        $accounts = Account::withoutGlobalScopes()
+            ->where('tenant_id', $tenant->id)
+            ->orderBy('number')
+            ->get();
+
+        $accounts->each(fn (Account $account) => $account->updateBalance());
+        $totalAccounts += $accounts->count();
+
+        $this->components->info("{$tenant->name}: {$accounts->count()} Konten neu berechnet.");
+    }
+
+    $this->newLine();
+    $this->components->info("Fertig. {$totalAccounts} Konten wurden neu berechnet.");
+
+    return 0;
+})->purpose('Berechnet die aktuellen Salden aller Konten aus abgeschlossenen Buchungen neu');

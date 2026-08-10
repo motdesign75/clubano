@@ -196,117 +196,81 @@
                         </div>
 
                         @if($guidedContext === 'bar-einnahme')
-                            <div>
-                                <label for="account_from_id" class="mb-1 block text-sm font-medium text-slate-600">Einnahmekonto *</label>
-                                <select id="account_from_id"
-                                        name="account_from_id"
-                                        class="w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                        required>
-                                    <option value="">Bitte wählen</option>
-                                    @foreach($incomeAccounts as $account)
-                                        <option value="{{ $account->id }}" @selected($selectedFromId === (string) $account->id)>
-                                            {{ $account->number ? $account->number . ' - ' : '' }}{{ $account->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('account_from_id')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
+                            @include('transactions.partials.account-search-select', [
+                                'name' => 'account_from_id',
+                                'id' => 'account_from_id',
+                                'label' => 'Einnahmekonto *',
+                                'accounts' => $incomeAccounts,
+                                'selectedId' => $selectedFromId,
+                                'placeholder' => 'Einnahmekonto suchen',
+                            ])
+                            @error('account_from_id')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
                             <input type="hidden" name="account_to_id" value="{{ old('account_to_id', $selectedCashAccount?->id) }}">
                         @elseif($guidedContext === 'bar-ausgabe')
                             <input type="hidden" name="account_from_id" value="{{ old('account_from_id', $selectedCashAccount?->id) }}">
-                            <div>
-                                <label for="account_to_id" class="mb-1 block text-sm font-medium text-slate-600">Ausgabekonto *</label>
-                                <select id="account_to_id"
-                                        name="account_to_id"
-                                        class="w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                        required>
-                                    <option value="">Bitte wählen</option>
-                                    @foreach($expenseAccounts as $account)
-                                        <option value="{{ $account->id }}" @selected($selectedToId === (string) $account->id)>
-                                            {{ $account->number ? $account->number . ' - ' : '' }}{{ $account->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('account_to_id')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
+                            @include('transactions.partials.account-search-select', [
+                                'name' => 'account_to_id',
+                                'id' => 'account_to_id',
+                                'label' => 'Ausgabekonto *',
+                                'accounts' => $expenseAccounts,
+                                'selectedId' => $selectedToId,
+                                'placeholder' => 'Ausgabekonto suchen',
+                            ])
+                            @error('account_to_id')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
                         @elseif($guidedContext === 'bank-zu-kasse')
-                            <div>
-                                <label for="account_from_id" class="mb-1 block text-sm font-medium text-slate-600">Bankkonto *</label>
-                                <select id="account_from_id"
-                                        name="account_from_id"
-                                        class="w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                        required>
-                                    <option value="">Bitte wählen</option>
-                                    @foreach($bankAccounts as $account)
-                                        <option value="{{ $account->id }}" @selected($selectedFromId === (string) $account->id)>
-                                            {{ $account->number ? $account->number . ' - ' : '' }}{{ $account->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('account_from_id')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
+                            @include('transactions.partials.account-search-select', [
+                                'name' => 'account_from_id',
+                                'id' => 'account_from_id',
+                                'label' => 'Bankkonto *',
+                                'accounts' => $bankAccounts,
+                                'selectedId' => $selectedFromId,
+                                'placeholder' => 'Bankkonto suchen',
+                            ])
+                            @error('account_from_id')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
                             <input type="hidden" name="account_to_id" value="{{ old('account_to_id', $selectedCashAccount?->id) }}">
                         @elseif($guidedContext === 'kasse-zu-bank')
                             <input type="hidden" name="account_from_id" value="{{ old('account_from_id', $selectedCashAccount?->id) }}">
-                            <div>
-                                <label for="account_to_id" class="mb-1 block text-sm font-medium text-slate-600">Bankkonto *</label>
-                                <select id="account_to_id"
-                                        name="account_to_id"
-                                        class="w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                        required>
-                                    <option value="">Bitte wählen</option>
-                                    @foreach($bankAccounts as $account)
-                                        <option value="{{ $account->id }}" @selected($selectedToId === (string) $account->id)>
-                                            {{ $account->number ? $account->number . ' - ' : '' }}{{ $account->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('account_to_id')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
+                            @include('transactions.partials.account-search-select', [
+                                'name' => 'account_to_id',
+                                'id' => 'account_to_id',
+                                'label' => 'Bankkonto *',
+                                'accounts' => $bankAccounts,
+                                'selectedId' => $selectedToId,
+                                'placeholder' => 'Bankkonto suchen',
+                            ])
+                            @error('account_to_id')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
                         @else
-                            <div>
-                                <label for="account_from_id" class="mb-1 block text-sm font-medium text-slate-600">Von Konto *</label>
-                                <select id="account_from_id"
-                                        name="account_from_id"
-                                        class="w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                        required>
-                                    <option value="">Bitte wählen</option>
-                                    @foreach($accounts as $account)
-                                        <option value="{{ $account->id }}" @selected($selectedFromId === (string) $account->id)>
-                                            {{ $account->number ? $account->number . ' - ' : '' }}{{ $account->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('account_from_id')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
+                            @include('transactions.partials.account-search-select', [
+                                'name' => 'account_from_id',
+                                'id' => 'account_from_id',
+                                'label' => 'Von Konto *',
+                                'accounts' => $accounts,
+                                'selectedId' => $selectedFromId,
+                                'placeholder' => 'Von-Konto suchen, z. B. 1200 oder Bank',
+                            ])
+                            @error('account_from_id')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
 
-                            <div>
-                                <label for="account_to_id" class="mb-1 block text-sm font-medium text-slate-600">Nach Konto *</label>
-                                <select id="account_to_id"
-                                        name="account_to_id"
-                                        class="w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                        required>
-                                    <option value="">Bitte wählen</option>
-                                    @foreach($accounts as $account)
-                                        <option value="{{ $account->id }}" @selected($selectedToId === (string) $account->id)>
-                                            {{ $account->number ? $account->number . ' - ' : '' }}{{ $account->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                @error('account_to_id')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
+                            @include('transactions.partials.account-search-select', [
+                                'name' => 'account_to_id',
+                                'id' => 'account_to_id',
+                                'label' => 'Nach Konto *',
+                                'accounts' => $accounts,
+                                'selectedId' => $selectedToId,
+                                'placeholder' => 'Nach-Konto suchen, z. B. 8006 oder Beitrag',
+                            ])
+                            @error('account_to_id')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
                         @endif
 
                         <div class="lg:col-span-2">
