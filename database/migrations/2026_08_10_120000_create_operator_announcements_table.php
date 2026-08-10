@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('operator_announcements', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('created_by')->nullable();
             $table->string('subject');
             $table->text('body_markdown');
             $table->longText('body_html');
@@ -21,13 +21,18 @@ return new class extends Migration
             $table->string('status')->default('draft');
             $table->timestamp('sent_at')->nullable();
             $table->timestamps();
+
+            $table->foreign('created_by', 'op_ann_created_by_fk')
+                ->references('id')
+                ->on('users')
+                ->nullOnDelete();
         });
 
         Schema::create('operator_announcement_deliveries', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('operator_announcement_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('tenant_id')->nullable()->constrained('tenants')->nullOnDelete();
-            $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('operator_announcement_id');
+            $table->foreignId('tenant_id')->nullable();
+            $table->foreignId('user_id')->nullable();
             $table->string('recipient_name')->nullable();
             $table->string('email');
             $table->string('status')->default('sent');
@@ -36,6 +41,19 @@ return new class extends Migration
 
             $table->index(['tenant_id', 'status']);
             $table->index(['email', 'created_at']);
+
+            $table->foreign('operator_announcement_id', 'op_ann_del_ann_fk')
+                ->references('id')
+                ->on('operator_announcements')
+                ->cascadeOnDelete();
+            $table->foreign('tenant_id', 'op_ann_del_tenant_fk')
+                ->references('id')
+                ->on('tenants')
+                ->nullOnDelete();
+            $table->foreign('user_id', 'op_ann_del_user_fk')
+                ->references('id')
+                ->on('users')
+                ->nullOnDelete();
         });
     }
 
