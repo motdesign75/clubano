@@ -65,14 +65,16 @@ return [
     ],
 
     'update_notice' => [
-        'version' => env('CLUBANO_UPDATE_NOTICE_VERSION', '2026-08-04'),
+        'version' => env('CLUBANO_UPDATE_NOTICE_VERSION', '2026-08-10'),
         'title' => 'Clubano wurde aktualisiert',
-        'summary' => 'Wir haben heute mehrere Bereiche verbessert, damit der Alltag im Verein ruhiger, klarer und sicherer läuft.',
+        'summary' => 'Wir haben den Finanzbereich deutlich erweitert: Kontenrahmen, Buchungsimporte und Kontostände sind jetzt besser vorbereitet und sicherer nachvollziehbar.',
         'items' => [
-            'Admin-Cockpit mit Vereinsprüfung für neue Registrierungen',
-            'Importe mit Qualitätsprüfung, Korrekturlisten und Korrekturmappe',
-            'Kalender, Veranstaltungen und Teilnehmerlisten weiter optimiert',
-            'Stabilere Downloads für Berichte und Excel-Dateien',
+            'Kontenrahmen können importiert oder als einfacher Clubano-Standardrahmen angelegt werden',
+            'DATEV-Buchungsstapel können importiert und automatisch den richtigen Konten zugeordnet werden',
+            'Konten und Buchungskonten lassen sich schneller suchen, filtern und kompakt anzeigen',
+            'Kontostände werden zuverlässiger berechnet; negative Bankbestände werden klar rot dargestellt',
+            'Vor dem Import eines weiteren Kontenrahmens schützt eine deutliche Warnung vor unbeabsichtigten Änderungen',
+            'Ein neuer Wartungsbefehl kann Kontensalden aus abgeschlossenen Buchungen neu berechnen',
         ],
     ],
 

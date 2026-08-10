@@ -823,6 +823,9 @@ test('authenticated users can dismiss the update notice', function () {
         ->get(route('dashboard'))
         ->assertOk()
         ->assertSee('Clubano wurde aktualisiert')
+        ->assertSee('Update 2026-08-10')
+        ->assertSee('DATEV-Buchungsstapel')
+        ->assertSee('Kontensalden')
         ->assertSee('Nicht mehr anzeigen');
 
     $this->actingAs($admin)
