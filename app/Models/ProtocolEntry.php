@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 
 class ProtocolEntry extends Model
 {
+    use BelongsToTenant;
+
     public const TYPE_INFORMATION = 'information';
     public const TYPE_DISCUSSION = 'discussion';
     public const TYPE_RESOLUTION = 'resolution';

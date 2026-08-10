@@ -15,7 +15,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 
-test('viewer can create calendar event and audit log is written', function () {
+test('event managers can create calendar event and audit log is written', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
     $tenant = Tenant::create([
@@ -24,9 +24,9 @@ test('viewer can create calendar event and audit log is written', function () {
         'email' => 'kalender@example.test',
     ]);
 
-    $viewer = User::factory()->create([
+    $eventManager = User::factory()->create([
         'tenant_id' => $tenant->id,
-        'role' => User::ROLE_VIEWER,
+        'role' => User::ROLE_EVENT_MANAGER,
     ]);
 
     $category = EventCategory::withoutGlobalScopes()->create([
@@ -36,14 +36,14 @@ test('viewer can create calendar event and audit log is written', function () {
         'color' => '#2563EB',
     ]);
 
-    $response = $this->actingAs($viewer)->post(route('events.store'), [
+    $response = $this->actingAs($eventManager)->post(route('events.store'), [
         'title' => 'Jugendtraining',
         'description' => 'Dienstags auf dem Platz',
         'location' => 'Sportplatz',
         'start' => now()->addWeek()->setTime(18, 0)->toDateTimeString(),
         'end' => now()->addWeek()->setTime(20, 0)->toDateTimeString(),
         'category_id' => $category->id,
-        'responsible_user_id' => $viewer->id,
+        'responsible_user_id' => $eventManager->id,
         'is_public' => 0,
     ]);
 
@@ -52,9 +52,9 @@ test('viewer can create calendar event and audit log is written', function () {
     $event = Event::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('title', 'Jugendtraining')->first();
 
     expect($event)->not->toBeNull();
-    expect((int) $event->responsible_user_id)->toBe($viewer->id);
-    expect((int) $event->created_by)->toBe($viewer->id);
-    expect((int) $event->updated_by)->toBe($viewer->id);
+    expect((int) $event->responsible_user_id)->toBe($eventManager->id);
+    expect((int) $event->created_by)->toBe($eventManager->id);
+    expect((int) $event->updated_by)->toBe($eventManager->id);
 
     $log = EventChangeLog::query()->where('event_id', $event->id)->where('action', 'created')->first();
 

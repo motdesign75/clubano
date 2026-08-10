@@ -125,6 +125,48 @@
         : 'Kein Engpass sichtbar. Du kannst bewusst und ruhig weiterarbeiten.');
     $heroRoute = $primaryNextStep['route'] ?? ($heroEvent ? route('events.show', $heroEvent) : route('dashboard'));
     $heroAction = $primaryNextStep ? 'Jetzt machen' : ($heroEvent ? 'Termin öffnen' : 'Übersicht behalten');
+
+    $todaysBirthdays = $birthdays->filter(fn ($member) => $member->birthday?->format('m-d') === now()->format('m-d'))->values();
+    $birthdayMember = $todaysBirthdays->first();
+    $anniversaryMember = $anniversaries->first();
+    $entryMember = $entries->first();
+
+    $memberDisplayName = fn ($member) => trim(($member?->first_name ? $member->first_name . ' ' : '') . ($member?->last_name ?? '')) ?: ($member?->organization ?? 'Mitglied');
+
+    $clubMoment = match (true) {
+        (bool) $birthdayMember => [
+            'eyebrow' => 'Clubano-Moment',
+            'title' => $memberDisplayName($birthdayMember) . ' hat heute Geburtstag',
+            'text' => 'Ein kurzer Glückwunsch wirkt oft stärker als jede perfekte Verwaltung.',
+            'action' => 'Mitglied öffnen',
+            'route' => route('members.show', $birthdayMember),
+            'icon' => 'cake',
+        ],
+        (bool) $anniversaryMember => [
+            'eyebrow' => 'Clubano-Moment',
+            'title' => $memberDisplayName($anniversaryMember) . ' hat heute Vereinsjubiläum',
+            'text' => 'Solche Momente machen sichtbar, wer den Verein über Jahre trägt.',
+            'action' => 'Mitglied öffnen',
+            'route' => route('members.show', $anniversaryMember),
+            'icon' => 'sparkles',
+        ],
+        (bool) $entryMember => [
+            'eyebrow' => 'Clubano-Moment',
+            'title' => $memberDisplayName($entryMember) . ' ist neu dabei',
+            'text' => 'Ein persönliches Willkommen entscheidet oft darüber, ob jemand wirklich ankommt.',
+            'action' => 'Neue Mitglieder',
+            'route' => route('members.index'),
+            'icon' => 'heart',
+        ],
+        default => [
+            'eyebrow' => 'Clubano-Moment',
+            'title' => 'Heute ist ein guter Tag für ein Danke',
+            'text' => 'Such dir eine Person im Verein aus, die selten im Mittelpunkt steht, aber viel möglich macht.',
+            'action' => 'Mitglieder ansehen',
+            'route' => route('members.index'),
+            'icon' => 'heart',
+        ],
+    };
 @endphp
 
 <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
@@ -148,6 +190,33 @@
                     <p class="mt-4 max-w-2xl text-base leading-7 text-white/72 sm:text-lg">
                         Clubano zeigt dir den nächsten sinnvollen Schritt, bevor du suchen musst.
                     </p>
+
+                    <div class="mt-8 max-w-3xl rounded-xl border border-white/15 bg-white/8 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur">
+                        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="min-w-0">
+                                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-white/50">{{ $clubMoment['eyebrow'] }}</div>
+                                <div class="mt-3 flex items-start gap-3">
+                                    <div class="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-slate-950">
+                                        @if($clubMoment['icon'] === 'cake')
+                                            <x-heroicon-o-cake class="h-5 w-5" />
+                                        @elseif($clubMoment['icon'] === 'sparkles')
+                                            <x-heroicon-o-sparkles class="h-5 w-5" />
+                                        @else
+                                            <x-heroicon-o-heart class="h-5 w-5" />
+                                        @endif
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="text-xl font-semibold leading-snug tracking-tight text-white">{{ $clubMoment['title'] }}</p>
+                                        <p class="mt-2 max-w-2xl text-sm leading-6 text-white/65">{{ $clubMoment['text'] }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <a href="{{ $clubMoment['route'] }}"
+                               class="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-white/18 px-4 text-sm font-semibold text-white transition hover:bg-white/10">
+                                {{ $clubMoment['action'] }}
+                            </a>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center">

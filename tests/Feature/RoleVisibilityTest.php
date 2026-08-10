@@ -514,6 +514,8 @@ test('dashboard shows a calm guided cockpit', function () {
 
     $response->assertOk();
     $response->assertSee('Heute zuerst');
+    $response->assertSee('Clubano-Moment');
+    $response->assertSee('Mira Muster ist neu dabei');
     $response->assertSee('Nächster Schritt');
     $response->assertSee('Hinweise');
     $response->assertSee('Nächste Termine');

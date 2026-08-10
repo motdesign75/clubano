@@ -3,12 +3,14 @@
 // app/Models/Project.php
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Support\Carbon;
 
 class Project extends Model
 {
+    use BelongsToTenant;
     use HasUlids;
 
     public $incrementing = false;

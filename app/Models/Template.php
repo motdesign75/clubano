@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 
 class Template extends Model
 {
+    use BelongsToTenant;
+
     public const TYPE_MAIL = 'mail';
     public const TYPE_LETTER = 'letter';
     public const TYPE_MAIL_AND_LETTER = 'mail_letter';

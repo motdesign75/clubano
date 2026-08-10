@@ -72,7 +72,7 @@ test('public form export cannot be accessed across tenants', function () {
 
     $response = $this->actingAs($userA)->get(route('forms.export', $formB));
 
-    $response->assertForbidden();
+    $response->assertNotFound();
 });
 
 test('event exports cannot be accessed across tenants', function () {

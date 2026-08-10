@@ -11,8 +11,22 @@ class CurrentTenantScope implements Scope
 {
     public function apply(Builder $builder, Model $model): void
     {
-        if (Auth::check()) {
-            $builder->where('tenant_id', Auth::user()->tenant_id);
+        if (! Auth::check()) {
+            return;
         }
+
+        $user = Auth::user();
+
+        if (method_exists($user, 'isSuperAdmin') && $user->isSuperAdmin() && blank($user->tenant_id)) {
+            return;
+        }
+
+        if (blank($user->tenant_id)) {
+            $builder->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $builder->where($model->getTable() . '.tenant_id', $user->tenant_id);
     }
 }
