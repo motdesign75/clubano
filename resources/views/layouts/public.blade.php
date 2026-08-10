@@ -9,6 +9,7 @@
     @if(!empty($robots))
         <meta name="robots" content="{{ $robots }}">
     @endif
+    @include('layouts.partials.google-analytics')
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="{{ $bodyClass ?? 'min-h-screen bg-slate-50 text-slate-900' }}">

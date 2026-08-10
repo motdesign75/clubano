@@ -27,6 +27,8 @@
     <link rel="icon" type="image/svg+xml" href="{{ asset('images/clubano-icon.svg') }}">
     <link rel="alternate icon" href="{{ asset('images/clubano-icon.svg') }}">
 
+    @include('layouts.partials.google-analytics')
+
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 
