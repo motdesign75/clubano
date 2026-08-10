@@ -160,6 +160,35 @@
             </section>
 
             <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Onboarding-Funnel</p>
+                        <h2 class="mt-2 text-xl font-semibold text-slate-950">Warum noch keine Mitglieder?</h2>
+                        <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                            Diagnose aus Login-, Import- und Nutzungsmetadaten. Inhalte einzelner Mitglieder werden nicht angezeigt.
+                        </p>
+                    </div>
+                    <span class="inline-flex w-fit rounded-full px-3 py-1 text-sm font-semibold {{ $memberOnboarding['level'] === 'ok' ? 'bg-emerald-50 text-emerald-700' : ($memberOnboarding['level'] === 'risk' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700') }}">
+                        {{ $memberOnboarding['label'] }}
+                    </span>
+                </div>
+
+                <div class="mt-5 rounded-2xl {{ $memberOnboarding['level'] === 'ok' ? 'bg-emerald-50' : ($memberOnboarding['level'] === 'risk' ? 'bg-rose-50' : 'bg-amber-50') }} px-4 py-4">
+                    <div class="text-sm font-semibold text-slate-950">{{ $memberOnboarding['reason'] }}</div>
+                    <div class="mt-2 text-sm leading-6 text-slate-700">{{ $memberOnboarding['next_action'] }}</div>
+                </div>
+
+                <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    @foreach($memberOnboarding['evidence'] as $item)
+                        <div class="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                            <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{{ $item['label'] }}</div>
+                            <div class="mt-2 text-xl font-semibold text-slate-950">{{ $item['value'] }}</div>
+                        </div>
+                    @endforeach
+                </div>
+            </section>
+
+            <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div class="flex items-center justify-between gap-4">
                     <div>
                         <h2 class="text-lg font-semibold text-slate-950">Nutzung</h2>

@@ -34,7 +34,7 @@
             ['label' => 'Aktiv', 'value' => $lifecycleStats['active_30_days'], 'hint' => 'Aktivität in 30 Tagen'],
             ['label' => 'Prüfung offen', 'value' => $platformStats['verification_pending'], 'hint' => 'neue Vereine prüfen'],
             ['label' => 'Risiko', 'value' => $platformStats['verification_risk'], 'hint' => 'markiert oder abgelehnt'],
-            ['label' => 'Mit Ort', 'value' => $lifecycleStats['with_location'], 'hint' => 'Vereinsprofil gepflegt'],
+            ['label' => 'Ohne Mitglieder', 'value' => $lifecycleStats['without_members'], 'hint' => 'Onboarding prüfen'],
             ['label' => 'Supportbereit', 'value' => $lifecycleStats['support_ready'], 'hint' => 'geprüft und aktiv'],
         ] as $stat)
             <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -62,7 +62,7 @@
                     ['label' => 'Kalendernutzung', 'value' => $lifecycleStats['with_events'], 'hint' => 'Vereine mit Terminen'],
                     ['label' => 'Lizenzen', 'value' => $platformStats['licensed'], 'hint' => 'Pilot- und Freilizenzen'],
                     ['label' => 'Trials prüfen', 'value' => $platformStats['expired_trials'], 'hint' => 'abgelaufene Tests'],
-                    ['label' => 'Support-Risiko', 'value' => $lifecycleStats['without_admin_user'], 'hint' => 'Vereine ohne Admin'],
+                    ['label' => 'Mitgliederstart', 'value' => $lifecycleStats['member_onboarding_risk'], 'hint' => 'brauchen Unterstützung'],
                 ] as $signal)
                     <div class="rounded-xl bg-slate-50 px-4 py-4">
                         <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{{ $signal['label'] }}</div>
@@ -138,6 +138,7 @@
                             $profile = $tenant->admin_profile;
                             $features = $tenant->admin_feature_state;
                             $review = $tenant->admin_registration_review;
+                            $memberOnboarding = $tenant->admin_member_onboarding;
                         @endphp
                         <tr class="align-top">
                             <td class="px-5 py-4">
@@ -163,6 +164,11 @@
                                 <div class="mt-2 max-w-xs text-xs leading-5 text-slate-500">{{ $health['reason'] }}</div>
                                 @if(!empty($review['reasons']))
                                     <div class="mt-1 max-w-xs text-xs leading-5 text-slate-500">{{ $review['reasons'][0] }}</div>
+                                @endif
+                                @if(($metrics['members'] ?? 0) === 0)
+                                    <div class="mt-2 inline-flex rounded-md px-2 py-1 text-[11px] font-semibold {{ $memberOnboarding['level'] === 'risk' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700' }}">
+                                        Mitglieder: {{ $memberOnboarding['label'] }}
+                                    </div>
                                 @endif
                             </td>
                             <td class="px-5 py-4">

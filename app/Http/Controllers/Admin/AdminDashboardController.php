@@ -82,6 +82,11 @@ class AdminDashboardController extends Controller
                 $tenant->admin_profile = $this->tenantProfile($tenant);
                 $tenant->admin_feature_state = $this->tenantFeatureState($tenant);
                 $tenant->admin_registration_review = $this->tenantRegistrationReview($tenant);
+                $tenant->admin_member_onboarding = $this->memberOnboardingDiagnosis(
+                    $tenant,
+                    $tenant->admin_metrics,
+                    $tenant->admin_last_activity_at
+                );
 
                 return $tenant;
             });
@@ -89,7 +94,9 @@ class AdminDashboardController extends Controller
         $latestTenants = $allTenants->take(12);
 
         $attentionTenants = $allTenants
-            ->filter(fn (Tenant $tenant) => ($tenant->admin_health['level'] ?? 'ok') !== 'ok' || ($tenant->admin_registration_review['level'] ?? 'ok') !== 'ok')
+            ->filter(fn (Tenant $tenant) => ($tenant->admin_health['level'] ?? 'ok') !== 'ok'
+                || ($tenant->admin_registration_review['level'] ?? 'ok') !== 'ok'
+                || ($tenant->admin_member_onboarding['level'] ?? 'ok') === 'risk')
             ->take(8)
             ->values();
 
@@ -104,6 +111,8 @@ class AdminDashboardController extends Controller
             'with_imports' => $allTenants->filter(fn (Tenant $tenant) => ($tenant->admin_metrics['imports'] ?? 0) > 0)->count(),
             'support_ready' => $allTenants->filter(fn (Tenant $tenant) => ($tenant->admin_health['level'] ?? 'risk') === 'ok' && ($tenant->admin_registration_review['level'] ?? 'risk') === 'ok')->count(),
             'without_admin_user' => $allTenants->filter(fn (Tenant $tenant) => ($tenant->admin_metrics['admin_users'] ?? 0) === 0)->count(),
+            'without_members' => $allTenants->filter(fn (Tenant $tenant) => ($tenant->admin_metrics['members'] ?? 0) === 0)->count(),
+            'member_onboarding_risk' => $allTenants->filter(fn (Tenant $tenant) => ($tenant->admin_member_onboarding['level'] ?? 'ok') === 'risk')->count(),
         ];
 
         $latestUsers = User::with('tenant')
@@ -197,6 +206,7 @@ class AdminDashboardController extends Controller
         $registrationReview = $this->tenantRegistrationReview($tenant, $stats);
         $lastActivity = $this->lastActivityByTenant([$tenant->id])[(int) $tenant->id] ?? null;
         $supportDossier = $this->supportDossier($tenant, $stats, $registrationReview, $lastActivity);
+        $memberOnboarding = $this->memberOnboardingDiagnosis($tenant, $stats, $lastActivity);
 
         return view('admin.tenants.show', compact(
             'tenant',
@@ -209,7 +219,8 @@ class AdminDashboardController extends Controller
             'featureState',
             'registrationReview',
             'lastActivity',
-            'supportDossier'
+            'supportDossier',
+            'memberOnboarding'
         ));
     }
 
@@ -769,6 +780,113 @@ class AdminDashboardController extends Controller
                 ],
             ],
             'signals' => $signals,
+        ];
+    }
+
+    /**
+     * @param array<string, int> $stats
+     * @return array{level: string, label: string, reason: string, next_action: string, evidence: array<int, array{label: string, value: string}>}
+     */
+    private function memberOnboardingDiagnosis(Tenant $tenant, array $stats, ?\Illuminate\Support\Carbon $lastActivity): array
+    {
+        $members = (int) ($stats['members'] ?? 0);
+        $imports = (int) ($stats['imports'] ?? 0);
+        $failedImports = (int) ($stats['failed_imports'] ?? 0);
+        $recentLogins = (int) ($stats['recent_logins_30_days'] ?? 0);
+        $unverifiedUsers = (int) ($stats['unverified_users'] ?? 0);
+        $otherUsage = (int) ($stats['events'] ?? 0)
+            + (int) ($stats['tasks'] ?? 0)
+            + (int) ($stats['documents'] ?? 0)
+            + (int) ($stats['accounts'] ?? 0)
+            + (int) ($stats['forms'] ?? 0);
+
+        $evidence = [
+            ['label' => 'Mitglieder', 'value' => (string) $members],
+            ['label' => 'Importe', 'value' => (string) $imports],
+            ['label' => 'Logins 30 Tage', 'value' => (string) $recentLogins],
+            ['label' => 'Andere Nutzung', 'value' => (string) $otherUsage],
+        ];
+
+        if ($members > 0) {
+            return [
+                'level' => 'ok',
+                'label' => 'Mitgliederanlage gestartet',
+                'reason' => 'Der Verein hat bereits Mitglieder angelegt oder importiert.',
+                'next_action' => 'Kein akuter Eingriff nötig. Bei Supportbedarf eher nach Datenqualität und Importfragen schauen.',
+                'evidence' => $evidence,
+            ];
+        }
+
+        if ($unverifiedUsers > 0 && $recentLogins === 0) {
+            return [
+                'level' => 'risk',
+                'label' => 'Login hängt',
+                'reason' => 'Es gibt unbestätigte Benutzer und keine erkennbare Rückkehr in die Anwendung.',
+                'next_action' => 'Kontakt aufnehmen: E-Mail-Bestätigung, Login und ersten Einstieg prüfen.',
+                'evidence' => array_merge($evidence, [
+                    ['label' => 'E-Mail offen', 'value' => (string) $unverifiedUsers],
+                ]),
+            ];
+        }
+
+        if ($imports > 0 && $failedImports > 0) {
+            return [
+                'level' => 'risk',
+                'label' => 'Import blockiert',
+                'reason' => 'Der Verein hat Importversuche, aber noch keine Mitglieder im Bestand.',
+                'next_action' => 'Support anbieten: Importdatei, Feldzuordnung und Korrekturmappe gemeinsam durchgehen.',
+                'evidence' => array_merge($evidence, [
+                    ['label' => 'Importe prüfen', 'value' => (string) $failedImports],
+                ]),
+            ];
+        }
+
+        if ($imports > 0) {
+            return [
+                'level' => 'watch',
+                'label' => 'Import begonnen',
+                'reason' => 'Es gibt Importaktivität, aber noch keine übernommenen Mitglieder.',
+                'next_action' => 'Nachfragen, ob beim Importbericht oder bei der Korrektur der Daten Hilfe benötigt wird.',
+                'evidence' => $evidence,
+            ];
+        }
+
+        if ($recentLogins === 0 && $tenant->created_at?->lt(now()->subDays(2))) {
+            return [
+                'level' => 'risk',
+                'label' => 'Nicht zurückgekehrt',
+                'reason' => 'Nach der Registrierung ist keine aktuelle Nutzung erkennbar.',
+                'next_action' => 'Kurze persönliche Mail senden: Login, Ziel des Vereins und erster Schritt Mitgliederimport anbieten.',
+                'evidence' => $evidence,
+            ];
+        }
+
+        if ($otherUsage > 0) {
+            return [
+                'level' => 'watch',
+                'label' => 'Andere Bereiche zuerst',
+                'reason' => 'Der Verein nutzt Clubano, startet aber nicht mit der Mitgliederbasis.',
+                'next_action' => 'Im Support auf den Nutzen der Mitgliederbasis hinweisen: Einladungen, Beiträge, Auswertungen und Rollen hängen daran.',
+                'evidence' => $evidence,
+            ];
+        }
+
+        if ($tenant->created_at?->greaterThanOrEqualTo(now()->subDays(2))) {
+            return [
+                'level' => 'watch',
+                'label' => 'Noch frisch',
+                'reason' => 'Die Registrierung ist neu. Noch ist fehlende Mitgliederanlage nicht zwingend kritisch.',
+                'next_action' => 'Noch beobachten oder eine freundliche Willkommen-Mail mit erstem Schritt senden.',
+                'evidence' => $evidence,
+            ];
+        }
+
+        return [
+            'level' => 'watch',
+            'label' => 'Mitgliederstart offen',
+            'reason' => 'Es gibt weder Mitglieder noch Importaktivität.',
+            'next_action' => 'Gezielt nachfragen, ob der Verein lieber manuell starten oder eine Bestandsliste importieren möchte.',
+            'evidence' => $evidence,
         ];
     }
 }
