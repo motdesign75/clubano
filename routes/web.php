@@ -17,6 +17,7 @@ use App\Http\Controllers\EventCategoryController;
 use App\Http\Controllers\DocumentationController;
 use App\Http\Controllers\SepaExportController;
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\OperatorAnnouncementController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\PublicFormController;
@@ -629,6 +630,9 @@ Route::middleware(['auth', 'superadmin'])->prefix('admin')->group(function () {
     Route::get('/', [AdminDashboardController::class, 'index'])->name('admin.dashboard');
     Route::get('/konto', [AdminDashboardController::class, 'account'])->name('admin.account');
     Route::patch('/konto', [AdminDashboardController::class, 'updateAccount'])->name('admin.account.update');
+    Route::get('/mitteilungen', [OperatorAnnouncementController::class, 'index'])->name('admin.announcements.index');
+    Route::get('/mitteilungen/neu', [OperatorAnnouncementController::class, 'create'])->name('admin.announcements.create');
+    Route::post('/mitteilungen', [OperatorAnnouncementController::class, 'store'])->name('admin.announcements.store');
     Route::get('/tenants/{tenant}', [AdminDashboardController::class, 'showTenant'])->name('admin.tenants.show');
     Route::patch('/tenants/{tenant}/license', [AdminDashboardController::class, 'updateLicense'])->name('admin.tenants.license');
     Route::patch('/tenants/{tenant}/verification', [AdminDashboardController::class, 'updateVerification'])->name('admin.tenants.verification');

@@ -263,6 +263,12 @@
             'icon' => 'shield-check',
         ];
         $systemNav[] = [
+            'label' => 'Mitteilungen',
+            'route' => route('admin.announcements.index'),
+            'active' => request()->routeIs('admin.announcements.*'),
+            'icon' => 'megaphone',
+        ];
+        $systemNav[] = [
             'label' => 'Betreiberkonto',
             'route' => route('admin.account'),
             'active' => request()->routeIs('admin.account'),
