@@ -20,12 +20,23 @@ class BillingController extends Controller
         }
 
         $plans = config('clubano.plans') ?? [];
+        $primaryPlanIds = collect(config('clubano.billing.plans', []))
+            ->pluck('stripe_price_id')
+            ->filter()
+            ->values()
+            ->all();
 
         // Nur Pläne anzeigen, die mindestens eine Price-ID haben
         $plans = array_filter($plans, function ($p) {
             $ids = $p['stripe_price_ids'] ?? [];
             return is_array($ids) && count($ids) > 0;
         });
+
+        if (! empty($primaryPlanIds)) {
+            $plans = array_filter($plans, function ($p) use ($primaryPlanIds) {
+                return count(array_intersect($p['stripe_price_ids'] ?? [], $primaryPlanIds)) === 0;
+            });
+        }
 
         return view('billing.plans', compact('tenant', 'plans'));
     }
@@ -60,6 +71,8 @@ class BillingController extends Controller
         $this->ensureStripeCustomer($tenant);
 
         $subscription = $tenant->newSubscription('default', $priceId);
+        $billingPlan = collect(config('clubano.billing.plans', []))
+            ->firstWhere('stripe_price_id', $priceId);
 
         if ($tenant->onTrial() && $tenant->trial_ends_at) {
             $subscription->trialUntil($tenant->trial_ends_at);
@@ -68,6 +81,19 @@ class BillingController extends Controller
         return $subscription->checkout([
                 'success_url' => route('dashboard', [], true) . '?subscription=success',
                 'cancel_url'  => route('dashboard', [], true) . '?subscription=cancelled',
+                'payment_method_types' => config('clubano.billing.payment_method_types', ['card', 'sepa_debit']),
+                'metadata' => [
+                    'tenant_id' => $tenant->id,
+                    'billing_plan' => $billingPlan['key'] ?? 'custom',
+                    'price_id' => $priceId,
+                ],
+                'subscription_data' => [
+                    'metadata' => [
+                        'tenant_id' => $tenant->id,
+                        'billing_plan' => $billingPlan['key'] ?? 'custom',
+                        'price_id' => $priceId,
+                    ],
+                ],
             ]);
     }
 

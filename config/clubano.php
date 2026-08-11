@@ -4,6 +4,31 @@ return [
 
     'trial_days' => 14,
 
+    'billing' => [
+        'payment_method_types' => ['card', 'sepa_debit'],
+        'plans' => [
+            'monthly' => [
+                'key' => 'monthly',
+                'name' => 'Monatlich',
+                'label' => 'Monatlich flexibel',
+                'price' => '19,99 €',
+                'interval' => 'Monat',
+                'description' => 'Für Vereine, die flexibel starten möchten.',
+                'stripe_price_id' => env('STRIPE_PRICE_MONTHLY', 'price_1TMm3iLTnGBaGb0l8O7P19vr'),
+            ],
+            'yearly' => [
+                'key' => 'yearly',
+                'name' => 'Jährlich',
+                'label' => 'Jährlich sparen',
+                'price' => '199,00 €',
+                'interval' => 'Jahr',
+                'description' => 'Einmal jährlich zahlen und gegenüber monatlicher Zahlung sparen.',
+                'badge' => '40,88 € sparen',
+                'stripe_price_id' => env('STRIPE_PRICE_YEARLY', 'price_1U3A51LTnGBaGb0lp3MVF2it'),
+            ],
+        ],
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Lizenz-Pläne (über Stripe Price IDs)
@@ -34,6 +59,15 @@ return [
             'member_limit' => NULL, // unbegrenzt
             'stripe_price_ids' => [
                 'price_1SzzqgLp71a9zFH1xmTy6MOP',
+            ],
+        ],
+
+        'clubano' => [
+            'name' => 'Clubano',
+            'member_limit' => null,
+            'stripe_price_ids' => [
+                env('STRIPE_PRICE_MONTHLY', 'price_1TMm3iLTnGBaGb0l8O7P19vr'),
+                env('STRIPE_PRICE_YEARLY', 'price_1U3A51LTnGBaGb0lp3MVF2it'),
             ],
         ],
     ],

@@ -12,7 +12,9 @@ class SubscriptionController extends Controller
     {
         abort_unless(auth()->user()?->canManageTenantSettings(), 403);
 
-        return view('subscription.index');
+        return view('subscription.index', [
+            'billingPlans' => $this->billingPlans(),
+        ]);
     }
 
     public function checkout(Request $request)
@@ -22,6 +24,13 @@ class SubscriptionController extends Controller
     $request->validate([
         'price_id' => 'required|string',
     ]);
+
+    $billingPlans = $this->billingPlans();
+    $selectedPlan = collect($billingPlans)->firstWhere('stripe_price_id', $request->price_id);
+
+    if (! $selectedPlan) {
+        abort(403, 'Ungültiger Abo-Plan.');
+    }
 
     $tenant = Auth::user()->tenant;
 
@@ -39,11 +48,21 @@ class SubscriptionController extends Controller
 
     // 🔥 WICHTIG: Checkout mit Metadata
     return $subscription->checkout([
-            'success_url' => route('dashboard'),
-            'cancel_url' => route('subscription.index'),
+            'success_url' => route('dashboard', [], true) . '?subscription=success',
+            'cancel_url' => route('subscription.index', [], true),
+            'payment_method_types' => config('clubano.billing.payment_method_types', ['card', 'sepa_debit']),
 
             'metadata' => [
                 'tenant_id' => $tenant->id, // 🔥 DAS IST DER SCHLÜSSEL
+                'billing_plan' => $selectedPlan['key'],
+                'price_id' => $selectedPlan['stripe_price_id'],
+            ],
+            'subscription_data' => [
+                'metadata' => [
+                    'tenant_id' => $tenant->id,
+                    'billing_plan' => $selectedPlan['key'],
+                    'price_id' => $selectedPlan['stripe_price_id'],
+                ],
             ],
         ]);
 
@@ -61,5 +80,13 @@ class SubscriptionController extends Controller
             $tenant->forceFill(['stripe_id' => null])->save();
             $tenant->createOrGetStripeCustomer();
         }
+    }
+
+    private function billingPlans(): array
+    {
+        return collect(config('clubano.billing.plans', []))
+            ->filter(fn (array $plan) => filled($plan['stripe_price_id'] ?? null))
+            ->values()
+            ->all();
     }
 }

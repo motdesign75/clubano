@@ -23,19 +23,38 @@ class StripeWebhookController extends Controller
                 $tenant = Tenant::find($tenantId);
 
                 if ($tenant) {
-                    $trialDays = (int) config('clubano.trial_days', 14);
+                    $subscriptionId = $session['subscription'] ?? null;
 
-                    DB::table('subscriptions')->insert([
-                        'tenant_id' => $tenant->id,
-                        'name' => 'default',
-                        'stripe_id' => $session['subscription'] ?? null,
-                        'stripe_status' => 'active',
-                        'stripe_price' => null,
-                        'quantity' => 1,
-                        'trial_ends_at' => now()->addDays($trialDays),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
+                    if (! $subscriptionId) {
+                        return response()->json(['status' => 'ignored']);
+                    }
+
+                    $priceId = $session['metadata']['price_id'] ?? null;
+                    $billingPlan = $session['metadata']['billing_plan'] ?? null;
+
+                    if (! $priceId && $billingPlan) {
+                        $priceId = config("clubano.billing.plans.{$billingPlan}.stripe_price_id");
+                    }
+
+                    $trialEndsAt = $tenant->trial_ends_at && $tenant->trial_ends_at->isFuture()
+                        ? $tenant->trial_ends_at
+                        : null;
+
+                    DB::table('subscriptions')->updateOrInsert(
+                        [
+                            'stripe_id' => $subscriptionId,
+                        ],
+                        [
+                            'tenant_id' => $tenant->id,
+                            'name' => 'default',
+                            'stripe_status' => 'active',
+                            'stripe_price' => $priceId,
+                            'quantity' => 1,
+                            'trial_ends_at' => $trialEndsAt,
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]
+                    );
                 }
             }
         }
