@@ -35,6 +35,8 @@ test('new users can register', function () {
     expect($user->role)->toBe(User::ROLE_ADMIN);
     expect($user->isSuperAdmin())->toBeFalse();
     expect($user->name)->toBe('Test User');
+    expect($user->last_login_at)->not->toBeNull();
+    expect($user->last_login_ip)->toBe('127.0.0.1');
     expect($tenant->name)->toBe('Test Verein e.V.');
     expect($tenant->city)->toBe('Demostadt');
     expect($tenant->verification_status)->toBe('pending');

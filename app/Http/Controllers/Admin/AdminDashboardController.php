@@ -471,8 +471,8 @@ class AdminDashboardController extends Controller
         if (($metrics['users'] ?? 0) === 0) {
             return [
                 'level' => 'risk',
-                'label' => 'Kein Benutzer',
-                'reason' => 'Der Verein hat noch keinen Login.',
+                'label' => 'Kein Benutzerkonto',
+                'reason' => 'Der Verein hat noch keinen angelegten Benutzerzugang.',
             ];
         }
 
@@ -684,11 +684,25 @@ class AdminDashboardController extends Controller
 
         $signals = [];
 
-        if (($stats['admin_users'] ?? 0) === 0) {
+        if (($stats['users'] ?? 0) === 0) {
+            $signals[] = [
+                'label' => 'Kein Benutzerkonto',
+                'text' => 'Zu diesem Verein wurde noch kein Benutzerzugang gefunden.',
+                'state' => 'risk',
+            ];
+        } elseif (($stats['admin_users'] ?? 0) === 0) {
             $signals[] = [
                 'label' => 'Kein Vereinsadmin',
                 'text' => 'Im Supportfall fehlt ein klarer Ansprechpartner mit Verwaltungsrechten.',
                 'state' => 'risk',
+            ];
+        }
+
+        if (($stats['users'] ?? 0) > 0 && ($stats['recent_logins_30_days'] ?? 0) === 0) {
+            $signals[] = [
+                'label' => 'Noch kein aktueller Login',
+                'text' => 'Es gibt Benutzerzugänge, aber in den letzten 30 Tagen wurde kein Login erkannt.',
+                'state' => 'watch',
             ];
         }
 

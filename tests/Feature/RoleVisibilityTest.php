@@ -778,6 +778,8 @@ test('superadmin can use the platform cockpit without opening a club dashboard',
     $detail->assertSee('Warum noch keine Mitglieder?');
     $detail->assertSee('Onboarding-Funnel');
     $detail->assertSee('Vereinsprüfung');
+    $detail->assertSee('Adminbenutzer');
+    $detail->assertDontSee('Kein Vereinsadmin');
     $detail->assertSee('Hauptstraße 12');
     $detail->assertSee('Mitglieder aktiv');
     $detail->assertSee('Probetraining');
