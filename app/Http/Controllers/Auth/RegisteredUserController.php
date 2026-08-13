@@ -9,6 +9,7 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Illuminate\Http\Request;
@@ -45,38 +46,39 @@ class RegisteredUserController extends Controller
             'nickname' => ['nullable', 'max:0'],
         ]);
 
-        // 🧩 Neuen Verein (Tenant) automatisch erstellen
-        $tenant = Tenant::create([
-            'name' => $validated['tenant_name'],
-            'slug' => Str::slug($validated['tenant_name']) . '-' . Str::random(4),
-            'email' => $validated['email'],
-            'city' => $validated['club_city'] ?? null,
-            'invite_code' => Str::uuid(),
-            'verification_status' => 'pending',
-            'registration_contact_name' => $validated['contact_name'],
-            'registration_role' => $validated['role_in_club'],
-            'registration_website' => $validated['club_website'] ?? null,
-            'registration_intent' => collect($validated['intended_use'] ?? [])->filter()->implode(', '),
-            'registration_ip' => $request->ip(),
-        ]);
+        [$tenant, $user] = DB::transaction(function () use ($validated, $request) {
+            // 🧩 Neuen Verein (Tenant) automatisch erstellen
+            $tenant = Tenant::create([
+                'name' => $validated['tenant_name'],
+                'slug' => Str::slug($validated['tenant_name']) . '-' . Str::random(4),
+                'email' => $validated['email'],
+                'city' => $validated['club_city'] ?? null,
+                'invite_code' => Str::uuid(),
+                'verification_status' => 'pending',
+                'registration_contact_name' => $validated['contact_name'],
+                'registration_role' => $validated['role_in_club'],
+                'registration_website' => $validated['club_website'] ?? null,
+                'registration_intent' => collect($validated['intended_use'] ?? [])->filter()->implode(', '),
+                'registration_ip' => $request->ip(),
+            ]);
 
-        // 👤 Neuen Benutzer anlegen und Tenant zuweisen
-        $user = User::create([
-            'name' => $validated['contact_name'],
-            'email' => $validated['email'],
-            'tenant_id' => $tenant->id,
-            'role' => User::ROLE_ADMIN,
-            'password' => Hash::make($validated['password']),
-        ]);
+            // 👤 Neuen Benutzer anlegen und Tenant zuweisen
+            $user = User::create([
+                'name' => $validated['contact_name'],
+                'email' => $validated['email'],
+                'tenant_id' => $tenant->id,
+                'role' => User::ROLE_ADMIN,
+                'password' => Hash::make($validated['password']),
+                'last_login_at' => now(),
+                'last_login_ip' => $request->ip(),
+            ]);
+
+            return [$tenant, $user];
+        });
 
         // 📣 Event & Login
         event(new Registered($user));
         Auth::login($user);
-
-        $user->forceFill([
-            'last_login_at' => now(),
-            'last_login_ip' => $request->ip(),
-        ])->save();
 
         $request->session()->forget('registration.form_started_at');
 

@@ -448,6 +448,17 @@ class AdminDashboardController extends Controller
     private function tenantHealth(Tenant $tenant): array
     {
         $metrics = $tenant->admin_metrics ?? [];
+        $hasTenantData = array_sum([
+            (int) ($metrics['members'] ?? 0),
+            (int) ($metrics['events'] ?? 0),
+            (int) ($metrics['protocols'] ?? 0),
+            (int) ($metrics['tasks'] ?? 0),
+            (int) ($metrics['documents'] ?? 0),
+            (int) ($metrics['forms'] ?? 0),
+            (int) ($metrics['imports'] ?? 0),
+            (int) ($metrics['accounts'] ?? 0),
+            (int) ($metrics['donations'] ?? 0),
+        ]) > 0;
         $hasAccess = $tenant->hasComplimentaryAccess()
             || $tenant->subscribed('default')
             || $tenant->trial_ends_at?->isFuture();
@@ -471,8 +482,10 @@ class AdminDashboardController extends Controller
         if (($metrics['users'] ?? 0) === 0) {
             return [
                 'level' => 'risk',
-                'label' => 'Kein Benutzerkonto',
-                'reason' => 'Der Verein hat noch keinen angelegten Benutzerzugang.',
+                'label' => $hasTenantData ? 'Benutzer prüfen' : 'Kein Benutzerkonto',
+                'reason' => $hasTenantData
+                    ? 'Vereinsdaten sind vorhanden, aber kein Benutzerzugang ist mit diesem Verein verknüpft.'
+                    : 'Der Verein hat noch keinen angelegten Benutzerzugang.',
             ];
         }
 
@@ -669,6 +682,17 @@ class AdminDashboardController extends Controller
      */
     private function supportDossier(Tenant $tenant, array $stats, array $registrationReview, ?\Illuminate\Support\Carbon $lastActivity): array
     {
+        $hasTenantData = array_sum([
+            (int) ($stats['members'] ?? 0),
+            (int) ($stats['events'] ?? 0),
+            (int) ($stats['protocols'] ?? 0),
+            (int) ($stats['tasks'] ?? 0),
+            (int) ($stats['documents'] ?? 0),
+            (int) ($stats['forms'] ?? 0),
+            (int) ($stats['imports'] ?? 0),
+            (int) ($stats['accounts'] ?? 0),
+            (int) ($stats['donations'] ?? 0),
+        ]) > 0;
         $hasAccess = $tenant->hasComplimentaryAccess()
             || $tenant->subscribed('default')
             || $tenant->trial_ends_at?->isFuture();
@@ -686,8 +710,10 @@ class AdminDashboardController extends Controller
 
         if (($stats['users'] ?? 0) === 0) {
             $signals[] = [
-                'label' => 'Kein Benutzerkonto',
-                'text' => 'Zu diesem Verein wurde noch kein Benutzerzugang gefunden.',
+                'label' => $hasTenantData ? 'Benutzerverknüpfung prüfen' : 'Kein Benutzerkonto',
+                'text' => $hasTenantData
+                    ? 'Es sind Vereinsdaten vorhanden, aber kein Benutzerzugang ist mit diesem Verein verknüpft.'
+                    : 'Zu diesem Verein wurde noch kein Benutzerzugang gefunden.',
                 'state' => 'risk',
             ];
         } elseif (($stats['admin_users'] ?? 0) === 0) {

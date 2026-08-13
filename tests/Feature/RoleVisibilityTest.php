@@ -822,6 +822,35 @@ test('operator superadmin is not tied to a club account', function () {
         ->assertSee('Kennwort ändern');
 });
 
+test('admin cockpit flags tenant data without a linked user as a repair case', function () {
+    $orphanTenant = Tenant::create([
+        'name' => 'TSC Blau-Gold Nienburg e.V.',
+        'slug' => 'tsc-blau-gold-nienburg',
+        'email' => 'kasse@tsc-nienburg.de',
+        'verification_status' => 'verified',
+    ]);
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $orphanTenant->id,
+        'first_name' => 'Yannick',
+        'last_name' => 'Fischer',
+        'email' => 'kasse@tsc-nienburg.de',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $operator = User::factory()->create([
+        'tenant_id' => null,
+        'role' => User::ROLE_SUPERADMIN,
+        'email_verified_at' => now(),
+    ]);
+
+    $this->actingAs($operator)
+        ->get(route('admin.tenants.show', $orphanTenant))
+        ->assertOk()
+        ->assertSee('Benutzerverknüpfung prüfen')
+        ->assertSee('Es sind Vereinsdaten vorhanden, aber kein Benutzerzugang ist mit diesem Verein verknüpft.');
+});
+
 test('authenticated users can dismiss the update notice', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
