@@ -4,14 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Template;
 use App\Models\TemplateDispatchLog;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 
 class TemplateDispatchLogController extends Controller
 {
-    public function index(Request $request)
+    private function filteredQuery(Request $request, int $tenantId)
     {
-        $tenantId = auth()->user()->tenant_id;
-
         $query = TemplateDispatchLog::query()
             ->where('tenant_id', $tenantId)
             ->with(['template', 'creator', 'member', 'contact']);
@@ -33,6 +32,15 @@ class TemplateDispatchLogController extends Controller
                     ->orWhere('subject', 'like', $search);
             });
         }
+
+        return $query;
+    }
+
+    public function index(Request $request)
+    {
+        $tenantId = auth()->user()->tenant_id;
+
+        $query = $this->filteredQuery($request, $tenantId);
 
         $logs = $query
             ->latest('dispatched_at')
@@ -56,5 +64,43 @@ class TemplateDispatchLogController extends Controller
         ];
 
         return view('templates.dispatch-log', compact('logs', 'templates', 'stats'));
+    }
+
+    public function exportPdf(Request $request)
+    {
+        $tenantId = auth()->user()->tenant_id;
+        $tenant = auth()->user()->tenant;
+
+        $logs = $this->filteredQuery($request, $tenantId)
+            ->latest('dispatched_at')
+            ->latest('id')
+            ->get();
+
+        $stats = [
+            'total' => $logs->count(),
+            'mail' => $logs->where('channel', 'mail')->count(),
+            'letter' => $logs->where('channel', 'letter')->count(),
+            'opened' => $logs->where('open_count', '>', 0)->count(),
+            'clicked' => $logs->where('click_count', '>', 0)->count(),
+        ];
+
+        $filters = [
+            'search' => trim((string) $request->string('search')),
+            'channel' => trim((string) $request->string('channel')),
+            'template_id' => $request->filled('template_id') ? $request->integer('template_id') : null,
+        ];
+
+        $pdf = Pdf::loadView('pdf.dispatch-log', [
+            'tenant' => $tenant,
+            'logs' => $logs,
+            'stats' => $stats,
+            'filters' => $filters,
+            'generatedAt' => now(),
+            'generatedBy' => auth()->user(),
+        ])->setPaper('a4', 'landscape');
+
+        $fileName = 'versandprotokoll-' . now()->format('Y-m-d-His') . '.pdf';
+
+        return $pdf->download($fileName);
     }
 }

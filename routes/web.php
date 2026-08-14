@@ -550,6 +550,9 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () {
     Route::get('/templates/protokoll', [TemplateDispatchLogController::class, 'index'])
         ->middleware('tenant.role:Mitarbeiter')
         ->name('templates.dispatch-log');
+    Route::get('/templates/protokoll/pdf', [TemplateDispatchLogController::class, 'exportPdf'])
+        ->middleware('tenant.role:Mitarbeiter')
+        ->name('templates.dispatch-log.pdf');
 
     Route::get('/templates', [TemplateController::class, 'index'])->name('templates.index');
     Route::get('/templates/create', [TemplateController::class, 'create'])->middleware('tenant.role:Mitarbeiter')->name('templates.create');

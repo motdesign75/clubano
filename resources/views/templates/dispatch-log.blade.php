@@ -12,6 +12,10 @@
         </div>
 
         <div class="flex flex-wrap gap-3">
+            <a href="{{ route('templates.dispatch-log.pdf', request()->query()) }}"
+               class="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
+                Protokoll als PDF sichern
+            </a>
             <a href="{{ route('mail.create') }}"
                class="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                 Mailversand öffnen
