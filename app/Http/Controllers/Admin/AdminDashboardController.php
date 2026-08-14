@@ -51,6 +51,7 @@ class AdminDashboardController extends Controller
             'failed_imports' => $this->countByTenant('import_runs', fn ($query) => $query->where('status', '!=', 'completed')),
             'unverified_users' => $this->countByTenant('users', fn ($query) => $query->whereNull('email_verified_at')),
             'admin_users' => $this->countByTenant('users', fn ($query) => $query->whereIn('role', [User::ROLE_ADMIN, User::ROLE_SUPERADMIN])),
+            'active_support_grants' => $this->countByTenant('support_access_grants', fn ($query) => $query->whereNull('revoked_at')->where('expires_at', '>', now())),
         ];
 
         $lastActivity = $this->lastActivityByTenant($tenantIds->all());
@@ -76,6 +77,7 @@ class AdminDashboardController extends Controller
                     'failed_imports' => $tenantMetrics['failed_imports'][$tenantId] ?? 0,
                     'unverified_users' => $tenantMetrics['unverified_users'][$tenantId] ?? 0,
                     'admin_users' => $tenantMetrics['admin_users'][$tenantId] ?? 0,
+                    'active_support_grants' => $tenantMetrics['active_support_grants'][$tenantId] ?? 0,
                 ];
                 $tenant->admin_last_activity_at = $lastActivity[$tenantId] ?? null;
                 $tenant->admin_health = $this->tenantHealth($tenant);
@@ -195,6 +197,7 @@ class AdminDashboardController extends Controller
             'admin_users' => $this->tenantCount('users', $tenant, fn ($query) => $query->whereIn('role', [User::ROLE_ADMIN, User::ROLE_SUPERADMIN])),
             'unverified_users' => $this->tenantCount('users', $tenant, fn ($query) => $query->whereNull('email_verified_at')),
             'recent_logins_30_days' => $this->tenantCount('users', $tenant, fn ($query) => $query->where('last_login_at', '>=', now()->subDays(30))),
+            'active_support_grants' => $this->tenantCount('support_access_grants', $tenant, fn ($query) => $query->whereNull('revoked_at')->where('expires_at', '>', now())),
         ];
 
         $recentEvents = $this->tenantRows('events', $tenant, ['id', 'title', 'start', 'created_at'], 'start', 8);
@@ -817,6 +820,11 @@ class AdminDashboardController extends Controller
                     'label' => 'Importstatus',
                     'value' => ($stats['failed_imports'] ?? 0) > 0 ? ($stats['failed_imports'] . ' prüfen') : 'unauffällig',
                     'state' => ($stats['failed_imports'] ?? 0) > 0 ? 'watch' : 'ok',
+                ],
+                [
+                    'label' => 'Supportfreigabe',
+                    'value' => ($stats['active_support_grants'] ?? 0) > 0 ? 'aktiv' : 'aus',
+                    'state' => ($stats['active_support_grants'] ?? 0) > 0 ? 'ok' : 'watch',
                 ],
             ],
             'signals' => $signals,

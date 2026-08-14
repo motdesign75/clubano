@@ -22,6 +22,7 @@ use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\PublicFormController;
 use App\Http\Controllers\UpdateNoticeController;
+use App\Http\Controllers\PrivacyCenterController;
 
 
 
@@ -318,6 +319,14 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/verein/briefbogen', [$cls, 'letterhead'])->middleware('tenant.role:Lesen')->name('tenant.letterhead');
         Route::get('/verein/bearbeiten', [$cls, 'edit'])->middleware('tenant.role:Admin')->name('tenant.edit');
         Route::patch('/verein/bearbeiten', [$cls, 'update'])->middleware('tenant.role:Admin')->name('tenant.update');
+    });
+
+    Route::middleware('tenant.role:Admin')->prefix('datenschutz')->name('privacy.')->group(function () {
+        Route::get('/', [PrivacyCenterController::class, 'index'])->name('index');
+        Route::post('/exporte', [PrivacyCenterController::class, 'requestExport'])->name('exports.store');
+        Route::get('/exporte/{privacyDataExport}/download', [PrivacyCenterController::class, 'downloadExport'])->name('exports.download');
+        Route::post('/supportfreigaben', [PrivacyCenterController::class, 'storeSupportGrant'])->name('support-grants.store');
+        Route::patch('/supportfreigaben/{supportAccessGrant}/widerrufen', [PrivacyCenterController::class, 'revokeSupportGrant'])->name('support-grants.revoke');
     });
 
     // Veranstaltungen

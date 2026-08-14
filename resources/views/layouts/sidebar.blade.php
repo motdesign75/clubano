@@ -207,6 +207,13 @@
             'minRole' => 'Admin',
         ],
         [
+            'label' => 'Datenschutz',
+            'route' => route('privacy.index'),
+            'active' => request()->routeIs('privacy.*'),
+            'icon' => 'shield-check',
+            'minRole' => 'Admin',
+        ],
+        [
             'label' => 'Mitgliedschaften',
             'route' => route('memberships.index'),
             'active' => request()->routeIs('memberships.*'),
