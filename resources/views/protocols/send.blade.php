@@ -19,7 +19,7 @@
                 <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Protokollversand</div>
                 <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{{ $protocol->title }}</h1>
                 <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
-                    Das erzeugte Protokoll-PDF wird immer mitgesendet. Bestehende Protokoll-Anhänge gehen automatisch mit in dieselbe Mail.
+                    Das erzeugte Protokoll-PDF wird immer mitgesendet. Bitte prüfe den Empfängerkreis besonders sorgfältig, weil Protokolle vertrauliche Vereinsinhalte enthalten können.
                 </p>
             </div>
 
@@ -45,12 +45,20 @@
         @csrf
 
         <div class="space-y-6 xl:col-span-2">
+            <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
+                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Vertraulicher Versand</div>
+                <h2 class="mt-2 text-lg font-semibold">Protokolle nur an den wirklich vorgesehenen Empfängerkreis senden.</h2>
+                <p class="mt-2 text-sm leading-6 text-amber-900">
+                    Clubano verhindert hier bewusst Massenversand per Schnellklick. Wähle die Empfänger einzeln aus und bestätige vor dem Versand die genaue Anzahl.
+                </p>
+            </section>
+
             <section class="rounded-2xl border border-slate-200 bg-white p-6">
                 <div class="flex items-start justify-between gap-4">
                     <div>
                         <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Empfänger</div>
                         <h2 class="mt-2 text-xl font-semibold text-slate-900">An wen soll das Protokoll gehen?</h2>
-                        <p class="mt-2 text-sm text-slate-500">Mitglieder, Kontakte und freie Mailadressen lassen sich hier in einem Schritt kombinieren.</p>
+                        <p class="mt-2 text-sm text-slate-500">Mitglieder, Kontakte und freie Mailadressen lassen sich kombinieren. Eine pauschale Auswahl aller Empfänger ist hier bewusst nicht vorgesehen.</p>
                     </div>
                     <div class="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
                         <span x-text="selectedCount"></span> ausgewählt
@@ -58,9 +66,6 @@
                 </div>
 
                 <div class="mt-5 flex flex-wrap gap-3">
-                    <button type="button" @click="selectAll('.member-checkbox, .contact-checkbox')" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-                        Alle markieren
-                    </button>
                     <button type="button" @click="unselectAll('.member-checkbox, .contact-checkbox')" class="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                         Alles lösen
                     </button>
@@ -75,9 +80,6 @@
                             </div>
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                                 <input type="text" x-model="memberSearch" placeholder="Mitglieder suchen..." class="w-full rounded-full border-slate-300 px-4 py-2 text-sm sm:w-64">
-                                <button type="button" @click="selectAll('.member-checkbox')" class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
-                                    Alle Mitglieder
-                                </button>
                             </div>
                         </div>
 
@@ -104,9 +106,6 @@
                             </div>
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
                                 <input type="text" x-model="contactSearch" placeholder="Kontakte suchen..." class="w-full rounded-full border-slate-300 px-4 py-2 text-sm sm:w-64">
-                                <button type="button" @click="selectAll('.contact-checkbox')" class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
-                                    Alle Kontakte
-                                </button>
                             </div>
                         </div>
 
@@ -130,6 +129,30 @@
                     <label for="direct_emails" class="block text-sm font-medium text-slate-700">Freie E-Mail-Adressen</label>
                     <p class="mt-1 text-sm text-slate-500">Eine Adresse pro Zeile oder durch Komma bzw. Semikolon getrennt.</p>
                     <textarea id="direct_emails" name="direct_emails" rows="4" x-model="directEmails" @input="updateCount()" class="mt-3 w-full rounded-2xl border-slate-300 text-sm" placeholder="info@example.org&#10;vorstand@example.org">{{ old('direct_emails') }}</textarea>
+                </div>
+            </section>
+
+            <section class="rounded-2xl border border-slate-200 bg-white p-6">
+                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Freigabe</div>
+                <h2 class="mt-2 text-xl font-semibold text-slate-900">Versand bewusst bestätigen</h2>
+                <p class="mt-2 text-sm text-slate-500">
+                    Vor dem Absenden muss die Auswahl noch einmal aktiv bestätigt werden. Das schützt vor versehentlichem Versand an zu viele Personen.
+                </p>
+
+                <div class="mt-5 grid gap-4 md:grid-cols-[1fr_14rem]">
+                    <label class="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <input type="checkbox" name="confidential_confirmation" value="1" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900" @change="updateCount()" required>
+                        <span>
+                            <span class="block text-sm font-semibold text-slate-900">Ich habe den Empfängerkreis geprüft.</span>
+                            <span class="mt-1 block text-sm text-slate-500">Das Protokoll darf an genau diese ausgewählten Personen versendet werden.</span>
+                        </span>
+                    </label>
+
+                    <label class="block rounded-2xl border border-slate-200 p-4">
+                        <span class="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Empfängerzahl</span>
+                        <input type="number" min="1" name="recipient_count_confirmation" class="mt-2 w-full rounded-2xl border-slate-300 text-lg font-semibold" placeholder="z. B. 3" required>
+                        <span class="mt-2 block text-xs text-slate-500">Aktuell ausgewählt: <strong x-text="selectedCount"></strong></span>
+                    </label>
                 </div>
             </section>
 

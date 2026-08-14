@@ -838,6 +838,8 @@ class ProtocolController extends Controller
                 'exists:contacts,id',
             ],
             'direct_emails' => 'nullable|string',
+            'confidential_confirmation' => 'accepted',
+            'recipient_count_confirmation' => 'required|integer|min:1',
         ]);
 
         $directEmails = collect(preg_split('/[\r\n,;]+/', (string) ($validated['direct_emails'] ?? '')) ?: [])
@@ -869,12 +871,24 @@ class ProtocolController extends Controller
             ->whereIn('id', $validated['contacts'] ?? [])
             ->orderBy('last_name')
             ->orderBy('organization')
-            ->get();
+            ->get()
+            ->filter(fn (Contact $contact) => filled($contact->primary_email))
+            ->values();
 
         if ($members->isEmpty() && $contacts->isEmpty() && $directEmails->isEmpty()) {
             return back()
                 ->withErrors([
                     'members' => 'Bitte wähle mindestens ein Mitglied, einen Kontakt oder eine freie E-Mail-Adresse aus.',
+                ])
+                ->withInput();
+        }
+
+        $recipientCount = $members->count() + $contacts->count() + $directEmails->count();
+
+        if ((int) $validated['recipient_count_confirmation'] !== $recipientCount) {
+            return back()
+                ->withErrors([
+                    'recipient_count_confirmation' => 'Die eingegebene Empfängerzahl stimmt nicht mit der aktuellen Auswahl überein. Bitte prüfe die Auswahl erneut.',
                 ])
                 ->withInput();
         }

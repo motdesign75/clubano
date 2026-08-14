@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
+use App\Mail\ProtocolMail;
 use App\Models\Document;
 use App\Models\Event;
 use App\Models\EventCategory;
@@ -13,6 +14,7 @@ use App\Models\Tenant;
 use App\Models\Task;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 function createTenantWithUser(string $role, string $suffix): array
@@ -303,6 +305,100 @@ test('protocol mail form excludes archived members from recipients', function ()
     $response->assertOk();
     $response->assertSee($activeMember->email);
     $response->assertDontSee($archivedMember->email);
+});
+
+test('protocol mail send requires a confidential recipient confirmation', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'protocol-mail-confirmation');
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Vertrauliche',
+        'last_name' => 'Person',
+        'email' => 'vertraulich@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $protocol = Protocol::create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $staff->id,
+        'title' => 'Vertrauliches Protokoll',
+        'type' => 'Vorstand',
+        'content' => '<p>Nur fuer den Vorstand</p>',
+    ]);
+
+    $response = $this->actingAs($staff)->post(route('protocols.mail.send', $protocol), [
+        'members' => [$member->id],
+    ]);
+
+    $response->assertSessionHasErrors(['confidential_confirmation', 'recipient_count_confirmation']);
+    Mail::assertNothingSent();
+});
+
+test('protocol mail send blocks mismatching recipient count confirmation', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'protocol-mail-count');
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Gezählte',
+        'last_name' => 'Person',
+        'email' => 'gezaehlt@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $protocol = Protocol::create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $staff->id,
+        'title' => 'Empfängerprüfung',
+        'type' => 'Vorstand',
+        'content' => '<p>Bitte pruefen</p>',
+    ]);
+
+    $response = $this->actingAs($staff)->post(route('protocols.mail.send', $protocol), [
+        'members' => [$member->id],
+        'confidential_confirmation' => '1',
+        'recipient_count_confirmation' => 2,
+    ]);
+
+    $response->assertSessionHasErrors(['recipient_count_confirmation']);
+    Mail::assertNothingSent();
+});
+
+test('protocol mail send succeeds after explicit confidential recipient confirmation', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'protocol-mail-confirmed');
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Bestätigte',
+        'last_name' => 'Person',
+        'email' => 'bestaetigt@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $protocol = Protocol::create([
+        'tenant_id' => $tenant->id,
+        'user_id' => $staff->id,
+        'title' => 'Freigegebenes Protokoll',
+        'type' => 'Vorstand',
+        'content' => '<p>Freigegeben</p>',
+    ]);
+
+    $response = $this->actingAs($staff)->post(route('protocols.mail.send', $protocol), [
+        'members' => [$member->id],
+        'confidential_confirmation' => '1',
+        'recipient_count_confirmation' => 1,
+    ]);
+
+    $response->assertRedirect(route('protocols.show', $protocol));
+    Mail::assertSent(ProtocolMail::class, 1);
 });
 
 test('protocol create ignores archived members as participants', function () {
