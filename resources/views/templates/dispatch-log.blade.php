@@ -12,10 +12,6 @@
         </div>
 
         <div class="flex flex-wrap gap-3">
-            <a href="{{ route('templates.dispatch-log.pdf', request()->query()) }}"
-               class="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
-                Protokoll als PDF sichern
-            </a>
             <a href="{{ route('mail.create') }}"
                class="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                 Mailversand öffnen
@@ -54,7 +50,8 @@
         </div>
     </div>
 
-    <form method="GET" class="grid gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-[1.2fr_0.7fr_0.8fr_auto]">
+    <form method="GET" class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.2fr_0.7fr_0.8fr_0.7fr_0.7fr]">
         <div>
             <label class="mb-2 block text-sm font-medium text-slate-700">Suche</label>
             <input type="search" name="search" value="{{ request('search') }}"
@@ -80,15 +77,38 @@
                 @endforeach
             </select>
         </div>
-        <div class="flex items-end gap-3">
+        <div>
+            <label class="mb-2 block text-sm font-medium text-slate-700">Versendet von</label>
+            <input type="date" name="date_from" value="{{ request('date_from') }}"
+                   class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
+        </div>
+        <div>
+            <label class="mb-2 block text-sm font-medium text-slate-700">Versendet bis</label>
+            <input type="date" name="date_to" value="{{ request('date_to') }}"
+                   class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm shadow-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100">
+        </div>
+        </div>
+
+        <div class="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <div class="text-sm font-semibold text-slate-900">Aktuelle Auswahl sichern</div>
+                <p class="mt-1 text-sm text-slate-500">Das PDF enthält genau die Einträge, die zu Suche, Kanal, Vorlage und Datum passen.</p>
+            </div>
+            <div class="flex flex-wrap gap-3">
             <button type="submit"
                     class="rounded-full bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700">
                 Filtern
+            </button>
+            <button type="submit"
+                    formaction="{{ route('templates.dispatch-log.pdf') }}"
+                    class="rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                Gefiltertes Protokoll als PDF sichern
             </button>
             <a href="{{ route('templates.dispatch-log') }}"
                class="rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
                 Zurücksetzen
             </a>
+            </div>
         </div>
     </form>
 

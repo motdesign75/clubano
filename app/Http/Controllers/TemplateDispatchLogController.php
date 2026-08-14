@@ -23,6 +23,14 @@ class TemplateDispatchLogController extends Controller
             $query->where('template_id', $request->integer('template_id'));
         }
 
+        if ($request->filled('date_from')) {
+            $query->whereDate('dispatched_at', '>=', $request->date('date_from')->toDateString());
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('dispatched_at', '<=', $request->date('date_to')->toDateString());
+        }
+
         if ($request->filled('search')) {
             $search = '%' . trim((string) $request->string('search')) . '%';
 
@@ -88,6 +96,8 @@ class TemplateDispatchLogController extends Controller
             'search' => trim((string) $request->string('search')),
             'channel' => trim((string) $request->string('channel')),
             'template_id' => $request->filled('template_id') ? $request->integer('template_id') : null,
+            'date_from' => $request->filled('date_from') ? $request->date('date_from')->format('d.m.Y') : null,
+            'date_to' => $request->filled('date_to') ? $request->date('date_to')->format('d.m.Y') : null,
         ];
 
         $pdf = Pdf::loadView('pdf.dispatch-log', [

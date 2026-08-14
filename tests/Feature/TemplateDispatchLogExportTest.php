@@ -38,6 +38,8 @@ test('staff can export the dispatch log as pdf with current filters', function (
     $response = $this->actingAs($staff)->get(route('templates.dispatch-log.pdf', [
         'channel' => 'mail',
         'search' => 'Vorstandssitzung',
+        'date_from' => now()->toDateString(),
+        'date_to' => now()->toDateString(),
     ]));
 
     $response->assertOk();
