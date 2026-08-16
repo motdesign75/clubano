@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Event;
 use App\Models\EventBooking;
 use App\Models\EventBookingParticipant;
+use App\Models\Template;
 use App\Models\TemplateDispatchLog;
 use App\Models\Tenant;
 use App\Models\User;
@@ -74,10 +75,18 @@ test('event participants can be mailed with explicit recipient confirmation', fu
     [$tenant, $admin, $event] = createParticipantMailContext();
     $first = createEventParticipant($event, 'max@example.test');
     $second = createEventParticipant($event, 'mia@example.test');
+    $template = Template::create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Termininfo',
+        'subject' => 'Vorlage Termin',
+        'body' => '<p>Hallo {{ teilnehmer_name }}</p>',
+        'type' => Template::TYPE_MAIL,
+    ]);
 
     $this->actingAs($admin)
         ->post(route('events.participants.mail.send', $event), [
             'participant_ids' => [$first->id, $second->id],
+            'template_id' => $template->id,
             'subject' => 'Wichtige Info',
             'body' => '<h2>Hallo {{ teilnehmer_name }}</h2><p>Wir sehen uns bei <strong>{{ event_titel }}</strong>.</p><script>alert("x")</script>',
             'recipient_count_confirmation' => 2,
@@ -98,19 +107,30 @@ test('event participants can be mailed with explicit recipient confirmation', fu
     expect($dispatchLog->message_excerpt)
         ->toContain('Hallo Max Muster')
         ->toContain('Sommerfest')
-        ->not->toContain('alert');
+        ->not->toContain('alert')
+        ->and($dispatchLog->template_id)->toBe($template->id);
 });
 
 test('event participant mail form opens and shows safe placeholders', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
-    [, $admin, $event] = createParticipantMailContext();
+    [$tenant, $admin, $event] = createParticipantMailContext();
     createEventParticipant($event, 'max@example.test');
+    Template::create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Info vor dem Termin',
+        'subject' => 'Bitte beachten',
+        'body' => '<p>Bitte beachten.</p>',
+        'type' => Template::TYPE_MAIL,
+    ]);
 
     $this->actingAs($admin)
         ->get(route('events.participants.mail.form', $event))
         ->assertOk()
         ->assertSee('Teilnehmermail')
+        ->assertSee('Vorlage nutzen')
+        ->assertSee('Info vor dem Termin')
+        ->assertSee('Vorlage übernehmen')
         ->assertSee('tinymce.min.js')
         ->assertSee('participant-placeholder')
         ->assertSee('&#123;&#123; teilnehmer_name &#125;&#125;', false)

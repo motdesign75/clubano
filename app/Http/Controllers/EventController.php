@@ -22,6 +22,7 @@ use App\Models\Member;
 use App\Models\PublicForm;
 use App\Models\Tag;
 use App\Models\Tenant;
+use App\Models\Template;
 use App\Models\TemplateDispatchLog;
 use App\Models\User;
 use App\Services\MailTrackingService;
@@ -661,6 +662,11 @@ class EventController extends Controller
         $event->load(['tenant']);
 
         $participants = $this->participantMailRecipients($event)->get();
+        $templates = Template::query()
+            ->where('tenant_id', $event->tenant_id)
+            ->whereIn('type', [Template::TYPE_MAIL, Template::TYPE_MAIL_AND_LETTER])
+            ->orderBy('name')
+            ->get(['id', 'name', 'subject', 'body', 'type']);
         $participantsWithoutEmail = EventBookingParticipant::query()
             ->whereHas('booking', fn ($query) => $query
                 ->where('event_id', $event->id)
@@ -676,6 +682,7 @@ class EventController extends Controller
         return view('events.participant-mail', [
             'event' => $event,
             'participants' => $participants,
+            'templates' => $templates,
             'participantsWithoutEmail' => $participantsWithoutEmail,
             'defaultSubject' => 'Information zu ' . $event->title,
             'defaultBody' => "<p>Hallo {{ teilnehmer_name }},</p><p>hier eine kurze Information zu <strong>{{ event_titel }}</strong> am {{ event_datum }}.</p><p>Viele Grüße<br>{{ verein_name }}</p>",
@@ -690,6 +697,12 @@ class EventController extends Controller
         $validated = $request->validate([
             'participant_ids' => ['required', 'array', 'min:1'],
             'participant_ids.*' => ['integer'],
+            'template_id' => [
+                'nullable',
+                Rule::exists('templates', 'id')->where(fn ($query) => $query
+                    ->where('tenant_id', $event->tenant_id)
+                    ->whereIn('type', [Template::TYPE_MAIL, Template::TYPE_MAIL_AND_LETTER])),
+            ],
             'subject' => ['required', 'string', 'max:255'],
             'body' => ['required', 'string', 'max:500000'],
             'recipient_count_confirmation' => ['required', 'integer', 'min:1'],
@@ -727,7 +740,7 @@ class EventController extends Controller
             $html = $this->renderParticipantMailHtml($event, $participant, $validated['body']);
             $dispatchLog = TemplateDispatchLog::create([
                 'tenant_id' => $tenant->id,
-                'template_id' => null,
+                'template_id' => $validated['template_id'] ?? null,
                 'created_by' => auth()->id(),
                 'channel' => 'mail',
                 'action' => 'event_participant_mail',

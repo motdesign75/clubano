@@ -53,6 +53,40 @@
             </div>
 
             <div class="mt-5 space-y-5">
+                <div class="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                        <div class="min-w-0 flex-1">
+                            <label for="template_id" class="mb-1 block text-sm font-semibold text-blue-950">Vorlage nutzen</label>
+                            <select id="template_id" name="template_id" class="w-full rounded-xl border-blue-200 bg-white text-sm shadow-sm focus:border-blue-500 focus:ring-blue-200">
+                                <option value="">Ohne Vorlage schreiben</option>
+                                @foreach($templates as $template)
+                                    <option
+                                        value="{{ $template->id }}"
+                                        data-subject="{{ $template->subject }}"
+                                        data-body="{{ base64_encode($template->body) }}"
+                                        @selected((string) old('template_id') === (string) $template->id)
+                                    >
+                                        {{ $template->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <button type="button" id="apply-template" class="inline-flex min-h-10 items-center justify-center rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800">
+                            Vorlage übernehmen
+                        </button>
+                    </div>
+                    <p class="mt-3 text-xs leading-5 text-blue-900">
+                        Die Vorlage füllt Betreff und Nachricht. Danach kannst du alles frei anpassen.
+                    </p>
+                    @if($templates->isEmpty())
+                        <p class="mt-3 text-sm font-semibold text-blue-950">Noch keine Mailvorlage vorhanden.</p>
+                    @endif
+                    @error('template_id')
+                        <p class="mt-2 text-sm text-rose-700">{{ $message }}</p>
+                    @enderror
+                </div>
+
                 <div>
                     <label for="subject" class="mb-1 block text-sm font-medium text-slate-700">Betreff</label>
                     <input id="subject" type="text" name="subject" value="{{ old('subject', $defaultSubject) }}" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
@@ -169,6 +203,9 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const bodyTextarea = document.getElementById('body');
+            const subjectInput = document.getElementById('subject');
+            const templateSelect = document.getElementById('template_id');
+            const applyTemplateButton = document.getElementById('apply-template');
 
             tinymce.init({
                 selector: '#body',
@@ -240,6 +277,47 @@
 
             document.getElementById('participantMailForm')?.addEventListener('submit', () => {
                 tinymce.triggerSave();
+            });
+
+            applyTemplateButton?.addEventListener('click', () => {
+                const selectedOption = templateSelect?.selectedOptions?.[0];
+
+                if (!selectedOption || !selectedOption.value) {
+                    return;
+                }
+
+                const subject = selectedOption.dataset.subject || '';
+                const encodedBody = selectedOption.dataset.body || '';
+                let body = '';
+
+                try {
+                    body = decodeURIComponent(escape(window.atob(encodedBody)));
+                } catch (error) {
+                    try {
+                        body = window.atob(encodedBody);
+                    } catch (fallbackError) {
+                        body = '';
+                    }
+                }
+
+                if (subjectInput) {
+                    subjectInput.value = subject || subjectInput.value;
+                    subjectInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+
+                const editor = window.tinymce ? tinymce.get('body') : null;
+
+                if (editor && !editor.isHidden()) {
+                    editor.setContent(body || '');
+                    editor.focus();
+                    return;
+                }
+
+                if (bodyTextarea) {
+                    bodyTextarea.value = body || '';
+                    bodyTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    bodyTextarea.focus();
+                }
             });
         });
     </script>
