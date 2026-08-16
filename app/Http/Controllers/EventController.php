@@ -678,7 +678,7 @@ class EventController extends Controller
             'participants' => $participants,
             'participantsWithoutEmail' => $participantsWithoutEmail,
             'defaultSubject' => 'Information zu ' . $event->title,
-            'defaultBody' => "Hallo {{ teilnehmer_name }},\n\nhier eine kurze Information zu {{ event_titel }} am {{ event_datum }}.\n\nViele Grüße\n{{ verein_name }}",
+            'defaultBody' => "<p>Hallo {{ teilnehmer_name }},</p><p>hier eine kurze Information zu <strong>{{ event_titel }}</strong> am {{ event_datum }}.</p><p>Viele Grüße<br>{{ verein_name }}</p>",
         ]);
     }
 
@@ -691,7 +691,7 @@ class EventController extends Controller
             'participant_ids' => ['required', 'array', 'min:1'],
             'participant_ids.*' => ['integer'],
             'subject' => ['required', 'string', 'max:255'],
-            'body' => ['required', 'string', 'max:10000'],
+            'body' => ['required', 'string', 'max:500000'],
             'recipient_count_confirmation' => ['required', 'integer', 'min:1'],
             'send_confirmed' => ['accepted'],
         ], [
@@ -2008,7 +2008,7 @@ class EventController extends Controller
             : 'Termin folgt';
         $participantName = $participant->display_name ?: $participant->full_name ?: 'Teilnehmer';
 
-        $text = strtr($body, [
+        $html = strtr($body, [
             '{{ teilnehmer_name }}' => $participantName,
             '{{ teilnehmer_email }}' => (string) $participant->email,
             '{{ event_titel }}' => (string) $event->title,
@@ -2018,7 +2018,22 @@ class EventController extends Controller
             '{{ verein_name }}' => (string) ($event->tenant?->name ?: 'Clubano'),
         ]);
 
-        return '<div>' . nl2br(e($text), false) . '</div>';
+        if ($html === strip_tags($html)) {
+            $html = nl2br(e($html), false);
+        }
+
+        return $this->sanitizeParticipantMailBody($html);
+    }
+
+    private function sanitizeParticipantMailBody(string $body): string
+    {
+        $html = preg_replace('#<(script|style|iframe|object|embed|form|meta|link)\b[^>]*>.*?</\1>#is', '', $body) ?? '';
+        $html = preg_replace('#<(script|style|iframe|object|embed|form|meta|link)\b[^>]*\/?>#is', '', $html) ?? '';
+        $html = preg_replace('/\s+on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $html) ?? '';
+        $html = preg_replace('/(href|src)\s*=\s*([\'"])\s*javascript:[^\'"]*\2/i', '$1="#"', $html) ?? '';
+        $html = preg_replace('/(href|src)\s*=\s*([\'"])\s*data:(?!image\/(?:png|jpeg|jpg|gif|webp);base64,)[^\'"]*\2/i', '$1="#"', $html) ?? '';
+
+        return strip_tags($html, '<p><br><strong><b><em><i><u><ul><ol><li><a><h2><h3><blockquote><table><thead><tbody><tr><th><td><img><figure><figcaption><span>');
     }
 
     private function publicListData(string $tenantSlug, Request $request): array

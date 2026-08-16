@@ -43,7 +43,7 @@
         </div>
     </section>
 
-    <form method="POST" action="{{ route('events.participants.mail.send', $event) }}" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]" x-data="{ selected: @js(collect(old('participant_ids', []))->map(fn ($id) => (string) $id)->values()), search: '' }">
+    <form id="participantMailForm" method="POST" action="{{ route('events.participants.mail.send', $event) }}" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]" x-data="{ selected: @js(collect(old('participant_ids', []))->map(fn ($id) => (string) $id)->values()), search: '' }">
         @csrf
 
         <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -63,7 +63,10 @@
 
                 <div>
                     <label for="body" class="mb-1 block text-sm font-medium text-slate-700">Nachricht</label>
-                    <textarea id="body" name="body" rows="12" class="w-full rounded-xl border-slate-300 text-sm leading-6 shadow-sm focus:border-slate-500 focus:ring-slate-300">{{ old('body', $defaultBody) }}</textarea>
+                    <textarea id="body" name="body" rows="16" class="w-full rounded-xl border-slate-300 text-sm leading-6 shadow-sm focus:border-slate-500 focus:ring-slate-300">{{ old('body', $defaultBody) }}</textarea>
+                    <p class="mt-2 text-xs leading-5 text-slate-500">
+                        Du kannst Text formatieren, Links setzen, Tabellen nutzen und Bilder direkt einfügen. Der Editor läuft lokal ohne Tiny-Cloud-Lizenz.
+                    </p>
                     @error('body')
                         <p class="mt-1 text-sm text-rose-700">{{ $message }}</p>
                     @enderror
@@ -72,12 +75,12 @@
                 <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div class="text-sm font-semibold text-slate-950">Verfügbare Platzhalter</div>
                     <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; teilnehmer_name &#125;&#125;</span>
-                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; event_titel &#125;&#125;</span>
-                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; event_datum &#125;&#125;</span>
-                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; event_ort &#125;&#125;</span>
-                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; buchungsnummer &#125;&#125;</span>
-                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; verein_name &#125;&#125;</span>
+                        <button type="button" data-placeholder="&#123;&#123; teilnehmer_name &#125;&#125;" class="participant-placeholder rounded-full bg-white px-3 py-1 hover:bg-slate-100">&#123;&#123; teilnehmer_name &#125;&#125;</button>
+                        <button type="button" data-placeholder="&#123;&#123; event_titel &#125;&#125;" class="participant-placeholder rounded-full bg-white px-3 py-1 hover:bg-slate-100">&#123;&#123; event_titel &#125;&#125;</button>
+                        <button type="button" data-placeholder="&#123;&#123; event_datum &#125;&#125;" class="participant-placeholder rounded-full bg-white px-3 py-1 hover:bg-slate-100">&#123;&#123; event_datum &#125;&#125;</button>
+                        <button type="button" data-placeholder="&#123;&#123; event_ort &#125;&#125;" class="participant-placeholder rounded-full bg-white px-3 py-1 hover:bg-slate-100">&#123;&#123; event_ort &#125;&#125;</button>
+                        <button type="button" data-placeholder="&#123;&#123; buchungsnummer &#125;&#125;" class="participant-placeholder rounded-full bg-white px-3 py-1 hover:bg-slate-100">&#123;&#123; buchungsnummer &#125;&#125;</button>
+                        <button type="button" data-placeholder="&#123;&#123; verein_name &#125;&#125;" class="participant-placeholder rounded-full bg-white px-3 py-1 hover:bg-slate-100">&#123;&#123; verein_name &#125;&#125;</button>
                     </div>
                 </div>
             </div>
@@ -160,3 +163,84 @@
     </form>
 </div>
 @endsection
+
+@push('scripts')
+    <script src="/tinymce/tinymce.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const bodyTextarea = document.getElementById('body');
+
+            tinymce.init({
+                selector: '#body',
+                license_key: 'gpl',
+                height: 560,
+                menubar: false,
+                branding: false,
+                statusbar: true,
+                plugins: 'lists link image table code fullscreen autoresize',
+                toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image table | removeformat | code fullscreen',
+                block_formats: 'Absatz=p; Überschrift=h2; Zwischenüberschrift=h3',
+                image_title: true,
+                image_caption: true,
+                image_advtab: true,
+                paste_data_images: true,
+                automatic_uploads: true,
+                file_picker_types: 'image',
+                file_picker_callback: (callback, value, meta) => {
+                    if (meta.filetype !== 'image') {
+                        return;
+                    }
+
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.addEventListener('change', () => {
+                        const file = input.files && input.files[0];
+
+                        if (!file) {
+                            return;
+                        }
+
+                        const reader = new FileReader();
+                        reader.addEventListener('load', () => {
+                            callback(reader.result, {
+                                alt: file.name.replace(/\.[^.]+$/, ''),
+                                title: file.name,
+                            });
+                        });
+                        reader.readAsDataURL(file);
+                    });
+                    input.click();
+                },
+                content_style: 'body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:15px;line-height:1.65;color:#0f172a;} h2,h3{line-height:1.25;margin:1.2em 0 .5em;} p{margin:.7em 0;} img{max-width:100%;height:auto;border-radius:14px;} table{border-collapse:collapse;width:100%;} td,th{border:1px solid #cbd5e1;padding:8px;text-align:left;}',
+            });
+
+            document.querySelectorAll('.participant-placeholder').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const placeholder = button.dataset.placeholder || '';
+                    const editor = window.tinymce ? tinymce.get('body') : null;
+
+                    if (editor && !editor.isHidden()) {
+                        editor.focus();
+                        editor.insertContent(placeholder);
+                        return;
+                    }
+
+                    if (!bodyTextarea) {
+                        return;
+                    }
+
+                    const start = bodyTextarea.selectionStart ?? bodyTextarea.value.length;
+                    const end = bodyTextarea.selectionEnd ?? bodyTextarea.value.length;
+                    bodyTextarea.value = bodyTextarea.value.slice(0, start) + placeholder + bodyTextarea.value.slice(end);
+                    bodyTextarea.focus();
+                    bodyTextarea.setSelectionRange(start + placeholder.length, start + placeholder.length);
+                });
+            });
+
+            document.getElementById('participantMailForm')?.addEventListener('submit', () => {
+                tinymce.triggerSave();
+            });
+        });
+    </script>
+@endpush

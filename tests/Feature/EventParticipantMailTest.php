@@ -79,7 +79,7 @@ test('event participants can be mailed with explicit recipient confirmation', fu
         ->post(route('events.participants.mail.send', $event), [
             'participant_ids' => [$first->id, $second->id],
             'subject' => 'Wichtige Info',
-            'body' => 'Hallo {{ teilnehmer_name }}, wir sehen uns bei {{ event_titel }}.',
+            'body' => '<h2>Hallo {{ teilnehmer_name }}</h2><p>Wir sehen uns bei <strong>{{ event_titel }}</strong>.</p><script>alert("x")</script>',
             'recipient_count_confirmation' => 2,
             'send_confirmed' => '1',
         ])
@@ -89,6 +89,16 @@ test('event participants can be mailed with explicit recipient confirmation', fu
         ->where('tenant_id', $tenant->id)
         ->where('action', 'event_participant_mail')
         ->count())->toBe(2);
+
+    $dispatchLog = TemplateDispatchLog::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('action', 'event_participant_mail')
+        ->firstOrFail();
+
+    expect($dispatchLog->message_excerpt)
+        ->toContain('Hallo Max Muster')
+        ->toContain('Sommerfest')
+        ->not->toContain('alert');
 });
 
 test('event participant mail form opens and shows safe placeholders', function () {
@@ -101,6 +111,8 @@ test('event participant mail form opens and shows safe placeholders', function (
         ->get(route('events.participants.mail.form', $event))
         ->assertOk()
         ->assertSee('Teilnehmermail')
+        ->assertSee('tinymce.min.js')
+        ->assertSee('participant-placeholder')
         ->assertSee('&#123;&#123; teilnehmer_name &#125;&#125;', false)
         ->assertSee('max@example.test');
 });
