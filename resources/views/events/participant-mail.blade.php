@@ -60,12 +60,7 @@
                             <select id="template_id" name="template_id" class="w-full rounded-xl border-blue-200 bg-white text-sm shadow-sm focus:border-blue-500 focus:ring-blue-200">
                                 <option value="">Ohne Vorlage schreiben</option>
                                 @foreach($templates as $template)
-                                    <option
-                                        value="{{ $template->id }}"
-                                        data-subject="{{ $template->subject }}"
-                                        data-body="{{ base64_encode($template->body) }}"
-                                        @selected((string) old('template_id') === (string) $template->id)
-                                    >
+                                    <option value="{{ $template->id }}" @selected((string) old('template_id') === (string) $template->id)>
                                         {{ $template->name }}
                                     </option>
                                 @endforeach
@@ -206,6 +201,48 @@
             const subjectInput = document.getElementById('subject');
             const templateSelect = document.getElementById('template_id');
             const applyTemplateButton = document.getElementById('apply-template');
+            const participantTemplates = @js($templates->map(fn ($template) => [
+                'id' => (string) $template->id,
+                'subject' => (string) ($template->subject ?? ''),
+                'body' => (string) ($template->body ?? ''),
+            ])->values());
+
+            const findSelectedTemplate = () => {
+                const selectedId = String(templateSelect?.value || '');
+
+                if (selectedId === '') {
+                    return null;
+                }
+
+                return participantTemplates.find((template) => template.id === selectedId) || null;
+            };
+
+            const applySelectedTemplate = () => {
+                const template = findSelectedTemplate();
+
+                if (!template) {
+                    return;
+                }
+
+                if (subjectInput) {
+                    subjectInput.value = template.subject || subjectInput.value;
+                    subjectInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+
+                const editor = window.tinymce ? tinymce.get('body') : null;
+
+                if (editor && !editor.isHidden()) {
+                    editor.setContent(template.body || '');
+                    editor.focus();
+                    return;
+                }
+
+                if (bodyTextarea) {
+                    bodyTextarea.value = template.body || '';
+                    bodyTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    bodyTextarea.focus();
+                }
+            };
 
             tinymce.init({
                 selector: '#body',
@@ -279,46 +316,8 @@
                 tinymce.triggerSave();
             });
 
-            applyTemplateButton?.addEventListener('click', () => {
-                const selectedOption = templateSelect?.selectedOptions?.[0];
-
-                if (!selectedOption || !selectedOption.value) {
-                    return;
-                }
-
-                const subject = selectedOption.dataset.subject || '';
-                const encodedBody = selectedOption.dataset.body || '';
-                let body = '';
-
-                try {
-                    body = decodeURIComponent(escape(window.atob(encodedBody)));
-                } catch (error) {
-                    try {
-                        body = window.atob(encodedBody);
-                    } catch (fallbackError) {
-                        body = '';
-                    }
-                }
-
-                if (subjectInput) {
-                    subjectInput.value = subject || subjectInput.value;
-                    subjectInput.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-
-                const editor = window.tinymce ? tinymce.get('body') : null;
-
-                if (editor && !editor.isHidden()) {
-                    editor.setContent(body || '');
-                    editor.focus();
-                    return;
-                }
-
-                if (bodyTextarea) {
-                    bodyTextarea.value = body || '';
-                    bodyTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-                    bodyTextarea.focus();
-                }
-            });
+            templateSelect?.addEventListener('change', applySelectedTemplate);
+            applyTemplateButton?.addEventListener('click', applySelectedTemplate);
         });
     </script>
 @endpush
