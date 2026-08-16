@@ -344,6 +344,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/events/{event}', [$cls, 'show'])->whereNumber('event')->name('events.show');
         Route::get('/events/{event}/teilnehmer', [$cls, 'participants'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.manage');
         Route::get('/events/{event}/teilnehmer/mail', [$cls, 'participantMailForm'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.mail.form');
+        Route::post('/events/{event}/teilnehmer/mail/test', [$cls, 'sendParticipantTestMail'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.mail.test');
         Route::post('/events/{event}/teilnehmer/mail', [$cls, 'sendParticipantMail'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.mail.send');
         Route::get('/events/{event}/teilnehmer/export', [$cls, 'participantsExport'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.export');
         Route::get('/events/{event}/teilnehmer/drucken', [$cls, 'participantsPrint'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.print');

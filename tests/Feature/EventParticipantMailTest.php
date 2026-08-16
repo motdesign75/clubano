@@ -131,10 +131,51 @@ test('event participant mail form opens and shows safe placeholders', function (
         ->assertSee('Vorlage nutzen')
         ->assertSee('Info vor dem Termin')
         ->assertSee('Vorlage übernehmen')
+        ->assertSee('Testmail senden')
         ->assertSee('tinymce.min.js')
         ->assertSee('participant-placeholder')
         ->assertSee('&#123;&#123; teilnehmer_name &#125;&#125;', false)
         ->assertSee('max@example.test');
+});
+
+test('event participant mail can be sent as test mail without selecting recipients', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    [$tenant, $admin, $event] = createParticipantMailContext();
+    $template = Template::create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Testvorlage',
+        'subject' => 'Vorlage Termin',
+        'body' => '<p>Hallo {{ teilnehmer_name }}</p>',
+        'type' => Template::TYPE_MAIL,
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('events.participants.mail.form', $event))
+        ->post(route('events.participants.mail.test', $event), [
+            'template_id' => $template->id,
+            'test_email' => 'preview@example.test',
+            'subject' => 'Wichtige Info',
+            'body' => '<p>Hallo {{ teilnehmer_name }}, wir sehen uns bei {{ event_titel }}.</p>',
+        ])
+        ->assertRedirect(route('events.participants.mail.form', $event))
+        ->assertSessionHas('success');
+
+    expect(TemplateDispatchLog::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('action', 'event_participant_mail')
+        ->count())->toBe(0);
+
+    $dispatchLog = TemplateDispatchLog::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('action', 'event_participant_test')
+        ->firstOrFail();
+
+    expect($dispatchLog->recipient_reference)->toBe('preview@example.test')
+        ->and($dispatchLog->subject)->toBe('[Test] Wichtige Info')
+        ->and($dispatchLog->template_id)->toBe($template->id)
+        ->and($dispatchLog->meta['is_test'])->toBeTrue();
 });
 
 test('participant mail stops when the confirmed recipient count is wrong', function () {

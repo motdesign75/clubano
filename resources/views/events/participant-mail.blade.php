@@ -25,6 +25,18 @@
         </div>
     @endif
 
+    @if (session('success'))
+        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            {{ session('success') }}
+        </div>
+    @endif
+
+    @if (session('error'))
+        <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            {{ session('error') }}
+        </div>
+    @endif
+
     <section class="grid gap-4 md:grid-cols-3">
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div class="text-xs font-semibold uppercase tracking-wide text-slate-400">Mit E-Mail</div>
@@ -159,6 +171,26 @@
                         <div class="px-4 py-5 text-sm text-slate-500">Für diese Veranstaltung gibt es noch keine Teilnehmer mit E-Mail-Adresse.</div>
                     @endforelse
                 </div>
+            </section>
+
+            <section class="rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
+                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">Testmail</div>
+                <h2 class="mt-2 text-xl font-semibold text-blue-950">Vor dem Versand prüfen</h2>
+                <p class="mt-2 text-sm leading-6 text-blue-900">
+                    Sendet diese Nachricht nur an die Testadresse. Teilnehmer werden dabei nicht angeschrieben.
+                </p>
+
+                <div class="mt-4">
+                    <label for="test_email" class="mb-1 block text-sm font-medium text-blue-950">Testadresse</label>
+                    <input id="test_email" type="email" name="test_email" value="{{ old('test_email', $defaultTestEmail) }}" class="w-full rounded-lg border-blue-200 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-200">
+                    @error('test_email')
+                        <p class="mt-1 text-sm text-rose-700">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <button type="submit" formaction="{{ route('events.participants.mail.test', $event) }}" formnovalidate class="mt-5 inline-flex w-full min-h-11 items-center justify-center rounded-xl bg-blue-700 px-5 text-sm font-semibold text-white hover:bg-blue-800">
+                    Testmail senden
+                </button>
             </section>
 
             <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">

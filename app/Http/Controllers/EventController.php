@@ -686,7 +686,108 @@ class EventController extends Controller
             'participantsWithoutEmail' => $participantsWithoutEmail,
             'defaultSubject' => 'Information zu ' . $event->title,
             'defaultBody' => "<p>Hallo {{ teilnehmer_name }},</p><p>hier eine kurze Information zu <strong>{{ event_titel }}</strong> am {{ event_datum }}.</p><p>Viele Grüße<br>{{ verein_name }}</p>",
+            'defaultTestEmail' => auth()->user()->email,
         ]);
+    }
+
+    public function sendParticipantTestMail(Request $request, Event $event)
+    {
+        $this->authorizeEvent($event);
+        $tenant = $event->tenant ?: auth()->user()->tenant;
+
+        $validated = $request->validate([
+            'template_id' => [
+                'nullable',
+                Rule::exists('templates', 'id')->where(fn ($query) => $query
+                    ->where('tenant_id', $event->tenant_id)
+                    ->whereIn('type', [Template::TYPE_MAIL, Template::TYPE_MAIL_AND_LETTER])),
+            ],
+            'test_email' => ['required', 'email', 'max:255'],
+            'subject' => ['required', 'string', 'max:255'],
+            'body' => ['required', 'string', 'max:500000'],
+        ], [
+            'test_email.required' => 'Bitte gib eine Testadresse ein.',
+            'test_email.email' => 'Bitte gib eine gültige Testadresse ein.',
+        ]);
+
+        $selectedIds = collect($request->input('participant_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $previewParticipant = null;
+
+        if ($selectedIds->isNotEmpty()) {
+            $previewParticipant = $this->participantMailRecipients($event)
+                ->whereIn('id', $selectedIds)
+                ->first();
+        }
+
+        $previewParticipant ??= $this->participantMailRecipients($event)->first();
+        $previewParticipant ??= new EventBookingParticipant([
+            'participant_type' => 'guest',
+            'first_name' => 'Max',
+            'last_name' => 'Mustermann',
+            'email' => $validated['test_email'],
+        ]);
+
+        $html = $this->renderParticipantMailHtml($event, $previewParticipant, $validated['body'], $validated['test_email']);
+        $fromAddress = $tenant->mail_from_address ?: config('mail.from.address');
+        $fromName = $tenant->mail_from_name ?: ($tenant->name ?: config('mail.from.name'));
+        $replyToAddress = filled($tenant->email) && $tenant->email !== $fromAddress ? $tenant->email : null;
+        $subject = '[Test] ' . $validated['subject'];
+
+        $dispatchLog = TemplateDispatchLog::create([
+            'tenant_id' => $tenant->id,
+            'template_id' => $validated['template_id'] ?? null,
+            'created_by' => auth()->id(),
+            'channel' => 'mail',
+            'action' => 'event_participant_test',
+            'recipient_type' => 'event_test',
+            'member_id' => $previewParticipant->exists ? $previewParticipant->member_id : null,
+            'contact_id' => $previewParticipant->exists ? $previewParticipant->contact_id : null,
+            'recipient_name' => 'Testmail',
+            'recipient_reference' => $validated['test_email'],
+            'subject' => $subject,
+            'message_excerpt' => Str::limit(strip_tags($html), 240),
+            'dispatched_at' => now(),
+            'meta' => [
+                'event_id' => $event->id,
+                'event_title' => $event->title,
+                'participant_id' => $previewParticipant->exists ? $previewParticipant->id : null,
+                'source' => 'event_participant_test',
+                'is_test' => true,
+            ],
+        ]);
+
+        $trackedHtml = app(MailTrackingService::class)->instrument($html, $dispatchLog);
+
+        try {
+            Mail::send('mail.layout', [
+                'body' => $trackedHtml,
+                'tenant' => $tenant,
+            ], function ($mail) use ($validated, $subject, $fromAddress, $fromName, $replyToAddress, $tenant) {
+                $mail->to($validated['test_email'], 'Testmail')
+                    ->subject($subject)
+                    ->from($fromAddress, $fromName);
+
+                if ($replyToAddress) {
+                    $mail->replyTo($replyToAddress, $tenant->name ?: $fromName);
+                }
+            });
+        } catch (Throwable $e) {
+            $dispatchLog->delete();
+            report($e);
+
+            return back()
+                ->with('error', 'Die Testmail konnte nicht versendet werden. Bitte pruefe die Mail-Einstellungen.')
+                ->withInput();
+        }
+
+        return back()
+            ->with('success', 'Testmail wurde an ' . $validated['test_email'] . ' gesendet. Es wurden keine Teilnehmer angeschrieben.')
+            ->withInput();
     }
 
     public function sendParticipantMail(Request $request, Event $event)
@@ -2011,7 +2112,7 @@ class EventController extends Controller
             ->orderBy('organization_name');
     }
 
-    private function renderParticipantMailHtml(Event $event, EventBookingParticipant $participant, string $body): string
+    private function renderParticipantMailHtml(Event $event, EventBookingParticipant $participant, string $body, ?string $fallbackEmail = null): string
     {
         $event->loadMissing('tenant');
         $participant->loadMissing('booking');
@@ -2023,7 +2124,7 @@ class EventController extends Controller
 
         $html = strtr($body, [
             '{{ teilnehmer_name }}' => $participantName,
-            '{{ teilnehmer_email }}' => (string) $participant->email,
+            '{{ teilnehmer_email }}' => (string) ($participant->email ?: $fallbackEmail ?: ''),
             '{{ event_titel }}' => (string) $event->title,
             '{{ event_datum }}' => $eventDate,
             '{{ event_ort }}' => (string) ($event->location ?: 'Ort folgt'),
