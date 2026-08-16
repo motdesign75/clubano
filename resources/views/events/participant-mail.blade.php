@@ -72,12 +72,12 @@
                 <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <div class="text-sm font-semibold text-slate-950">Verfügbare Platzhalter</div>
                     <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-                        <span class="rounded-full bg-white px-3 py-1">{{ '{{ teilnehmer_name }}' }}</span>
-                        <span class="rounded-full bg-white px-3 py-1">{{ '{{ event_titel }}' }}</span>
-                        <span class="rounded-full bg-white px-3 py-1">{{ '{{ event_datum }}' }}</span>
-                        <span class="rounded-full bg-white px-3 py-1">{{ '{{ event_ort }}' }}</span>
-                        <span class="rounded-full bg-white px-3 py-1">{{ '{{ buchungsnummer }}' }}</span>
-                        <span class="rounded-full bg-white px-3 py-1">{{ '{{ verein_name }}' }}</span>
+                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; teilnehmer_name &#125;&#125;</span>
+                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; event_titel &#125;&#125;</span>
+                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; event_datum &#125;&#125;</span>
+                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; event_ort &#125;&#125;</span>
+                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; buchungsnummer &#125;&#125;</span>
+                        <span class="rounded-full bg-white px-3 py-1">&#123;&#123; verein_name &#125;&#125;</span>
                     </div>
                 </div>
             </div>

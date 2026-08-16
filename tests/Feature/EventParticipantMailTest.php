@@ -91,6 +91,20 @@ test('event participants can be mailed with explicit recipient confirmation', fu
         ->count())->toBe(2);
 });
 
+test('event participant mail form opens and shows safe placeholders', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [, $admin, $event] = createParticipantMailContext();
+    createEventParticipant($event, 'max@example.test');
+
+    $this->actingAs($admin)
+        ->get(route('events.participants.mail.form', $event))
+        ->assertOk()
+        ->assertSee('Teilnehmermail')
+        ->assertSee('&#123;&#123; teilnehmer_name &#125;&#125;', false)
+        ->assertSee('max@example.test');
+});
+
 test('participant mail stops when the confirmed recipient count is wrong', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
     Mail::fake();
