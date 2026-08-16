@@ -30,6 +30,12 @@
         </div>
     @endif
 
+    @if(session('error'))
+        <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            {{ session('error') }}
+        </div>
+    @endif
+
     @if ($errors->any())
         <div class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             Bitte prüfe die markierten Felder.

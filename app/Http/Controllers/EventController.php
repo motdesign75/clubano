@@ -22,13 +22,16 @@ use App\Models\Member;
 use App\Models\PublicForm;
 use App\Models\Tag;
 use App\Models\Tenant;
+use App\Models\TemplateDispatchLog;
 use App\Models\User;
+use App\Services\MailTrackingService;
 use App\Services\OnboardingService;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Carbon\Carbon;
+use Throwable;
 
 class EventController extends Controller
 {
@@ -650,6 +653,135 @@ class EventController extends Controller
             'event' => $event,
             ...$this->participantViewData($event),
         ]);
+    }
+
+    public function participantMailForm(Event $event)
+    {
+        $this->authorizeEvent($event);
+        $event->load(['tenant']);
+
+        $participants = $this->participantMailRecipients($event)->get();
+        $participantsWithoutEmail = EventBookingParticipant::query()
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $event->id)
+                ->where('tenant_id', $event->tenant_id)
+                ->where(fn ($statusQuery) => $statusQuery
+                    ->where('booking_status', '!=', 'cancelled')
+                    ->orWhereNull('booking_status')))
+            ->where(function ($query) {
+                $query->whereNull('email')->orWhere('email', '');
+            })
+            ->count();
+
+        return view('events.participant-mail', [
+            'event' => $event,
+            'participants' => $participants,
+            'participantsWithoutEmail' => $participantsWithoutEmail,
+            'defaultSubject' => 'Information zu ' . $event->title,
+            'defaultBody' => "Hallo {{ teilnehmer_name }},\n\nhier eine kurze Information zu {{ event_titel }} am {{ event_datum }}.\n\nViele Grüße\n{{ verein_name }}",
+        ]);
+    }
+
+    public function sendParticipantMail(Request $request, Event $event)
+    {
+        $this->authorizeEvent($event);
+        $tenant = $event->tenant ?: auth()->user()->tenant;
+
+        $validated = $request->validate([
+            'participant_ids' => ['required', 'array', 'min:1'],
+            'participant_ids.*' => ['integer'],
+            'subject' => ['required', 'string', 'max:255'],
+            'body' => ['required', 'string', 'max:10000'],
+            'recipient_count_confirmation' => ['required', 'integer', 'min:1'],
+            'send_confirmed' => ['accepted'],
+        ], [
+            'participant_ids.required' => 'Bitte waehle mindestens einen Teilnehmer aus.',
+            'recipient_count_confirmation.required' => 'Bitte bestaetige die Empfaengerzahl.',
+            'send_confirmed.accepted' => 'Bitte bestaetige den bewussten Versand an die ausgewaehlten Teilnehmer.',
+        ]);
+
+        $selectedIds = collect($validated['participant_ids'])->map(fn ($id) => (int) $id)->unique()->values();
+        $participants = $this->participantMailRecipients($event)
+            ->whereIn('id', $selectedIds)
+            ->get();
+
+        if ($participants->count() !== $selectedIds->count()) {
+            return back()
+                ->withErrors(['participant_ids' => 'Mindestens ein ausgewaehlter Teilnehmer gehoert nicht zu dieser Veranstaltung oder hat keine gueltige E-Mail-Adresse.'])
+                ->withInput();
+        }
+
+        if ((int) $validated['recipient_count_confirmation'] !== $participants->count()) {
+            return back()
+                ->withErrors(['recipient_count_confirmation' => 'Die bestaetigte Empfaengerzahl stimmt nicht mit der Auswahl ueberein.'])
+                ->withInput();
+        }
+
+        $fromAddress = $tenant->mail_from_address ?: config('mail.from.address');
+        $fromName = $tenant->mail_from_name ?: ($tenant->name ?: config('mail.from.name'));
+        $replyToAddress = filled($tenant->email) && $tenant->email !== $fromAddress ? $tenant->email : null;
+        $sentCount = 0;
+        $failedCount = 0;
+
+        foreach ($participants as $participant) {
+            $html = $this->renderParticipantMailHtml($event, $participant, $validated['body']);
+            $dispatchLog = TemplateDispatchLog::create([
+                'tenant_id' => $tenant->id,
+                'template_id' => null,
+                'created_by' => auth()->id(),
+                'channel' => 'mail',
+                'action' => 'event_participant_mail',
+                'recipient_type' => 'event_participant',
+                'member_id' => $participant->member_id,
+                'contact_id' => $participant->contact_id,
+                'recipient_name' => $participant->display_name ?: $participant->full_name ?: $participant->email,
+                'recipient_reference' => $participant->email,
+                'subject' => $validated['subject'],
+                'message_excerpt' => Str::limit(strip_tags($html), 240),
+                'dispatched_at' => now(),
+                'meta' => [
+                    'event_id' => $event->id,
+                    'event_title' => $event->title,
+                    'booking_id' => $participant->event_booking_id,
+                    'booking_reference' => $participant->booking?->booking_reference,
+                    'participant_id' => $participant->id,
+                    'source' => 'event_participants',
+                ],
+            ]);
+
+            $trackedHtml = app(MailTrackingService::class)->instrument($html, $dispatchLog);
+
+            try {
+                Mail::send('mail.layout', [
+                    'body' => $trackedHtml,
+                    'tenant' => $tenant,
+                ], function ($mail) use ($participant, $validated, $fromAddress, $fromName, $replyToAddress, $tenant) {
+                    $mail->to($participant->email, $participant->display_name ?: $participant->full_name ?: null)
+                        ->subject($validated['subject'])
+                        ->from($fromAddress, $fromName);
+
+                    if ($replyToAddress) {
+                        $mail->replyTo($replyToAddress, $tenant->name ?: $fromName);
+                    }
+                });
+
+                $sentCount++;
+            } catch (Throwable $e) {
+                $dispatchLog->delete();
+                report($e);
+                $failedCount++;
+            }
+        }
+
+        $message = $sentCount . ' Teilnehmermail' . ($sentCount === 1 ? '' : 's') . ' gesendet.';
+
+        if ($failedCount > 0) {
+            $message .= ' ' . $failedCount . ' Versand' . ($failedCount === 1 ? '' : 'e') . ' fehlgeschlagen.';
+        }
+
+        return redirect()
+            ->route('events.participants.manage', $event)
+            ->with($failedCount > 0 ? 'error' : 'success', $message);
     }
 
     public function schedule(Event $event)
@@ -1847,6 +1979,46 @@ class EventController extends Controller
         } while (EventBooking::query()->where('booking_reference', $reference)->exists());
 
         return $reference;
+    }
+
+    private function participantMailRecipients(Event $event)
+    {
+        return EventBookingParticipant::query()
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $event->id)
+                ->where('tenant_id', $event->tenant_id)
+                ->where(fn ($statusQuery) => $statusQuery
+                    ->where('booking_status', '!=', 'cancelled')
+                    ->orWhereNull('booking_status')))
+            ->whereNotNull('email')
+            ->where('email', '!=', '')
+            ->with(['booking', 'member', 'contact'])
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->orderBy('organization_name');
+    }
+
+    private function renderParticipantMailHtml(Event $event, EventBookingParticipant $participant, string $body): string
+    {
+        $event->loadMissing('tenant');
+        $participant->loadMissing('booking');
+
+        $eventDate = $event->start
+            ? $event->start->format('d.m.Y H:i') . ' Uhr'
+            : 'Termin folgt';
+        $participantName = $participant->display_name ?: $participant->full_name ?: 'Teilnehmer';
+
+        $text = strtr($body, [
+            '{{ teilnehmer_name }}' => $participantName,
+            '{{ teilnehmer_email }}' => (string) $participant->email,
+            '{{ event_titel }}' => (string) $event->title,
+            '{{ event_datum }}' => $eventDate,
+            '{{ event_ort }}' => (string) ($event->location ?: 'Ort folgt'),
+            '{{ buchungsnummer }}' => (string) ($participant->booking?->booking_reference ?: ''),
+            '{{ verein_name }}' => (string) ($event->tenant?->name ?: 'Clubano'),
+        ]);
+
+        return '<div>' . nl2br(e($text), false) . '</div>';
     }
 
     private function publicListData(string $tenantSlug, Request $request): array

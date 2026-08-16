@@ -3,8 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Contact;
-use App\Models\CustomMemberField;
-use App\Models\CustomMemberValue;
 use App\Models\Event;
 use App\Models\EventBooking;
 use App\Models\EventBookingParticipant;
@@ -104,12 +102,33 @@ class PublicFormController extends Controller
     public function submissions(PublicForm $form)
     {
         $this->authorizeForm($form);
+        $form->load('event');
 
         $submissions = $form->submissions()
             ->with(['eventBooking.participants', 'member', 'contact'])
             ->paginate(20);
 
-        return view('forms.submissions', compact('form', 'submissions'));
+        $manualParticipantMembers = collect();
+        $manualParticipantContacts = collect();
+
+        if (auth()->user()?->canManageForms()) {
+            $manualParticipantMembers = Member::query()
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->whereNull('archived_at')
+                ->orderBy('last_name')
+                ->orderBy('first_name')
+                ->get(['id', 'first_name', 'last_name', 'organization', 'email', 'mobile', 'landline']);
+
+            $manualParticipantContacts = Contact::query()
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->where('is_active', true)
+                ->orderBy('organization')
+                ->orderBy('last_name')
+                ->orderBy('first_name')
+                ->get(['id', 'organization', 'company', 'first_name', 'last_name', 'email', 'mobile', 'phone', 'phone_mobile', 'phone_landline']);
+        }
+
+        return view('forms.submissions', compact('form', 'submissions', 'manualParticipantMembers', 'manualParticipantContacts'));
     }
 
     public function export(PublicForm $form)
@@ -216,6 +235,195 @@ class PublicFormController extends Controller
         return redirect()
             ->route('forms.submissions', $form)
             ->with('success', 'Die Antwort wurde gelöscht.');
+    }
+
+    public function convertSubmissionToMember(Request $request, PublicForm $form, PublicFormSubmission $submission)
+    {
+        $this->authorizeForm($form);
+        $this->authorizeSubmission($form, $submission);
+
+        $validated = $request->validate([
+            'confirmed' => ['accepted'],
+            'entry_date' => ['nullable', 'date'],
+        ], [
+            'confirmed.accepted' => 'Bitte bestätige, dass die Antwort geprüft wurde.',
+        ]);
+
+        if ($submission->member_id) {
+            return redirect()
+                ->route('forms.submissions', $form)
+                ->with('success', 'Diese Antwort ist bereits mit einem Mitglied verknüpft.');
+        }
+
+        $answers = $submission->answers ?? [];
+        $payload = $this->memberPayloadFromSubmission($submission, $answers, $validated['entry_date'] ?? null);
+
+        if (! $this->hasPersonOrOrganization($payload)) {
+            return redirect()
+                ->route('forms.submissions', $form)
+                ->withErrors(['conversion' => 'Für ein Mitglied fehlen Name, Organisation oder E-Mail. Bitte prüfe die Antwort.']);
+        }
+
+        if ($duplicate = $this->findDuplicateMember($payload, (int) $form->tenant_id)) {
+            $submission->update(['member_id' => $duplicate['record']->id]);
+
+            return redirect()
+                ->route('forms.submissions', $form)
+                ->with('success', 'Mögliche Dublette erkannt. Die Antwort wurde mit dem vorhandenen Mitglied verknüpft: ' . ($duplicate['record']->full_name ?: $duplicate['record']->organization ?: $duplicate['record']->email) . ' (' . $duplicate['reason'] . ').');
+        }
+
+        $member = DB::transaction(function () use ($submission, $payload) {
+            $member = Member::create($payload);
+            $submission->update(['member_id' => $member->id]);
+
+            return $member;
+        });
+
+        return redirect()
+            ->route('forms.submissions', $form)
+            ->with('success', 'Antwort wurde als Mitglied übernommen: ' . ($member->full_name ?: $member->organization ?: $member->email));
+    }
+
+    public function convertSubmissionToContact(Request $request, PublicForm $form, PublicFormSubmission $submission)
+    {
+        $this->authorizeForm($form);
+        $this->authorizeSubmission($form, $submission);
+
+        $request->validate([
+            'confirmed' => ['accepted'],
+        ], [
+            'confirmed.accepted' => 'Bitte bestätige, dass die Antwort geprüft wurde.',
+        ]);
+
+        if ($submission->contact_id) {
+            return redirect()
+                ->route('forms.submissions', $form)
+                ->with('success', 'Diese Antwort ist bereits mit einem Kontakt verknüpft.');
+        }
+
+        $answers = $submission->answers ?? [];
+        $payload = $this->contactPayloadFromSubmission($submission, $answers);
+
+        if (! $this->hasPersonOrOrganization($payload)) {
+            return redirect()
+                ->route('forms.submissions', $form)
+                ->withErrors(['conversion' => 'Für einen Kontakt fehlen Name, Organisation oder E-Mail. Bitte prüfe die Antwort.']);
+        }
+
+        if ($duplicate = $this->findDuplicateContact($payload, (int) $form->tenant_id)) {
+            $submission->update(['contact_id' => $duplicate['record']->id]);
+
+            return redirect()
+                ->route('forms.submissions', $form)
+                ->with('success', 'Mögliche Dublette erkannt. Die Antwort wurde mit dem vorhandenen Kontakt verknüpft: ' . $duplicate['record']->display_name . ' (' . $duplicate['reason'] . ').');
+        }
+
+        $contact = DB::transaction(function () use ($submission, $payload) {
+            $contact = Contact::create($payload);
+            $submission->update(['contact_id' => $contact->id]);
+
+            return $contact;
+        });
+
+        return redirect()
+            ->route('forms.submissions', $form)
+            ->with('success', 'Antwort wurde als Kontakt übernommen: ' . $contact->display_name);
+    }
+
+    public function convertSubmissionToEventParticipant(Request $request, PublicForm $form, PublicFormSubmission $submission)
+    {
+        $this->authorizeForm($form);
+        $this->authorizeSubmission($form, $submission);
+
+        $event = $submission->event ?: $form->event;
+
+        abort_unless($event && (int) $event->tenant_id === (int) $form->tenant_id, 404);
+
+        $validated = $request->validate([
+            'confirmed' => ['accepted'],
+            'participant_type' => ['required', Rule::in(['guest', 'member', 'contact'])],
+            'member_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => $request->input('participant_type') === 'member'),
+                Rule::exists('members', 'id')->where('tenant_id', $form->tenant_id),
+            ],
+            'contact_id' => [
+                'nullable',
+                Rule::requiredIf(fn () => $request->input('participant_type') === 'contact'),
+                Rule::exists('contacts', 'id')->where('tenant_id', $form->tenant_id),
+            ],
+            'payment_required' => ['nullable', 'boolean'],
+            'price_amount' => ['nullable', 'numeric', 'min:0', 'max:999999.99'],
+            'payment_status' => ['required', Rule::in(['not_required', 'open', 'paid', 'cancelled'])],
+            'payment_reason' => ['nullable', 'string', 'max:255'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'confirmed.accepted' => 'Bitte bestätige, dass die Antwort geprüft wurde.',
+            'member_id.required' => 'Bitte wähle ein Mitglied aus.',
+            'contact_id.required' => 'Bitte wähle einen Kontakt aus.',
+        ]);
+
+        if ($submission->event_booking_id) {
+            return redirect()
+                ->route('forms.submissions', $form)
+                ->with('success', 'Diese Antwort ist bereits mit einer Event-Buchung verknüpft.');
+        }
+
+        $answers = $submission->answers ?? [];
+        $participantPayload = $this->participantPayloadFromSubmission($submission, $answers, $validated);
+
+        if (! $this->hasPersonOrOrganization($participantPayload)) {
+            return redirect()
+                ->route('forms.submissions', $form)
+                ->withErrors(['conversion' => 'Für einen Teilnehmer fehlen Name, Organisation oder E-Mail. Bitte prüfe die Antwort.']);
+        }
+
+        $paymentRequired = $request->boolean('payment_required');
+        $priceAmount = $paymentRequired ? round((float) ($validated['price_amount'] ?? $event->price_per_person ?? 0), 2) : 0;
+        $paymentStatus = $paymentRequired ? $validated['payment_status'] : 'not_required';
+
+        if ($priceAmount <= 0 && $paymentStatus === 'open') {
+            $paymentStatus = 'not_required';
+        }
+
+        $booking = DB::transaction(function () use ($submission, $event, $participantPayload, $validated, $paymentRequired, $priceAmount, $paymentStatus) {
+            $booking = EventBooking::create([
+                'tenant_id' => $event->tenant_id,
+                'event_id' => $event->id,
+                'public_form_submission_id' => $submission->id,
+                'booking_reference' => $this->generateBookingReference($event),
+                'booker_name' => $participantPayload['organization_name'] ?: trim(($participantPayload['first_name'] ?? '') . ' ' . ($participantPayload['last_name'] ?? '')) ?: ($submission->full_name ?: 'Formularantwort'),
+                'booker_email' => $participantPayload['email'] ?? $submission->email,
+                'booker_phone' => $participantPayload['phone'] ?? $submission->phone,
+                'participant_count' => 1,
+                'price_per_person' => $priceAmount,
+                'total_amount' => $priceAmount,
+                'currency' => strtoupper($event->currency ?: 'EUR'),
+                'payment_status' => $paymentStatus,
+                'booking_status' => 'confirmed',
+                'notes' => trim('Aus Formularantwort übernommen' . (filled($validated['note'] ?? null) ? ': ' . $validated['note'] : '')),
+            ]);
+
+            $booking->participants()->create(array_merge($participantPayload, [
+                'position' => 1,
+                'participant_type' => $validated['participant_type'],
+                'payment_required' => $paymentRequired,
+                'price_amount' => $priceAmount,
+                'payment_status' => $paymentStatus,
+                'payment_reason' => $validated['payment_reason'] ?? null,
+                'source' => 'manual',
+                'note' => $validated['note'] ?? null,
+                'answers' => $submission->answers ?? [],
+            ]));
+
+            $submission->update(['event_booking_id' => $booking->id]);
+
+            return $booking;
+        });
+
+        return redirect()
+            ->route('forms.submissions', $form)
+            ->with('success', 'Antwort wurde als Teilnehmer übernommen: ' . $booking->booker_name);
     }
 
     public function storeField(Request $request, PublicForm $form)
@@ -519,70 +727,6 @@ class PublicFormController extends Controller
                 }
             }
 
-            if ($form->form_type === 'contact') {
-                $contact = Contact::create([
-                    'tenant_id' => $form->tenant_id,
-                    'contact_type' => blank($answers['organization'] ?? null) ? 'person' : 'organization',
-                    'organization' => $answers['organization'] ?? null,
-                    'first_name' => $answers['first_name'] ?? null,
-                    'last_name' => $answers['last_name'] ?? null,
-                    'email' => $answers['email'] ?? null,
-                    'mobile' => $answers['mobile'] ?? null,
-                    'phone' => $answers['phone'] ?? null,
-                    'street' => $answers['street'] ?? null,
-                    'zip' => $answers['zip'] ?? null,
-                    'city' => $answers['city'] ?? null,
-                    'country' => $answers['country'] ?? 'Deutschland',
-                    'notes' => $answers['notes'] ?? null,
-                    'source' => 'public_form:' . $form->slug,
-                    'consent_email' => (bool) ($answers['consent_email'] ?? false),
-                    'consent_phone' => (bool) ($answers['consent_phone'] ?? false),
-                    'consent_given_at' => now(),
-                ]);
-
-                $submission->update(['contact_id' => $contact->id]);
-            }
-
-            if ($form->form_type === 'membership') {
-                $member = Member::create([
-                    'tenant_id' => $form->tenant_id,
-                    'first_name' => $answers['first_name'] ?? null,
-                    'last_name' => $answers['last_name'] ?? null,
-                    'email' => $answers['email'] ?? null,
-                    'mobile' => $answers['mobile'] ?? null,
-                    'landline' => $answers['phone'] ?? null,
-                    'birthday' => $answers['birthday'] ?? null,
-                    'street' => $answers['street'] ?? null,
-                    'zip' => $answers['zip'] ?? null,
-                    'city' => $answers['city'] ?? null,
-                    'country' => $answers['country'] ?? 'Deutschland',
-                    'entry_date' => now()->toDateString(),
-                ]);
-
-                $customFields = CustomMemberField::query()
-                    ->where('tenant_id', $form->tenant_id)
-                    ->get()
-                    ->keyBy('slug');
-
-                foreach ($answers as $slug => $value) {
-                    $customField = $customFields->get($slug);
-
-                    if (!$customField || $value === null || $value === '') {
-                        continue;
-                    }
-
-                    CustomMemberValue::create([
-                        'member_id' => $member->id,
-                        'custom_member_field_id' => $customField->id,
-                        'value' => is_bool($value)
-                            ? ($value ? '1' : '0')
-                            : (is_array($value) ? implode(', ', $value) : (string) $value),
-                    ]);
-                }
-
-                $submission->update(['member_id' => $member->id]);
-            }
-
             return $submission->fresh(['member', 'contact', 'eventBooking.invoice']);
         });
 
@@ -744,6 +888,243 @@ class PublicFormController extends Controller
             ->filter()
             ->values()
             ->all();
+    }
+
+    private function memberPayloadFromSubmission(PublicFormSubmission $submission, array $answers, ?string $entryDate = null): array
+    {
+        return [
+            'tenant_id' => $submission->tenant_id,
+            'organization' => $this->answer($answers, 'organization'),
+            'first_name' => $this->answer($answers, 'first_name') ?: $this->firstNameFromFullName($submission->full_name),
+            'last_name' => $this->answer($answers, 'last_name') ?: $this->lastNameFromFullName($submission->full_name),
+            'email' => $this->answer($answers, 'email') ?: $submission->email,
+            'mobile' => $this->answer($answers, 'mobile'),
+            'landline' => $this->answer($answers, 'phone') ?: $submission->phone,
+            'birthday' => $this->answer($answers, 'birthday'),
+            'street' => $this->answer($answers, 'street'),
+            'zip' => $this->answer($answers, 'zip'),
+            'city' => $this->answer($answers, 'city'),
+            'country' => $this->answer($answers, 'country') ?: 'Deutschland',
+            'entry_date' => $entryDate ?: now()->toDateString(),
+            'consent_email' => (bool) ($answers['consent_email'] ?? false),
+            'consent_phone' => (bool) ($answers['consent_phone'] ?? false),
+            'consent_data_processing' => (bool) ($answers['consent_data_processing'] ?? false),
+            'consent_given_at' => now(),
+        ];
+    }
+
+    private function contactPayloadFromSubmission(PublicFormSubmission $submission, array $answers): array
+    {
+        $organization = $this->answer($answers, 'organization');
+
+        return [
+            'tenant_id' => $submission->tenant_id,
+            'contact_type' => blank($organization) ? 'person' : 'organization',
+            'organization' => $organization,
+            'first_name' => $this->answer($answers, 'first_name') ?: $this->firstNameFromFullName($submission->full_name),
+            'last_name' => $this->answer($answers, 'last_name') ?: $this->lastNameFromFullName($submission->full_name),
+            'email' => $this->answer($answers, 'email') ?: $submission->email,
+            'mobile' => $this->answer($answers, 'mobile'),
+            'phone' => $this->answer($answers, 'phone') ?: $submission->phone,
+            'street' => $this->answer($answers, 'street'),
+            'zip' => $this->answer($answers, 'zip'),
+            'city' => $this->answer($answers, 'city'),
+            'country' => $this->answer($answers, 'country') ?: 'Deutschland',
+            'notes' => $this->answer($answers, 'notes'),
+            'source' => 'public_form:' . $submission->form?->slug,
+            'consent_email' => (bool) ($answers['consent_email'] ?? false),
+            'consent_phone' => (bool) ($answers['consent_phone'] ?? false),
+            'consent_given_at' => now(),
+        ];
+    }
+
+    private function participantPayloadFromSubmission(PublicFormSubmission $submission, array $answers, array $validated): array
+    {
+        if (($validated['participant_type'] ?? null) === 'member') {
+            $member = Member::query()
+                ->where('tenant_id', $submission->tenant_id)
+                ->findOrFail($validated['member_id']);
+
+            return [
+                'member_id' => $member->id,
+                'contact_id' => null,
+                'first_name' => $member->first_name ?: ($member->full_name ?: 'Mitglied'),
+                'last_name' => $member->last_name ?: '',
+                'organization_name' => $member->organization,
+                'email' => $member->email,
+                'phone' => $member->mobile ?: $member->landline,
+            ];
+        }
+
+        if (($validated['participant_type'] ?? null) === 'contact') {
+            $contact = Contact::query()
+                ->where('tenant_id', $submission->tenant_id)
+                ->findOrFail($validated['contact_id']);
+
+            return [
+                'member_id' => null,
+                'contact_id' => $contact->id,
+                'first_name' => $contact->first_name ?: ($contact->display_name ?: 'Kontakt'),
+                'last_name' => $contact->last_name ?: '',
+                'organization_name' => $contact->organization ?: $contact->company,
+                'email' => $contact->primary_email,
+                'phone' => $contact->primary_phone,
+            ];
+        }
+
+        return [
+            'member_id' => null,
+            'contact_id' => null,
+            'first_name' => $this->answer($answers, 'first_name') ?: $this->firstNameFromFullName($submission->full_name),
+            'last_name' => $this->answer($answers, 'last_name') ?: $this->lastNameFromFullName($submission->full_name),
+            'organization_name' => $this->answer($answers, 'organization'),
+            'email' => $this->answer($answers, 'email') ?: $submission->email,
+            'phone' => $this->answer($answers, 'mobile') ?: ($this->answer($answers, 'phone') ?: $submission->phone),
+        ];
+    }
+
+    private function answer(array $answers, string $key): ?string
+    {
+        $value = $answers[$key] ?? null;
+
+        if (is_array($value) || is_bool($value)) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
+    }
+
+    private function hasPersonOrOrganization(array $payload): bool
+    {
+        return filled($payload['organization'] ?? null)
+            || filled($payload['organization_name'] ?? null)
+            || filled($payload['first_name'] ?? null)
+            || filled($payload['last_name'] ?? null)
+            || filled($payload['email'] ?? null);
+    }
+
+    private function findDuplicateMember(array $payload, int $tenantId): ?array
+    {
+        if (filled($payload['email'] ?? null)) {
+            $member = Member::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->whereRaw('LOWER(email) = ?', [mb_strtolower($payload['email'])])
+                ->first();
+
+            if ($member) {
+                return ['record' => $member, 'reason' => 'gleiche E-Mail'];
+            }
+        }
+
+        if (filled($payload['first_name'] ?? null) && filled($payload['last_name'] ?? null)) {
+            $member = Member::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->whereRaw('LOWER(first_name) = ?', [mb_strtolower($payload['first_name'])])
+                ->whereRaw('LOWER(last_name) = ?', [mb_strtolower($payload['last_name'])])
+                ->when(filled($payload['birthday'] ?? null), fn ($query) => $query->where('birthday', $payload['birthday']))
+                ->first();
+
+            if ($member) {
+                return [
+                    'record' => $member,
+                    'reason' => filled($payload['birthday'] ?? null) ? 'gleicher Name und Geburtstag' : 'gleicher Name',
+                ];
+            }
+        }
+
+        if (filled($payload['organization'] ?? null)) {
+            $member = Member::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->whereRaw('LOWER(organization) = ?', [mb_strtolower($payload['organization'])])
+                ->when(filled($payload['city'] ?? null), fn ($query) => $query->whereRaw('LOWER(city) = ?', [mb_strtolower($payload['city'])]))
+                ->first();
+
+            if ($member) {
+                return [
+                    'record' => $member,
+                    'reason' => filled($payload['city'] ?? null) ? 'gleiche Organisation und gleicher Ort' : 'gleiche Organisation',
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    private function findDuplicateContact(array $payload, int $tenantId): ?array
+    {
+        if (filled($payload['email'] ?? null)) {
+            $contact = Contact::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where(function ($query) use ($payload) {
+                    $email = mb_strtolower($payload['email']);
+
+                    $query->whereRaw('LOWER(email) = ?', [$email])
+                        ->orWhereRaw('LOWER(secondary_email) = ?', [$email]);
+                })
+                ->first();
+
+            if ($contact) {
+                return ['record' => $contact, 'reason' => 'gleiche E-Mail'];
+            }
+        }
+
+        if (filled($payload['organization'] ?? null)) {
+            $contact = Contact::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where(function ($query) use ($payload) {
+                    $organization = mb_strtolower($payload['organization']);
+
+                    $query->whereRaw('LOWER(organization) = ?', [$organization])
+                        ->orWhereRaw('LOWER(company) = ?', [$organization]);
+                })
+                ->when(filled($payload['city'] ?? null), fn ($query) => $query->whereRaw('LOWER(city) = ?', [mb_strtolower($payload['city'])]))
+                ->first();
+
+            if ($contact) {
+                return [
+                    'record' => $contact,
+                    'reason' => filled($payload['city'] ?? null) ? 'gleiche Organisation und gleicher Ort' : 'gleiche Organisation',
+                ];
+            }
+        }
+
+        if (filled($payload['first_name'] ?? null) && filled($payload['last_name'] ?? null)) {
+            $contact = Contact::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->whereRaw('LOWER(first_name) = ?', [mb_strtolower($payload['first_name'])])
+                ->whereRaw('LOWER(last_name) = ?', [mb_strtolower($payload['last_name'])])
+                ->when(filled($payload['city'] ?? null), fn ($query) => $query->whereRaw('LOWER(city) = ?', [mb_strtolower($payload['city'])]))
+                ->first();
+
+            if ($contact) {
+                return [
+                    'record' => $contact,
+                    'reason' => filled($payload['city'] ?? null) ? 'gleicher Name und gleicher Ort' : 'gleicher Name',
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    private function firstNameFromFullName(?string $fullName): ?string
+    {
+        $parts = preg_split('/\s+/', trim((string) $fullName)) ?: [];
+
+        return count($parts) > 1 ? $parts[0] : null;
+    }
+
+    private function lastNameFromFullName(?string $fullName): ?string
+    {
+        $parts = preg_split('/\s+/', trim((string) $fullName)) ?: [];
+
+        if ($parts === []) {
+            return null;
+        }
+
+        return count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : $parts[0];
     }
 
     private function normalizeConfirmationMail(array $validated): array

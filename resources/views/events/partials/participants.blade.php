@@ -22,6 +22,11 @@
                     </a>
                 @endif
 
+                <a href="{{ route('events.participants.mail.form', $event) }}"
+                   class="inline-flex rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    Teilnehmer anschreiben
+                </a>
+
                 <a href="{{ route('events.participants.export', $event) }}"
                    class="inline-flex rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
                     Teilnehmer exportieren

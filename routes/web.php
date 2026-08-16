@@ -343,6 +343,8 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::delete('/events/{event}', [$cls, 'destroy'])->middleware('tenant.role:events')->whereNumber('event')->name('events.destroy');
         Route::get('/events/{event}', [$cls, 'show'])->whereNumber('event')->name('events.show');
         Route::get('/events/{event}/teilnehmer', [$cls, 'participants'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.manage');
+        Route::get('/events/{event}/teilnehmer/mail', [$cls, 'participantMailForm'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.mail.form');
+        Route::post('/events/{event}/teilnehmer/mail', [$cls, 'sendParticipantMail'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.mail.send');
         Route::get('/events/{event}/teilnehmer/export', [$cls, 'participantsExport'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.export');
         Route::get('/events/{event}/teilnehmer/drucken', [$cls, 'participantsPrint'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.print');
         Route::get('/events/{event}/teilnehmer/pdf', [$cls, 'participantsPdf'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.pdf');
@@ -534,6 +536,9 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     Route::delete('/formulare/{form}', [PublicFormController::class, 'destroy'])->middleware('tenant.role:forms')->name('forms.destroy');
     Route::get('/formulare/{form}/antworten', [PublicFormController::class, 'submissions'])->name('forms.submissions');
     Route::get('/formulare/{form}/antworten/export', [PublicFormController::class, 'export'])->middleware('tenant.role:forms')->name('forms.export');
+    Route::post('/formulare/{form}/antworten/{submission}/mitglied', [PublicFormController::class, 'convertSubmissionToMember'])->middleware('tenant.role:forms')->name('forms.submissions.convert-member');
+    Route::post('/formulare/{form}/antworten/{submission}/kontakt', [PublicFormController::class, 'convertSubmissionToContact'])->middleware('tenant.role:forms')->name('forms.submissions.convert-contact');
+    Route::post('/formulare/{form}/antworten/{submission}/teilnehmer', [PublicFormController::class, 'convertSubmissionToEventParticipant'])->middleware('tenant.role:forms')->name('forms.submissions.convert-participant');
     Route::patch('/formulare/{form}/antworten/{submission}/stornieren', [PublicFormController::class, 'cancelSubmission'])->middleware('tenant.role:forms')->name('forms.submissions.cancel');
     Route::delete('/formulare/{form}/antworten/{submission}', [PublicFormController::class, 'destroySubmission'])->middleware('tenant.role:forms')->name('forms.submissions.destroy');
     Route::post('/formulare/{form}/felder', [PublicFormController::class, 'storeField'])->middleware('tenant.role:forms')->name('forms.fields.store');
