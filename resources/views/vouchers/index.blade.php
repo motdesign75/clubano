@@ -13,9 +13,17 @@
                     Jeder Gutschein hat einen Code, einen Restwert und eine nachvollziehbare Historie. Alte unnummerierte Gutscheine kannst du hier nacherfassen.
                 </p>
             </div>
-            <a href="{{ route('vouchers.create') }}" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-white px-5 text-sm font-semibold text-slate-950 hover:bg-slate-100">
-                Gutschein anlegen
-            </a>
+            <div class="flex flex-col gap-3 sm:flex-row">
+                <a href="{{ route('vouchers.check') }}" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/20 px-5 text-sm font-semibold text-white hover:bg-white/10">
+                    Gutschein prüfen
+                </a>
+                <a href="{{ route('vouchers.settings') }}" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/20 px-5 text-sm font-semibold text-white hover:bg-white/10">
+                    Vorlage einrichten
+                </a>
+                <a href="{{ route('vouchers.create') }}" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-white px-5 text-sm font-semibold text-slate-950 hover:bg-slate-100">
+                    Gutschein anlegen
+                </a>
+            </div>
         </div>
     </section>
 
@@ -56,16 +64,18 @@
         </form>
 
         <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200">
-            <div class="hidden grid-cols-[170px_1fr_140px_140px_130px] bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid">
+            <div class="hidden grid-cols-[170px_1fr_140px_140px_150px_130px_180px] bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 lg:grid">
                 <div>Code</div>
                 <div>Gutschein</div>
                 <div>Restwert</div>
                 <div>Status</div>
+                <div>Zustellung</div>
                 <div>Einlösungen</div>
+                <div>Aktion</div>
             </div>
 
             @forelse($vouchers as $voucher)
-                <div class="grid gap-3 border-t border-slate-100 px-4 py-4 lg:grid-cols-[170px_1fr_140px_140px_130px] lg:items-center">
+                <div class="grid gap-3 border-t border-slate-100 px-4 py-4 lg:grid-cols-[170px_1fr_140px_140px_150px_130px_180px] lg:items-center">
                     <div class="font-mono text-sm font-semibold text-slate-950">{{ $voucher->code }}</div>
                     <div>
                         <div class="font-semibold text-slate-950">
@@ -93,7 +103,25 @@
                             {{ $voucher->status_label }}
                         </span>
                     </div>
+                    <div>
+                        <div class="text-sm font-semibold text-slate-700">{{ $voucher->delivery_method_label }}</div>
+                        @if($voucher->delivered_at)
+                            <div class="text-xs text-slate-500">versendet {{ $voucher->delivered_at->format('d.m.Y H:i') }}</div>
+                        @endif
+                    </div>
                     <div class="text-sm text-slate-600">{{ $voucher->redemptions_count }}</div>
+                    <div class="flex flex-wrap gap-2">
+                        <a href="{{ route('vouchers.download', $voucher) }}" class="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                            PDF
+                        </a>
+                        <form method="POST" action="{{ route('vouchers.send', $voucher) }}" class="flex min-w-0 flex-1 gap-1">
+                            @csrf
+                            <input type="email" name="email" value="{{ $voucher->recipient_email ?: $voucher->buyer_email }}" placeholder="E-Mail" class="min-w-0 flex-1 rounded-lg border-slate-300 text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                            <button type="submit" class="inline-flex min-h-9 items-center justify-center rounded-lg bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800">
+                                Senden
+                            </button>
+                        </form>
+                    </div>
                 </div>
             @empty
                 <div class="px-4 py-8 text-center text-sm text-slate-500">Noch keine Gutscheine vorhanden.</div>

@@ -14,6 +14,7 @@ use App\Models\TemplateDispatchLog;
 use App\Models\Voucher;
 use App\Models\VoucherRedemption;
 use App\Services\EventBookingBillingService;
+use App\Services\InvoiceCancellationService;
 use App\Services\TenantMailConfigurator;
 use App\Services\TemplateParser;
 use Illuminate\Http\Request;
@@ -28,6 +29,7 @@ class PublicFormController extends Controller
 {
     public function __construct(
         private readonly EventBookingBillingService $eventBookingBillingService,
+        private readonly InvoiceCancellationService $invoiceCancellationService,
         private readonly TenantMailConfigurator $tenantMailConfigurator,
     ) {
     }
@@ -210,6 +212,8 @@ class PublicFormController extends Controller
                     'booking_status' => 'cancelled',
                     'payment_status' => $booking->payment_status === 'open' ? 'cancelled' : $booking->payment_status,
                 ]);
+
+                $this->invoiceCancellationService->cancelForEventBookingIfPossible($booking);
             }
         });
 

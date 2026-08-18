@@ -26,6 +26,7 @@ use App\Models\Template;
 use App\Models\TemplateDispatchLog;
 use App\Models\User;
 use App\Services\MailTrackingService;
+use App\Services\InvoiceCancellationService;
 use App\Services\OnboardingService;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -1359,7 +1360,7 @@ class EventController extends Controller
         return $participant->note ?: ($participant->source ?: 'manual');
     }
 
-    public function updateBooking(Request $request, Event $event, EventBooking $booking)
+    public function updateBooking(Request $request, Event $event, EventBooking $booking, InvoiceCancellationService $invoiceCancellationService)
     {
         $this->authorizeEvent($event);
         $this->authorizeBooking($event, $booking);
@@ -1373,14 +1374,26 @@ class EventController extends Controller
             $validated['payment_status'] = 'not_required';
         }
 
+        if ($validated['booking_status'] === 'cancelled' && $validated['payment_status'] === 'open') {
+            $validated['payment_status'] = 'cancelled';
+        }
+
         $booking->update([
             'booking_status' => $validated['booking_status'],
             'payment_status' => $validated['payment_status'],
         ]);
 
+        $invoiceWasCancelled = false;
+
+        if ($validated['booking_status'] === 'cancelled') {
+            $invoiceWasCancelled = $invoiceCancellationService->cancelForEventBookingIfPossible($booking);
+        }
+
         return redirect()
             ->route('events.participants.manage', $event)
-            ->with('success', 'Buchungs- und Zahlungsstatus wurden aktualisiert.');
+            ->with('success', $invoiceWasCancelled
+                ? 'Buchung wurde storniert. Die automatisch erzeugte Rechnung wurde ebenfalls storniert.'
+                : 'Buchungs- und Zahlungsstatus wurden aktualisiert.');
     }
 
     public function updateParticipant(Request $request, Event $event, EventBooking $booking, EventBookingParticipant $participant)

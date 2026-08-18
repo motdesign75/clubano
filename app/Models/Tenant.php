@@ -59,6 +59,14 @@ class Tenant extends Model
         'donation_purposes',
         'donation_freistellung_document_id',
         'donation_email_body',
+        'voucher_template_path',
+        'voucher_template_width',
+        'voucher_template_height',
+        'voucher_code_position',
+        'voucher_code_color',
+        'voucher_show_qr',
+        'voucher_mail_subject',
+        'voucher_mail_body',
 
         // ➕ Stripe / Cashier
         'stripe_id',
@@ -93,6 +101,9 @@ class Tenant extends Model
         'donation_certificates_send_enabled' => 'boolean',
         'donation_notice_date' => 'date',
         'donation_notice_valid_until' => 'date',
+        'voucher_show_qr' => 'boolean',
+        'voucher_template_width' => 'integer',
+        'voucher_template_height' => 'integer',
     ];
 
     protected static function booted(): void

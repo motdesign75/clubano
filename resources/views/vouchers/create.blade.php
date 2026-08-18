@@ -59,9 +59,32 @@
             </div>
 
             <div>
+                <label for="buyer_email" class="mb-1 block text-sm font-medium text-slate-700">E-Mail Käufer</label>
+                <input id="buyer_email" type="email" name="buyer_email" value="{{ old('buyer_email') }}" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                @error('buyer_email')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
+            </div>
+
+            <div>
                 <label for="recipient_name" class="mb-1 block text-sm font-medium text-slate-700">Empfänger</label>
                 <input id="recipient_name" type="text" name="recipient_name" value="{{ old('recipient_name') }}" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                 @error('recipient_name')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
+            </div>
+
+            <div>
+                <label for="recipient_email" class="mb-1 block text-sm font-medium text-slate-700">E-Mail Empfänger</label>
+                <input id="recipient_email" type="email" name="recipient_email" value="{{ old('recipient_email') }}" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                @error('recipient_email')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
+            </div>
+
+            <div class="md:col-span-2">
+                <label for="delivery_method" class="mb-1 block text-sm font-medium text-slate-700">Zustellung</label>
+                <select id="delivery_method" name="delivery_method" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                    <option value="pickup" @selected(old('delivery_method', 'pickup') === 'pickup')>Abholung</option>
+                    <option value="mail" @selected(old('delivery_method') === 'mail')>Per E-Mail versenden</option>
+                    <option value="internal" @selected(old('delivery_method') === 'internal')>Nur intern erfassen</option>
+                </select>
+                <p class="mt-1 text-sm text-slate-500">Der Gutschein wird gespeichert. Den PDF-Versand startest du anschließend bewusst aus der Gutscheinliste.</p>
+                @error('delivery_method')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
             </div>
 
             <div class="md:col-span-2">

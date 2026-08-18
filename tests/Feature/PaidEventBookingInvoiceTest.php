@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Event;
 use App\Models\EventBooking;
 use App\Models\Invoice;
@@ -7,6 +8,7 @@ use App\Models\PublicForm;
 use App\Models\PublicFormField;
 use App\Models\TemplateDispatchLog;
 use App\Models\Tenant;
+use App\Models\User;
 use App\Models\Voucher;
 use App\Models\VoucherRedemption;
 use Illuminate\Support\Facades\Mail;
@@ -296,4 +298,91 @@ test('paid public event booking can redeem a voucher and invoices only the remai
     expect((float) $voucher->remaining_amount)->toBe(0.0)
         ->and($voucher->status)->toBe(Voucher::STATUS_REDEEMED)
         ->and(VoucherRedemption::query()->where('voucher_id', $voucher->id)->where('event_booking_id', $booking->id)->count())->toBe(1);
+});
+
+test('cancelling an event form submission also cancels its generated invoice', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    $tenant = Tenant::create([
+        'name' => 'Stornoverein',
+        'slug' => 'stornoverein-event',
+        'email' => 'vorstand-storno@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+        'email_verified_at' => now(),
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Kostenpflichtiger Kurs',
+        'start' => now()->addWeek(),
+        'end' => now()->addWeek()->addHours(3),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 79,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 1,
+    ]);
+
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'title' => 'Anmeldung Kostenpflichtiger Kurs',
+        'slug' => 'kostenpflichtiger-kurs-storno',
+        'description' => 'Anmeldung',
+        'form_type' => 'event',
+        'success_message' => 'ok',
+        'is_active' => true,
+    ]);
+
+    foreach ([
+        ['label' => 'Vorname Ansprechpartner', 'slug' => 'first_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 1],
+        ['label' => 'Nachname Ansprechpartner', 'slug' => 'last_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 2],
+        ['label' => 'E-Mail', 'slug' => 'email', 'field_type' => 'email', 'is_required' => true, 'sort_order' => 3],
+    ] as $field) {
+        PublicFormField::create([
+            'public_form_id' => $form->id,
+            'label' => $field['label'],
+            'slug' => $field['slug'],
+            'field_type' => $field['field_type'],
+            'is_required' => $field['is_required'],
+            'sort_order' => $field['sort_order'],
+        ]);
+    }
+
+    $this->post(route('forms.public.submit', $form->slug), [
+        'fields' => [
+            'first_name' => 'Sarah',
+            'last_name' => 'Storno',
+            'email' => 'sarah@example.test',
+            'street' => 'Musterstrasse 12',
+            'zip' => '12345',
+            'city' => 'Musterstadt',
+            'country' => 'Deutschland',
+        ],
+        'participant_count' => 1,
+        'use_booker_as_participant' => 1,
+    ])->assertRedirect();
+
+    $booking = EventBooking::query()->where('event_id', $event->id)->firstOrFail();
+    $invoice = Invoice::query()->findOrFail($booking->invoice_id);
+
+    expect($booking->booking_status)->toBe('pending')
+        ->and($booking->payment_status)->toBe('open')
+        ->and($invoice->status)->toBe('open');
+
+    $submission = $booking->submission;
+
+    $this->actingAs($staff)
+        ->patch(route('forms.submissions.cancel', [$form, $submission]))
+        ->assertRedirect(route('forms.submissions', $form));
+
+    expect($submission->fresh()->status)->toBe('cancelled')
+        ->and($booking->fresh()->booking_status)->toBe('cancelled')
+        ->and($booking->fresh()->payment_status)->toBe('cancelled')
+        ->and($invoice->fresh()->status)->toBe('storniert');
 });

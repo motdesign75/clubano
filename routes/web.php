@@ -185,8 +185,13 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     $when($C.'VoucherController', function($cls){
         Route::middleware('tenant.role:finance')->group(function () use ($cls) {
             Route::get('/gutscheine', [$cls, 'index'])->name('vouchers.index');
+            Route::get('/gutscheine/einstellungen', [$cls, 'settings'])->name('vouchers.settings');
+            Route::put('/gutscheine/einstellungen', [$cls, 'updateSettings'])->name('vouchers.settings.update');
+            Route::get('/gutscheine/pruefen', [$cls, 'check'])->name('vouchers.check');
             Route::get('/gutscheine/neu', [$cls, 'create'])->name('vouchers.create');
             Route::post('/gutscheine', [$cls, 'store'])->name('vouchers.store');
+            Route::get('/gutscheine/{voucher}/pdf', [$cls, 'download'])->name('vouchers.download');
+            Route::post('/gutscheine/{voucher}/senden', [$cls, 'sendMail'])->name('vouchers.send');
         });
     });
 

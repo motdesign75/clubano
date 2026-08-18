@@ -16,6 +16,9 @@ class Voucher extends Model
     public const STATUS_REDEEMED = 'redeemed';
     public const STATUS_EXPIRED = 'expired';
     public const STATUS_VOID = 'void';
+    public const DELIVERY_PICKUP = 'pickup';
+    public const DELIVERY_MAIL = 'mail';
+    public const DELIVERY_INTERNAL = 'internal';
 
     protected $fillable = [
         'tenant_id',
@@ -28,7 +31,11 @@ class Voucher extends Model
         'expires_at',
         'status',
         'buyer_name',
+        'buyer_email',
         'recipient_name',
+        'recipient_email',
+        'delivery_method',
+        'delivered_at',
         'legacy',
         'notes',
         'created_by',
@@ -39,6 +46,7 @@ class Voucher extends Model
         'remaining_amount' => 'decimal:2',
         'issued_at' => 'date',
         'expires_at' => 'date',
+        'delivered_at' => 'datetime',
         'legacy' => 'boolean',
     ];
 
@@ -67,6 +75,15 @@ class Voucher extends Model
         return $this->status === self::STATUS_ACTIVE
             && (float) $this->remaining_amount > 0
             && (! $this->expires_at || $this->expires_at->endOfDay()->isFuture());
+    }
+
+    public function getDeliveryMethodLabelAttribute(): string
+    {
+        return match ($this->delivery_method) {
+            self::DELIVERY_MAIL => 'E-Mail',
+            self::DELIVERY_INTERNAL => 'intern erzeugt',
+            default => 'Abholung',
+        };
     }
 
     public static function normalizeCode(string $code): string

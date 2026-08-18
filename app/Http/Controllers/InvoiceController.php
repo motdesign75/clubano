@@ -11,6 +11,7 @@ use App\Models\MemberCredit;
 use App\Models\MemberCreditApplication;
 use App\Models\TemplateDispatchLog;
 use App\Services\InvoicePdfService;
+use App\Services\InvoiceCancellationService;
 use App\Services\MailTrackingService;
 use App\Services\TenantMailConfigurator;
 use Carbon\Carbon;
@@ -25,6 +26,7 @@ class InvoiceController extends Controller
 {
     public function __construct(
         private readonly InvoicePdfService $invoicePdfService,
+        private readonly InvoiceCancellationService $invoiceCancellationService,
         private readonly TenantMailConfigurator $tenantMailConfigurator,
         private readonly MailTrackingService $mailTrackingService,
     ) {
@@ -1253,46 +1255,7 @@ class InvoiceController extends Controller
 
     private function cancelInvoice(Invoice $invoice): void
     {
-        DB::transaction(function () use ($invoice) {
-            $invoice->loadMissing(['items', 'eventBookings']);
-
-            $applications = MemberCreditApplication::query()
-                ->where('tenant_id', $invoice->tenant_id)
-                ->where('invoice_id', $invoice->id)
-                ->with('credit')
-                ->lockForUpdate()
-                ->get();
-
-            foreach ($applications as $application) {
-                if ($application->credit) {
-                    $application->credit->forceFill([
-                        'remaining_amount' => round((float) $application->credit->remaining_amount + (float) $application->amount, 2),
-                    ])->save();
-                }
-            }
-
-            if ($applications->isNotEmpty()) {
-                MemberCreditApplication::query()
-                    ->where('tenant_id', $invoice->tenant_id)
-                    ->where('invoice_id', $invoice->id)
-                    ->delete();
-
-                $invoice->items()
-                    ->where('description', 'Verrechnetes Guthaben')
-                    ->where('unit', 'Guthaben')
-                    ->delete();
-            }
-
-            $invoice->forceFill([
-                'status' => 'storniert',
-                'paid_at' => null,
-                'sepa_exported_at' => null,
-                'sepa_sequence_type' => null,
-                'last_sepa_run_id' => null,
-            ])->save();
-
-            $this->syncEventBookingPaymentStatus($invoice);
-        });
+        $this->invoiceCancellationService->cancel($invoice);
     }
 
     private function generateUniqueInvoiceNumber(string $documentType = 'invoice', int $attempt = 0, ?int $tenantId = null): string
