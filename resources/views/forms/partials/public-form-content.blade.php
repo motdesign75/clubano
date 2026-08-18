@@ -93,6 +93,7 @@
                   pricePerPerson: {{ json_encode((float) ($event->price_per_person ?? 0)) }},
                   maxParticipants: {{ max(1, (int) ($event->max_participants_per_booking ?: 1)) }},
                   participantCount: {{ $participantCountOld }},
+                  voucherCode: {{ json_encode(old('voucher_code', '')) }},
                   participants: {{ json_encode($participantTemplate) }},
                   useBookerAsParticipant: {{ $useBookerAsParticipantOld ? 'true' : 'false' }},
                   booker: {
@@ -126,6 +127,9 @@
                   },
                   totalAmount() {
                       return (this.participantCount * this.pricePerPerson).toFixed(2).replace('.', ',');
+                  },
+                  voucherHint() {
+                      return this.voucherCode && this.pricePerPerson > 0 ? 'Gutschein wird nach dem Absenden geprüft und angerechnet.' : '';
                   }
               }"
               x-init="syncParticipants()"
@@ -277,10 +281,30 @@
                                     <span class="font-semibold">Gesamt</span>
                                     <span class="font-semibold" x-text="pricePerPerson > 0 ? `${totalAmount()} {{ $currency }}` : '0,00 {{ $currency }}'"></span>
                                 </div>
+                                <p x-show="voucherHint()" x-cloak class="mt-2 text-xs leading-5 text-emerald-800" x-text="voucherHint()"></p>
                             </div>
                         </div>
                     </div>
                 </div>
+
+                @if($event->is_paid)
+                    <div class="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                        <label for="voucher_code" class="block text-sm font-semibold text-blue-950">Gutschein einlösen</label>
+                        <p class="mt-1 text-sm leading-6 text-blue-900/80">
+                            Falls du einen Gutschein hast, trage den Code hier ein. Der Betrag wird nach dem Absenden geprüft und automatisch angerechnet.
+                        </p>
+                        <input id="voucher_code"
+                               type="text"
+                               name="voucher_code"
+                               value="{{ old('voucher_code') }}"
+                               x-model="voucherCode"
+                               class="mt-3 w-full rounded-xl border-blue-200 bg-white font-mono text-sm uppercase shadow-sm focus:border-blue-500 focus:ring-blue-200"
+                               placeholder="z. B. CLB-2026-ABC123">
+                        @error('voucher_code')
+                            <p class="mt-2 text-sm text-rose-700">{{ $message }}</p>
+                        @enderror
+                    </div>
+                @endif
 
                 <div>
                     <h2 class="text-lg font-semibold text-slate-900">Teilnehmer</h2>

@@ -11,6 +11,8 @@ use App\Models\PublicForm;
 use App\Models\PublicFormField;
 use App\Models\PublicFormSubmission;
 use App\Models\TemplateDispatchLog;
+use App\Models\Voucher;
+use App\Models\VoucherRedemption;
 use App\Services\EventBookingBillingService;
 use App\Services\TenantMailConfigurator;
 use App\Services\TemplateParser;
@@ -593,6 +595,7 @@ class PublicFormController extends Controller
         if ($isEventBooking) {
             $rules['participant_count'] = ['required', 'integer', 'min:1', 'max:' . $maxParticipants];
             $rules['participant_notes'] = ['nullable', 'string'];
+            $rules['voucher_code'] = ['nullable', 'string', 'max:80'];
             $rules['use_booker_as_participant'] = ['nullable', 'boolean'];
             $rules['participants'] = ['nullable', 'array', 'min:1', 'max:' . $maxParticipants];
             $rules['participants.*.first_name'] = ['nullable', 'string', 'max:255'];
@@ -622,6 +625,7 @@ class PublicFormController extends Controller
         if ($isEventBooking) {
             $answers['participant_count'] = (int) ($validated['participant_count'] ?? 1);
             $answers['participant_notes'] = $validated['participant_notes'] ?? null;
+            $answers['voucher_code'] = filled($validated['voucher_code'] ?? null) ? Voucher::normalizeCode($validated['voucher_code']) : null;
             $answers['use_booker_as_participant'] = (bool) ($validated['use_booker_as_participant'] ?? false);
         }
 
@@ -675,7 +679,36 @@ class PublicFormController extends Controller
 
                 $participantCount = max(1, $participantRows->count());
                 $pricePerPerson = (float) ($form->event->price_per_person ?? 0);
-                $totalAmount = $participantCount * $pricePerPerson;
+                $grossAmount = round($participantCount * $pricePerPerson, 2);
+                $voucher = null;
+                $voucherDiscountAmount = 0.0;
+
+                if ($grossAmount > 0 && filled($answers['voucher_code'] ?? null)) {
+                    $voucher = Voucher::withoutGlobalScopes()
+                        ->where('tenant_id', $form->tenant_id)
+                        ->where('code', $answers['voucher_code'])
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (! $voucher || ! $voucher->is_redeemable) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'voucher_code' => 'Dieser Gutschein ist nicht gültig oder bereits eingelöst.',
+                        ]);
+                    }
+
+                    if (strtoupper($voucher->currency ?: 'EUR') !== strtoupper($form->event->currency ?: 'EUR')) {
+                        throw \Illuminate\Validation\ValidationException::withMessages([
+                            'voucher_code' => 'Dieser Gutschein hat eine andere Währung.',
+                        ]);
+                    }
+
+                    $voucherDiscountAmount = min((float) $voucher->remaining_amount, $grossAmount);
+                }
+
+                $totalAmount = max(0, round($grossAmount - $voucherDiscountAmount, 2));
+                $paymentStatus = $pricePerPerson > 0
+                    ? ($totalAmount > 0 ? 'open' : 'paid')
+                    : 'not_required';
 
                 $booking = EventBooking::create([
                     'tenant_id' => $form->tenant_id,
@@ -687,14 +720,23 @@ class PublicFormController extends Controller
                     'booker_phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
                     'participant_count' => $participantCount,
                     'price_per_person' => $pricePerPerson,
+                    'gross_amount' => $grossAmount,
+                    'voucher_discount_amount' => $voucherDiscountAmount,
                     'total_amount' => $totalAmount,
                     'currency' => strtoupper($form->event->currency ?: 'EUR'),
-                    'payment_status' => $pricePerPerson > 0 ? 'open' : 'not_required',
+                    'payment_status' => $paymentStatus,
                     'booking_status' => 'pending',
                     'notes' => $answers['participant_notes'] ?? null,
                 ]);
 
+                $remainingVoucherShare = $voucherDiscountAmount;
                 foreach ($participantRows as $index => $participant) {
+                    $participantVoucherShare = min($pricePerPerson, $remainingVoucherShare);
+                    $remainingVoucherShare = max(0, round($remainingVoucherShare - $participantVoucherShare, 2));
+                    $participantPaymentStatus = $pricePerPerson > 0
+                        ? (($pricePerPerson - $participantVoucherShare) > 0 ? 'open' : 'paid')
+                        : 'not_required';
+
                     EventBookingParticipant::create([
                         'event_booking_id' => $booking->id,
                         'position' => $index + 1,
@@ -705,17 +747,37 @@ class PublicFormController extends Controller
                         'participant_type' => 'guest',
                         'payment_required' => $pricePerPerson > 0,
                         'price_amount' => $pricePerPerson,
-                        'payment_status' => $pricePerPerson > 0 ? 'open' : 'not_required',
+                        'voucher_discount_amount' => $participantVoucherShare,
+                        'payment_status' => $participantPaymentStatus,
                         'source' => 'online',
                         'answers' => [],
                     ]);
+                }
+
+                if ($voucher && $voucherDiscountAmount > 0) {
+                    VoucherRedemption::create([
+                        'tenant_id' => $form->tenant_id,
+                        'voucher_id' => $voucher->id,
+                        'event_booking_id' => $booking->id,
+                        'amount' => $voucherDiscountAmount,
+                        'currency' => strtoupper($form->event->currency ?: 'EUR'),
+                        'redeemed_by_name' => $booking->booker_name,
+                        'redeemed_by_email' => $booking->booker_email,
+                        'notes' => 'Einlösung bei Event-Anmeldung ' . $booking->booking_reference,
+                    ]);
+
+                    $remainingAmount = max(0, round((float) $voucher->remaining_amount - $voucherDiscountAmount, 2));
+                    $voucher->forceFill([
+                        'remaining_amount' => $remainingAmount,
+                        'status' => $remainingAmount <= 0 ? Voucher::STATUS_REDEEMED : Voucher::STATUS_ACTIVE,
+                    ])->save();
                 }
 
                 $submission->update([
                     'event_booking_id' => $booking->id,
                 ]);
 
-                if ($pricePerPerson > 0 && $form->tenant) {
+                if ($pricePerPerson > 0 && $totalAmount > 0 && $form->tenant) {
                     $invoice = $this->eventBookingBillingService->createInvoiceForBooking(
                         $booking,
                         $answers,

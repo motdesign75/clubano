@@ -22,6 +22,8 @@ class EventBooking extends Model
         'booker_phone',
         'participant_count',
         'price_per_person',
+        'gross_amount',
+        'voucher_discount_amount',
         'total_amount',
         'currency',
         'payment_status',
@@ -32,6 +34,8 @@ class EventBooking extends Model
     protected $casts = [
         'participant_count' => 'integer',
         'price_per_person' => 'decimal:2',
+        'gross_amount' => 'decimal:2',
+        'voucher_discount_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
     ];
 
@@ -60,10 +64,17 @@ class EventBooking extends Model
         return $this->hasMany(EventBookingParticipant::class)->orderBy('position');
     }
 
+    public function voucherRedemptions()
+    {
+        return $this->hasMany(VoucherRedemption::class);
+    }
+
     public function recalculateTotalsFromParticipants(): void
     {
         $participants = $this->participants()->get();
-        $totalAmount = $participants->sum(fn (EventBookingParticipant $participant) => (float) $participant->price_amount);
+        $grossAmount = $participants->sum(fn (EventBookingParticipant $participant) => (float) $participant->price_amount);
+        $voucherDiscount = min((float) ($this->voucher_discount_amount ?? 0), $grossAmount);
+        $totalAmount = max(0, round($grossAmount - $voucherDiscount, 2));
         $participantCount = max(1, $participants->count());
         $paymentStatuses = $participants->pluck('payment_status');
 
@@ -78,7 +89,9 @@ class EventBooking extends Model
 
         $this->forceFill([
             'participant_count' => $participantCount,
-            'price_per_person' => $participantCount > 0 ? round($totalAmount / $participantCount, 2) : 0,
+            'price_per_person' => $participantCount > 0 ? round($grossAmount / $participantCount, 2) : 0,
+            'gross_amount' => $grossAmount,
+            'voucher_discount_amount' => $voucherDiscount,
             'total_amount' => $totalAmount,
             'payment_status' => $paymentStatus,
         ])->save();

@@ -182,6 +182,14 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::post('/feedback', [$cls, 'store'])->name('feedback.store');
     });
 
+    $when($C.'VoucherController', function($cls){
+        Route::middleware('tenant.role:finance')->group(function () use ($cls) {
+            Route::get('/gutscheine', [$cls, 'index'])->name('vouchers.index');
+            Route::get('/gutscheine/neu', [$cls, 'create'])->name('vouchers.create');
+            Route::post('/gutscheine', [$cls, 'store'])->name('vouchers.store');
+        });
+    });
+
     // Profil
     $when($C.'ProfileController', function($cls){
         Route::get('/profile', [$cls, 'edit'])->name('profile.edit');

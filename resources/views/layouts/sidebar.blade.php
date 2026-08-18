@@ -31,6 +31,7 @@
                 || request()->routeIs('transactions.*')
                 || request()->routeIs('donations.*')
                 || request()->routeIs('invoices.*')
+                || request()->routeIs('vouchers.*')
                 || request()->routeIs('payments.*'),
             'icon' => 'banknotes',
             'minRole' => 'finance',
@@ -127,6 +128,14 @@
             'hint' => 'Spenden erfassen und Bestätigungen erstellen',
             'route' => route('donations.index'),
             'active' => request()->routeIs('donations.*'),
+            'icon' => 'gift',
+            'minRole' => 'finance',
+        ],
+        [
+            'label' => 'Gutscheine',
+            'hint' => 'Gutscheine anlegen und Einlösungen verfolgen',
+            'route' => route('vouchers.index'),
+            'active' => request()->routeIs('vouchers.*'),
             'icon' => 'gift',
             'minRole' => 'finance',
         ],

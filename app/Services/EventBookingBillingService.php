@@ -57,6 +57,17 @@ class EventBookingBillingService
             'unit_price' => $booking->price_per_person,
         ]);
 
+        if ((float) ($booking->voucher_discount_amount ?? 0) > 0) {
+            InvoiceItem::create([
+                'invoice_id' => $invoice->id,
+                'description' => 'Gutschein angerechnet',
+                'details' => 'Buchungsnummer: ' . $booking->booking_reference,
+                'quantity' => 1,
+                'unit' => 'Gutschein',
+                'unit_price' => -1 * (float) $booking->voucher_discount_amount,
+            ]);
+        }
+
         $booking->update(['invoice_id' => $invoice->id]);
 
         return $invoice->fresh(['items']);

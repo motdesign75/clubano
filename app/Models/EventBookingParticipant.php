@@ -22,6 +22,7 @@ class EventBookingParticipant extends Model
         'phone',
         'payment_required',
         'price_amount',
+        'voucher_discount_amount',
         'payment_status',
         'payment_reason',
         'source',
@@ -33,6 +34,7 @@ class EventBookingParticipant extends Model
         'position' => 'integer',
         'payment_required' => 'boolean',
         'price_amount' => 'decimal:2',
+        'voucher_discount_amount' => 'decimal:2',
         'answers' => 'array',
     ];
 
