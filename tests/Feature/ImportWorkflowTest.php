@@ -73,6 +73,7 @@ test('admin can preview and import members from semicolon csv', function () {
     expect(Member::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(2);
     expect($run->imported_count)->toBe(2);
     expect($run->summary['source_profile'])->toBe('wiso');
+    Storage::assertMissing($path);
     expect($run->summary['import_goal'])->toBe('Erstimport');
 
     $this->actingAs($admin)->get(route('import.report', $run))

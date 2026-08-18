@@ -18,8 +18,10 @@ use App\Models\EventShift;
 use App\Models\EventShiftAssignment;
 use App\Models\Contact;
 use App\Models\Document;
+use App\Models\Invoice;
 use App\Models\Member;
 use App\Models\PublicForm;
+use App\Models\PublicFormSubmission;
 use App\Models\Tag;
 use App\Models\Tenant;
 use App\Models\Template;
@@ -94,6 +96,54 @@ class EventController extends Controller
 
         $formsCount = PublicForm::where('tenant_id', $tenantId)->count();
 
+        $formSubmissionsBaseQuery = PublicFormSubmission::where('tenant_id', $tenantId)
+            ->where(function ($query) {
+                $query->whereNull('status')
+                    ->orWhere('status', '!=', 'cancelled');
+            });
+
+        $newFormSubmissionsCount = (clone $formSubmissionsBaseQuery)
+            ->where('created_at', '>=', $today->copy()->subDays(7))
+            ->count();
+
+        $latestFormSubmissions = (clone $formSubmissionsBaseQuery)
+            ->with('form')
+            ->latest()
+            ->take(3)
+            ->get();
+
+        $eventBookingsBaseQuery = EventBooking::where('tenant_id', $tenantId)
+            ->where(function ($query) {
+                $query->whereNull('booking_status')
+                    ->orWhere('booking_status', '!=', 'cancelled');
+            });
+
+        $pendingEventBookingsCount = (clone $eventBookingsBaseQuery)
+            ->where('booking_status', 'pending')
+            ->count();
+
+        $newEventBookingsCount = (clone $eventBookingsBaseQuery)
+            ->where('created_at', '>=', $today->copy()->subDays(7))
+            ->count();
+
+        $latestEventBookings = (clone $eventBookingsBaseQuery)
+            ->with('event')
+            ->latest()
+            ->take(3)
+            ->get();
+
+        $openInvoicesCount = Invoice::where('tenant_id', $tenantId)
+            ->where('document_type', 'invoice')
+            ->where('status', 'open')
+            ->count();
+
+        $overdueInvoicesCount = Invoice::where('tenant_id', $tenantId)
+            ->where('document_type', 'invoice')
+            ->where('status', 'open')
+            ->whereNotNull('due_date')
+            ->whereDate('due_date', '<', $today->toDateString())
+            ->count();
+
         $documentsCount = Document::where('tenant_id', $tenantId)
             ->whereNull('archived_at')
             ->count();
@@ -139,6 +189,13 @@ class EventController extends Controller
             'upcomingEventsCount',
             'publicEventsCount',
             'formsCount',
+            'newFormSubmissionsCount',
+            'latestFormSubmissions',
+            'pendingEventBookingsCount',
+            'newEventBookingsCount',
+            'latestEventBookings',
+            'openInvoicesCount',
+            'overdueInvoicesCount',
             'documentsCount',
             'documentAttentionCount'
         ));

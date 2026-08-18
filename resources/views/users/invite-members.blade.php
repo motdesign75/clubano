@@ -4,31 +4,39 @@
 
 @section('content')
 <div class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-    <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div class="max-w-2xl">
-                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Benutzer einladen</div>
-                <h1 class="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Aus Mitgliedern werden Clubano-Nutzer.</h1>
-                <p class="mt-3 text-sm leading-6 text-slate-600">
+    <section class="overflow-hidden rounded-2xl bg-slate-950 text-white shadow-sm">
+        <div class="grid gap-8 bg-[linear-gradient(135deg,#020617_0%,#0f3a3a_52%,#1f2937_100%)] p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr),320px]">
+            <div class="min-w-0">
+                <div class="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">Verein verwalten</div>
+                <h1 class="mt-5 text-3xl font-semibold tracking-tight text-white">Mitglieder einladen</h1>
+                <p class="mt-4 max-w-2xl text-sm leading-6 text-white/68">
                     Wähle Mitglieder aus, setze eine Rolle und Clubano verschickt einen Link, mit dem die Person ihr eigenes Passwort festlegt.
                 </p>
             </div>
 
-            <a href="{{ route('users.index') }}" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                Zurück zu Benutzern
-            </a>
+            <aside class="rounded-xl border border-white/15 bg-white/10 p-5 backdrop-blur">
+                <div class="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">Einladbar</div>
+                <div class="mt-3 text-3xl font-semibold tracking-tight text-white">{{ $members->count() }}</div>
+                <p class="mt-2 text-sm leading-6 text-white/60">
+                    {{ ($unavailableMembers ?? collect())->count() }} brauchen vorher Aufmerksamkeit.
+                </p>
+                <a href="{{ route('users.index') }}" class="mt-5 inline-flex min-h-10 items-center justify-center rounded-xl border border-white/18 bg-white/8 px-4 text-sm font-semibold text-white transition hover:bg-white/12">
+                    Zurück zu Benutzern
+                </a>
+            </aside>
         </div>
+    </section>
 
-        @if ($errors->any())
-            <div class="mt-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-                <ul class="list-disc pl-5">
-                    @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
-            </div>
-        @endif
-    </div>
+    @if ($errors->any())
+        <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <div class="font-semibold">Bitte prüfe deine Auswahl.</div>
+            <ul class="mt-2 list-disc space-y-1 pl-5">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
 
     <form method="POST" action="{{ route('users.invite-members.store') }}" class="space-y-6" x-data="{ query: '', selected: [] }">
         @csrf
@@ -106,7 +114,7 @@
                             <span x-text="selected.length"></span> ausgewählt
                         </div>
                         <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">
-                            Einladung senden
+                            Einladungen senden
                         </button>
                     </div>
                 @endif

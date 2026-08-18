@@ -3,86 +3,109 @@
 @section('title', 'Benutzer bearbeiten')
 
 @section('content')
-<div class="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
-    <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
-        <div>
-            <h1 class="text-2xl font-semibold text-slate-900">Benutzer bearbeiten</h1>
-            <p class="mt-1 text-sm text-slate-500">Stammdaten, Rolle und optional das Passwort anpassen.</p>
+<div class="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <section class="rounded-2xl bg-slate-950 text-white shadow-sm">
+        <div class="bg-[linear-gradient(135deg,#020617_0%,#0f3a3a_58%,#1f2937_100%)] p-6 sm:p-8">
+            <div class="text-xs font-semibold uppercase tracking-[0.2em] text-white/55">Verein verwalten</div>
+            <h1 class="mt-5 text-3xl font-semibold tracking-tight text-white">Benutzer bearbeiten</h1>
+            <p class="mt-4 max-w-2xl text-sm leading-6 text-white/68">
+                Passe Stammdaten und Rolle an. Ändere das Passwort nur, wenn es wirklich nötig ist.
+            </p>
         </div>
+    </section>
 
-        @if(session('error'))
-            <div class="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
-                {{ session('error') }}
-            </div>
-        @endif
+    @if(session('error'))
+        <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
+            {{ session('error') }}
+        </div>
+    @endif
 
-        @if ($errors->any())
-            <div class="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-rose-700">
-                <ul class="list-disc pl-5 text-sm">
-                    @foreach ($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
-            </div>
-        @endif
+    @if ($errors->any())
+        <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <div class="font-semibold">Bitte prüfe deine Eingaben.</div>
+            <ul class="mt-2 list-disc space-y-1 pl-5">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
 
-        <form method="POST" action="{{ route('users.update', $user) }}" class="space-y-5">
-            @csrf
-            @method('PUT')
+    <form method="POST" action="{{ route('users.update', $user) }}" class="grid gap-6 lg:grid-cols-[minmax(0,1fr),360px]">
+        @csrf
+        @method('PUT')
 
-            <div>
-                <label class="block text-sm font-medium text-gray-700">Name</label>
-                <input name="name" type="text" required value="{{ old('name', $user->name) }}" class="mt-1 w-full rounded-xl border-gray-300 text-sm shadow-sm" />
-            </div>
-
-            <div>
-                <label class="block text-sm font-medium text-gray-700">E-Mail</label>
-                <input name="email" type="email" required value="{{ old('email', $user->email) }}" class="mt-1 w-full rounded-xl border-gray-300 text-sm shadow-sm" />
-            </div>
-
-            <div class="grid gap-5 md:grid-cols-2">
+        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-start gap-3">
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                    <x-heroicon-o-user class="h-5 w-5" />
+                </span>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Neues Passwort</label>
-                    <input name="password" type="password" class="mt-1 w-full rounded-xl border-gray-300 text-sm shadow-sm" />
-                    <p class="mt-1 text-xs text-gray-500">Leer lassen, wenn das Passwort unverändert bleiben soll.</p>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Passwort bestätigen</label>
-                    <input name="password_confirmation" type="password" class="mt-1 w-full rounded-xl border-gray-300 text-sm shadow-sm" />
+                    <h2 class="text-lg font-semibold text-slate-950">Zugangsdaten</h2>
+                    <p class="mt-1 text-sm leading-6 text-slate-500">Name und E-Mail-Adresse für diesen Clubano-Zugang.</p>
                 </div>
             </div>
 
-            <div class="space-y-3">
+            <div class="mt-6 space-y-5">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Rolle</label>
-                    <select name="role" required class="mt-1 w-full rounded-xl border-gray-300 text-sm shadow-sm">
-                        @foreach($roleOptions as $option)
-                            <option value="{{ $option['value'] }}" @selected(\App\Models\User::normalizeRole(old('role', $user->role)) === \App\Models\User::normalizeRole($option['value']))>{{ $option['label'] }}</option>
-                        @endforeach
-                    </select>
+                    <label for="name" class="block text-sm font-semibold text-slate-800">Name</label>
+                    <input id="name" name="name" type="text" required value="{{ old('name', $user->name) }}" class="mt-2 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                 </div>
 
-                <div class="grid gap-3 md:grid-cols-{{ count($roleOptions) > 2 ? '3' : '2' }}">
+                <div>
+                    <label for="email" class="block text-sm font-semibold text-slate-800">E-Mail-Adresse</label>
+                    <input id="email" name="email" type="email" required value="{{ old('email', $user->email) }}" class="mt-2 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                </div>
+
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div class="text-sm font-semibold text-slate-950">Passwort optional ändern</div>
+                    <p class="mt-1 text-sm leading-6 text-slate-500">Leer lassen, wenn das Passwort unverändert bleiben soll.</p>
+
+                    <div class="mt-4 grid gap-5 md:grid-cols-2">
+                        <div>
+                            <label for="password" class="block text-sm font-semibold text-slate-800">Neues Passwort</label>
+                            <input id="password" name="password" type="password" class="mt-2 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                        </div>
+
+                        <div>
+                            <label for="password_confirmation" class="block text-sm font-semibold text-slate-800">Neues Passwort wiederholen</label>
+                            <input id="password_confirmation" name="password_confirmation" type="password" class="mt-2 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <aside class="space-y-6">
+            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <label for="role" class="block text-sm font-semibold text-slate-800">Rolle</label>
+                <select id="role" name="role" required class="mt-2 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                     @foreach($roleOptions as $option)
-                        <div class="rounded-2xl border {{ \App\Models\User::normalizeRole(old('role', $user->role)) === \App\Models\User::normalizeRole($option['value']) ? 'border-indigo-200 bg-indigo-50' : 'border-slate-200 bg-slate-50' }} p-4">
+                        <option value="{{ $option['value'] }}" @selected(\App\Models\User::normalizeRole(old('role', $user->role)) === \App\Models\User::normalizeRole($option['value']))>{{ $option['label'] }}</option>
+                    @endforeach
+                </select>
+
+                <div class="mt-5 space-y-3">
+                    @foreach($roleOptions as $option)
+                        @php($selected = \App\Models\User::normalizeRole(old('role', $user->role)) === \App\Models\User::normalizeRole($option['value']))
+                        <div class="rounded-xl border p-3 {{ $selected ? 'border-slate-400 bg-slate-100' : 'border-slate-200 bg-slate-50' }}">
                             <div class="text-sm font-semibold text-slate-900">{{ $option['label'] }}</div>
-                            <p class="mt-2 text-xs leading-5 text-slate-600">{{ $option['description'] }}</p>
+                            <p class="mt-1 text-xs leading-5 text-slate-600">{{ $option['description'] }}</p>
                         </div>
                     @endforeach
                 </div>
-            </div>
+            </section>
 
-            <div class="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
-                <a href="{{ route('users.index') }}" class="text-sm text-gray-600 hover:text-gray-900">
-                    ← Zurück zur Benutzerliste
+            <div class="flex flex-col-reverse gap-3 sm:flex-row lg:flex-col-reverse">
+                <a href="{{ route('users.index') }}" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                    Zurück zu Benutzern
                 </a>
-
-                <button type="submit" class="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-5 py-3 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
+                <button type="submit" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800">
+                    <x-heroicon-o-check class="h-5 w-5" />
                     Änderungen speichern
                 </button>
             </div>
-        </form>
-    </div>
+        </aside>
+    </form>
 </div>
 @endsection

@@ -247,10 +247,14 @@ class ImportController extends Controller
         $mappingBlocker = $this->mappingBlockerMessage($mapping, $type);
 
         if ($mappingBlocker) {
+            Storage::delete((string) $request->input('path'));
+
             return $this->redirectToImport($type)->with('error', $mappingBlocker);
         }
 
         if ($type === 'members' && $limitMessage = $this->memberImportLimitMessage($rows, $mapping, $tenantId, $duplicateStrategy)) {
+            Storage::delete((string) $request->input('path'));
+
             return redirect()
                 ->route('import.mitglieder')
                 ->with('error', $limitMessage);
@@ -339,6 +343,8 @@ class ImportController extends Controller
         if (count($skippedRows) > 0) {
             $message .= ' ' . count($skippedRows) . ' Zeile(n) wurden wegen Fehlern oder Dubletten uebersprungen.';
         }
+
+        Storage::delete((string) $request->input('path'));
 
         return redirect()->route('import.report', $importRun)->with('success', $message);
     }

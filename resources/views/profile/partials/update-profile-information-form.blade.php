@@ -1,75 +1,63 @@
 <section>
-    <header>
-        <h2 class="text-lg font-medium text-gray-900">
-            {{ __('Profilinformationen') }}
-        </h2>
+    <div class="flex items-start gap-3">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+            <x-heroicon-o-user class="h-5 w-5" />
+        </span>
+        <div>
+            <h2 class="text-lg font-semibold text-slate-950">Persönliche Daten</h2>
+            <p class="mt-1 text-sm leading-6 text-slate-500">Aktualisiere deinen Namen und deine E-Mail-Adresse.</p>
+        </div>
+    </div>
 
-        <p class="mt-1 text-sm text-gray-600">
-            {{ __('Aktualisiere deinen Namen und deine E-Mail-Adresse.') }}
-        </p>
-    </header>
-
-    @php
-        $user = auth()->user();
-    @endphp
+    @php($user = auth()->user())
 
     <form id="send-verification" method="post" action="{{ route('verification.send') }}">
         @csrf
     </form>
 
-    <form method="post" action="{{ route('profile.update') }}" class="mt-6 space-y-6">
+    <form method="post" action="{{ route('profile.update') }}" class="mt-6 space-y-5">
         @csrf
         @method('patch')
 
-        {{-- Name --}}
         <div>
-            <x-input-label for="name" :value="__('Name')" />
-            <x-text-input id="name" name="name" type="text" class="mt-1 block w-full"
-                          :value="old('name', $user->name)" required autofocus autocomplete="name" />
+            <label for="name" class="block text-sm font-semibold text-slate-800">Name</label>
+            <input id="name"
+                   name="name"
+                   type="text"
+                   class="mt-2 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300"
+                   value="{{ old('name', $user->name) }}"
+                   required
+                   autofocus
+                   autocomplete="name">
             <x-input-error class="mt-2" :messages="$errors->get('name')" />
         </div>
 
-        {{-- E-Mail --}}
         <div>
-            <x-input-label for="email" :value="__('E-Mail-Adresse')" />
-            <x-text-input id="email" name="email" type="email" class="mt-1 block w-full"
-                          :value="old('email', $user->email)" required autocomplete="username" />
+            <label for="email" class="block text-sm font-semibold text-slate-800">E-Mail-Adresse</label>
+            <input id="email"
+                   name="email"
+                   type="email"
+                   class="mt-2 w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300"
+                   value="{{ old('email', $user->email) }}"
+                   required
+                   autocomplete="username">
             <x-input-error class="mt-2" :messages="$errors->get('email')" />
 
-            {{-- Hinweis bei nicht verifizierter E-Mail --}}
-            @if ($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && !$user->hasVerifiedEmail())
-                <div class="mt-2">
-                    <p class="text-sm text-gray-800">
-                        {{ __('Deine E-Mail-Adresse ist nicht verifiziert.') }}
-
-                        <button form="send-verification"
-                                class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                            {{ __('Hier klicken, um die Verifizierung erneut zu senden.') }}
-                        </button>
-                    </p>
-
-                    @if (session('status') === 'verification-link-sent')
-                        <p class="mt-2 font-medium text-sm text-green-600">
-                            {{ __('Ein neuer Verifizierungslink wurde an deine E-Mail-Adresse gesendet.') }}
-                        </p>
-                    @endif
+            @if ($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && ! $user->hasVerifiedEmail())
+                <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+                    <div class="font-semibold">Deine E-Mail-Adresse ist noch nicht bestätigt.</div>
+                    <button form="send-verification" class="mt-1 font-semibold text-amber-950 underline underline-offset-2">
+                        Bestätigungslink erneut senden
+                    </button>
                 </div>
             @endif
         </div>
 
-        {{-- Buttons --}}
-        <div class="flex items-center gap-4">
-            <x-primary-button>{{ __('Speichern') }}</x-primary-button>
-
-            @if (session('status') === 'profile-updated')
-                <p x-data="{ show: true }"
-                   x-show="show"
-                   x-transition
-                   x-init="setTimeout(() => show = false, 2000)"
-                   class="text-sm text-gray-600">
-                    {{ __('Gespeichert.') }}
-                </p>
-            @endif
+        <div class="flex justify-end border-t border-slate-100 pt-5">
+            <button type="submit" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800">
+                <x-heroicon-o-check class="h-5 w-5" />
+                Profil speichern
+            </button>
         </div>
     </form>
 </section>

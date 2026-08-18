@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Mail\ProtocolMail;
 use App\Models\Document;
 use App\Models\Event;
+use App\Models\EventBooking;
 use App\Models\EventCategory;
 use App\Models\Member;
 use App\Models\Protocol;
@@ -597,7 +598,7 @@ test('dashboard shows a calm guided cockpit', function () {
         'is_public' => false,
     ]);
 
-    PublicForm::create([
+    $form = PublicForm::create([
         'tenant_id' => $tenant->id,
         'title' => 'Kontaktformular',
         'slug' => 'dashboard-kontaktformular',
@@ -606,11 +607,40 @@ test('dashboard shows a calm guided cockpit', function () {
         'is_active' => true,
     ]);
 
+    PublicFormSubmission::create([
+        'tenant_id' => $tenant->id,
+        'public_form_id' => $form->id,
+        'full_name' => 'Ada Antwort',
+        'email' => 'ada@example.test',
+        'status' => 'active',
+        'answers' => [],
+    ]);
+
+    EventBooking::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => Event::where('tenant_id', $tenant->id)->value('id'),
+        'booking_reference' => 'EVT-DASHBOARD',
+        'booker_name' => 'Ben Buchung',
+        'booker_email' => 'ben@example.test',
+        'participant_count' => 1,
+        'price_per_person' => 0,
+        'gross_amount' => 0,
+        'total_amount' => 0,
+        'currency' => 'EUR',
+        'payment_status' => 'not_required',
+        'booking_status' => 'pending',
+    ]);
+
     $response = $this->actingAs($staff)->get(route('dashboard'));
 
     $response->assertOk();
     $response->assertSee('Heute zuerst');
     $response->assertSee('Clubano-Moment');
+    $response->assertSee('Eingang');
+    $response->assertSee('Formularantworten');
+    $response->assertSee('Anmeldungen');
+    $response->assertSee('Zuletzt passiert');
+    $response->assertSee('Ada Antwort');
     $response->assertSee('Mira Muster ist neu dabei');
     $response->assertSee('Nächster Schritt');
     $response->assertSee('Hinweise');

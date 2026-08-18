@@ -23,7 +23,30 @@
     $primaryNextStep = $onboarding['nextStep'] ?? null;
     $documentsCount = $documentsCount ?? 0;
     $documentAttentionCount = $documentAttentionCount ?? 0;
-    $canManageWork = auth()->user()?->isStaff() ?? false;
+    $currentUser = auth()->user();
+    $canManageWork = $currentUser?->isStaff() ?? false;
+    $canManageForms = $currentUser?->canManageForms() ?? false;
+    $canManageEvents = $currentUser?->canManageEvents() ?? false;
+    $canManageFinance = $currentUser?->canManageFinance() ?? false;
+    $latestFormSubmissions = $latestFormSubmissions ?? collect();
+    $latestEventBookings = $latestEventBookings ?? collect();
+    $newFormSubmissionsCount = $newFormSubmissionsCount ?? 0;
+    $newEventBookingsCount = $newEventBookingsCount ?? 0;
+    $pendingEventBookingsCount = $pendingEventBookingsCount ?? 0;
+    $openInvoicesCount = $openInvoicesCount ?? 0;
+    $overdueInvoicesCount = $overdueInvoicesCount ?? 0;
+    $dashboardInboxCount = $newFormSubmissionsCount + $newEventBookingsCount;
+    $firstFormSubmission = $latestFormSubmissions->first();
+    $firstEventBooking = $latestEventBookings->first();
+    $formResponsesRoute = $canManageForms && $firstFormSubmission?->form
+        ? route('forms.submissions', $firstFormSubmission->form)
+        : route('forms.index');
+    $eventResponsesRoute = $canManageEvents && $firstEventBooking?->event
+        ? route('events.participants.manage', $firstEventBooking->event)
+        : route('events.index');
+    $dashboardInboxRoute = $newFormSubmissionsCount > 0
+        ? $formResponsesRoute
+        : ($newEventBookingsCount > 0 ? $eventResponsesRoute : route('forms.index'));
 
     $licenseLabel = match (true) {
         $hasComplimentaryAccess => $tenant->license_mode_label,
@@ -61,10 +84,10 @@
             'icon' => 'calendar-days',
         ],
         [
-            'label' => 'Formulare',
-            'value' => $formsCount,
-            'hint' => $publicEventsCount . ' öffentliche Termine',
-            'route' => route('forms.index'),
+            'label' => 'Eingang',
+            'value' => $dashboardInboxCount,
+            'hint' => $newFormSubmissionsCount . ' Antworten, ' . $newEventBookingsCount . ' Anmeldungen',
+            'route' => $dashboardInboxRoute,
             'icon' => 'clipboard-document-list',
         ],
         [
@@ -94,11 +117,19 @@
         ];
     }
 
-    if ($formsCount > 0) {
+    if ($newFormSubmissionsCount > 0) {
         $signals[] = [
-            'label' => 'Formulare prüfen',
-            'text' => 'Antworten und Anmeldungen im Blick behalten',
-            'route' => route('forms.index'),
+            'label' => 'Formularantworten prüfen',
+            'text' => $newFormSubmissionsCount . ' neue Antworten in den letzten 7 Tagen',
+            'route' => $formResponsesRoute,
+        ];
+    }
+
+    if ($pendingEventBookingsCount > 0) {
+        $signals[] = [
+            'label' => 'Anmeldungen prüfen',
+            'text' => $pendingEventBookingsCount . ' Anmeldungen warten auf Bestätigung',
+            'route' => $eventResponsesRoute,
         ];
     }
 
@@ -107,6 +138,14 @@
             'label' => 'Dokumente prüfen',
             'text' => $documentAttentionCount . ' Dokumente haben Fristen oder Prüfbedarf',
             'route' => route('documents.index', ['due' => 'soon']),
+        ];
+    }
+
+    if ($canManageFinance && $overdueInvoicesCount > 0) {
+        $signals[] = [
+            'label' => 'Zahlungen prüfen',
+            'text' => $overdueInvoicesCount . ' offene Rechnungen sind überfällig',
+            'route' => route('invoices.index'),
         ];
     }
 
@@ -132,6 +171,70 @@
     $entryMember = $entries->first();
 
     $memberDisplayName = fn ($member) => trim(($member?->first_name ? $member->first_name . ' ' : '') . ($member?->last_name ?? '')) ?: ($member?->organization ?? 'Mitglied');
+
+    $attentionCards = collect([
+        [
+            'label' => 'Formularantworten',
+            'value' => $newFormSubmissionsCount,
+            'hint' => $newFormSubmissionsCount > 0 ? 'neu in den letzten 7 Tagen' : 'kein neuer Eingang',
+            'route' => $formResponsesRoute,
+            'icon' => 'clipboard-document-list',
+            'active' => $newFormSubmissionsCount > 0,
+        ],
+        [
+            'label' => 'Anmeldungen',
+            'value' => $pendingEventBookingsCount,
+            'hint' => $pendingEventBookingsCount > 0 ? 'warten auf Entscheidung' : $newEventBookingsCount . ' neu in 7 Tagen',
+            'route' => $eventResponsesRoute,
+            'icon' => 'ticket',
+            'active' => $pendingEventBookingsCount > 0 || $newEventBookingsCount > 0,
+        ],
+        $canManageFinance ? [
+            'label' => 'Offene Zahlungen',
+            'value' => $overdueInvoicesCount > 0 ? $overdueInvoicesCount : $openInvoicesCount,
+            'hint' => $overdueInvoicesCount > 0 ? 'überfällig' : $openInvoicesCount . ' offen',
+            'route' => route('invoices.index'),
+            'icon' => 'banknotes',
+            'active' => $overdueInvoicesCount > 0 || $openInvoicesCount > 0,
+        ] : null,
+    ])->filter()->values();
+
+    $recentActivity = collect();
+
+    foreach ($latestFormSubmissions as $submission) {
+        $recentActivity->push([
+            'type' => 'Antwort',
+            'title' => $submission->full_name ?: ($submission->email ?: 'Neue Formularantwort'),
+            'meta' => ($submission->form?->title ?? 'Formular') . ' · ' . $submission->created_at?->diffForHumans(),
+            'route' => $submission->form && $canManageForms ? route('forms.submissions', $submission->form) : route('forms.index'),
+            'date' => $submission->created_at,
+        ]);
+    }
+
+    foreach ($latestEventBookings as $booking) {
+        $recentActivity->push([
+            'type' => 'Anmeldung',
+            'title' => $booking->booker_name ?: 'Neue Anmeldung',
+            'meta' => ($booking->event?->title ?? 'Veranstaltung') . ' · ' . $booking->created_at?->diffForHumans(),
+            'route' => $booking->event && $canManageEvents ? route('events.participants.manage', $booking->event) : route('events.index'),
+            'date' => $booking->created_at,
+        ]);
+    }
+
+    foreach ($entries->take(2) as $member) {
+        $recentActivity->push([
+            'type' => 'Mitglied',
+            'title' => $memberDisplayName($member),
+            'meta' => 'neu im Verein · ' . $member->entry_date?->translatedFormat('d. M'),
+            'route' => route('members.show', $member),
+            'date' => $member->created_at ?? $member->entry_date,
+        ]);
+    }
+
+    $recentActivity = $recentActivity
+        ->sortByDesc(fn ($item) => $item['date'])
+        ->take(4)
+        ->values();
 
     $clubMoment = match (true) {
         (bool) $birthdayMember => [
@@ -217,6 +320,32 @@
                             </a>
                         </div>
                     </div>
+
+                    <div class="mt-4 grid max-w-3xl gap-3 md:grid-cols-3">
+                        @foreach($attentionCards as $card)
+                            <a href="{{ $card['route'] }}"
+                               class="group rounded-xl border px-4 py-3 transition {{ $card['active'] ? 'border-white/22 bg-white/12 hover:bg-white/16' : 'border-white/10 bg-white/5 hover:bg-white/10' }}">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="text-xs font-semibold uppercase tracking-[0.16em] {{ $card['active'] ? 'text-white/70' : 'text-white/45' }}">
+                                            {{ $card['label'] }}
+                                        </div>
+                                        <div class="mt-2 text-2xl font-semibold tracking-tight text-white">{{ $card['value'] }}</div>
+                                        <div class="mt-1 truncate text-xs text-white/58">{{ $card['hint'] }}</div>
+                                    </div>
+                                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {{ $card['active'] ? 'bg-white text-slate-950' : 'bg-white/10 text-white/70' }}">
+                                        @if($card['icon'] === 'ticket')
+                                            <x-heroicon-o-ticket class="h-5 w-5" />
+                                        @elseif($card['icon'] === 'banknotes')
+                                            <x-heroicon-o-banknotes class="h-5 w-5" />
+                                        @else
+                                            <x-heroicon-o-clipboard-document-list class="h-5 w-5" />
+                                        @endif
+                                    </span>
+                                </div>
+                            </a>
+                        @endforeach
+                    </div>
                 </div>
 
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -282,6 +411,29 @@
                                 <span class="text-2xl font-semibold tracking-tight text-white">{{ $metric['value'] }}</span>
                             </a>
                         @endforeach
+                    </div>
+
+                    <div class="mt-5 rounded-lg border border-white/12 bg-slate-950/15 p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-white/55">Zuletzt passiert</div>
+                            <span class="text-xs font-semibold text-white/50">{{ $recentActivity->count() }}</span>
+                        </div>
+
+                        <div class="mt-3 space-y-3">
+                            @forelse($recentActivity as $activity)
+                                <a href="{{ $activity['route'] }}" class="block rounded-lg px-2 py-1.5 transition hover:bg-white/8">
+                                    <div class="flex items-center gap-2">
+                                        <span class="rounded-md bg-white/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/65">{{ $activity['type'] }}</span>
+                                        <span class="min-w-0 truncate text-sm font-semibold text-white">{{ $activity['title'] }}</span>
+                                    </div>
+                                    <div class="mt-1 truncate text-xs text-white/52">{{ $activity['meta'] }}</div>
+                                </a>
+                            @empty
+                                <div class="rounded-lg border border-dashed border-white/12 px-3 py-3 text-sm leading-5 text-white/55">
+                                    Noch kein neuer Eingang. Heute ist Raum für Planung.
+                                </div>
+                            @endforelse
+                        </div>
                     </div>
 
                     <div class="mt-auto pt-6">

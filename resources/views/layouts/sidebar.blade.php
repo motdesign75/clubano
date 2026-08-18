@@ -12,6 +12,7 @@
         ],
         [
             'label' => 'Mitglieder',
+            'hint' => 'Mitgliederliste und Profile',
             'route' => route('members.index'),
             'active' => request()->routeIs('members.*'),
             'icon' => 'users',
@@ -41,13 +42,15 @@
     $workNav = [
         [
             'label' => 'Formulare',
+            'hint' => 'Antworten sammeln und übernehmen',
             'route' => route('forms.index'),
             'active' => request()->routeIs('forms.*'),
             'icon' => 'link',
             'minRole' => 'Lesen',
         ],
         [
-            'label' => 'Kontakte',
+            'label' => 'Kontakte & Firmen',
+            'hint' => 'Externe Personen, Firmen und Partner',
             'route' => route('contacts.index'),
             'active' => request()->routeIs('contacts.*'),
             'icon' => 'identification',
@@ -55,6 +58,7 @@
         ],
         [
             'label' => 'Projekte',
+            'hint' => 'Größere Vorhaben bündeln',
             'route' => route('projects.index'),
             'active' => request()->routeIs('projects.*'),
             'icon' => 'rectangle-stack',
@@ -62,6 +66,7 @@
         ],
         [
             'label' => 'Aufgaben',
+            'hint' => 'To-dos, Verantwortung und Fristen',
             'route' => route('tasks.index'),
             'active' => request()->routeIs('tasks.*'),
             'icon' => 'check-circle',
@@ -69,6 +74,7 @@
         ],
         [
             'label' => 'Dokumente',
+            'hint' => 'Dateien zentral ablegen und finden',
             'route' => route('documents.index'),
             'active' => request()->routeIs('documents.*'),
             'icon' => 'archive-box',
@@ -76,13 +82,15 @@
         ],
         [
             'label' => 'Protokolle',
+            'hint' => 'Sitzungen, Beschlüsse und Mitschriften',
             'route' => route('protocols.index'),
             'active' => request()->routeIs('protocols.*'),
             'icon' => 'document-duplicate',
             'minRole' => 'Lesen',
         ],
         [
-            'label' => 'Kommunikation',
+            'label' => 'Vorlagen & E-Mails',
+            'hint' => 'Nachrichten vorbereiten und versenden',
             'route' => route('templates.index'),
             'active' => request()->routeIs('templates.*') || request()->routeIs('mail.*') || request()->routeIs('letters.*'),
             'icon' => 'paper-airplane',
@@ -159,7 +167,7 @@
 
     $calendarNav = [
         [
-            'label' => 'Kalenderübersicht',
+            'label' => 'Kalender',
             'hint' => 'Termine sehen und den Monat planen',
             'route' => route('events.index'),
             'active' => request()->routeIs('events.index'),
@@ -167,7 +175,7 @@
             'minRole' => 'Lesen',
         ],
         [
-            'label' => 'Aktivität planen',
+            'label' => 'Termin anlegen',
             'hint' => 'Training, Spiel, Sitzung oder Einsatz anlegen',
             'route' => route('events.create'),
             'active' => request()->routeIs('events.create'),
@@ -175,7 +183,7 @@
             'minRole' => 'events',
         ],
         [
-            'label' => 'Aktivitätsarten',
+            'label' => 'Terminarten',
             'hint' => 'Kategorien, Zielgruppen und Standards steuern',
             'route' => route('event-categories.index'),
             'active' => request()->routeIs('event-categories.*'),
@@ -203,6 +211,7 @@
     $organizationNav = [
         [
             'label' => 'Verein',
+            'hint' => 'Adresse, Logo und Stammdaten',
             'route' => route('tenant.show'),
             'active' => request()->routeIs('tenant.*'),
             'icon' => 'building-office',
@@ -210,6 +219,7 @@
         ],
         [
             'label' => 'Benutzer',
+            'hint' => 'Menschen zur Mitarbeit einladen',
             'route' => route('users.index'),
             'active' => request()->routeIs('users.*'),
             'icon' => 'user-group',
@@ -217,27 +227,31 @@
         ],
         [
             'label' => 'Datenschutz',
+            'hint' => 'Auskunft, Löschung und Nachweise',
             'route' => route('privacy.index'),
             'active' => request()->routeIs('privacy.*'),
             'icon' => 'shield-check',
             'minRole' => 'Admin',
         ],
         [
-            'label' => 'Mitgliedschaften',
+            'label' => 'Beiträge & Arten',
+            'hint' => 'Beitragsmodelle und Mitgliedsarten',
             'route' => route('memberships.index'),
             'active' => request()->routeIs('memberships.*'),
             'icon' => 'credit-card',
             'minRole' => 'Admin',
         ],
         [
-            'label' => 'Eigene Felder',
+            'label' => 'Felder anpassen',
+            'hint' => 'Eigene Angaben für den Verein',
             'route' => route('custom-fields.index'),
             'active' => request()->routeIs('custom-fields.*'),
             'icon' => 'puzzle-piece',
             'minRole' => 'Admin',
         ],
         [
-            'label' => 'Tags',
+            'label' => 'Markierungen',
+            'hint' => 'Gruppen und Kennzeichen vergeben',
             'route' => route('tags.index'),
             'active' => request()->routeIs('tags.*'),
             'icon' => 'tag',
@@ -245,13 +259,15 @@
         ],
         [
             'label' => 'Import',
+            'hint' => 'Daten aus Excel, CSV oder DATEV übernehmen',
             'route' => route('import.index'),
             'active' => request()->routeIs('import.*'),
             'icon' => 'cloud-arrow-down',
             'minRole' => 'Admin',
         ],
         [
-            'label' => 'Maileinstellungen',
+            'label' => 'E-Mail-Absender',
+            'hint' => 'SMTP und Absender einstellen',
             'route' => url('/settings/email'),
             'active' => request()->is('settings/email'),
             'icon' => 'envelope',
@@ -300,34 +316,171 @@
         }
     }
 
-    $navGroups = $user?->isSuperAdmin() && blank($user->tenant_id)
-        ? ['System' => $systemNav]
-        : [
-            'Start' => $primaryNav,
-            'Arbeit' => $workNav,
-            'Verwaltung' => $organizationNav,
-            'System' => $systemNav,
-        ];
-
-    $navGroups = collect($navGroups)
-        ->map(function ($items) use ($user) {
-            return collect($items)
-                ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
-                ->values()
-                ->all();
-        })
-        ->filter(fn ($items) => !empty($items))
-        ->all();
-
     $calendarNav = collect($calendarNav)
         ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
         ->values()
         ->all();
 
+    $financeNav = collect($financeNav)
+        ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
+        ->values()
+        ->all();
+
+    $workNav = collect($workNav)
+        ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
+        ->values()
+        ->all();
+
+    $organizationNav = collect($organizationNav)
+        ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
+        ->values()
+        ->all();
+
+    $dashboardNav = collect($primaryNav)
+        ->filter(fn ($item) => ($item['label'] ?? null) === 'Dashboard')
+        ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
+        ->values()
+        ->all();
+
+    $moduleGroups = [];
+
+    if (! ($user?->isSuperAdmin() && blank($user->tenant_id))) {
+        $moduleGroups = [
+            [
+                'label' => 'Menschen',
+                'hint' => 'Mitglieder, Kontakte, Firmen',
+                'icon' => 'users',
+                'route' => route('members.index'),
+                'active' => request()->routeIs('members.*') || request()->routeIs('contacts.*'),
+                'children' => collect([
+                    collect($primaryNav)->firstWhere('label', 'Mitglieder'),
+                    collect($workNav)->firstWhere('label', 'Kontakte & Firmen'),
+                ])->filter()->values()->all(),
+            ],
+            [
+                'label' => 'Termine & Teilnahme',
+                'hint' => 'Kalender, Anmeldung, Anwesenheit',
+                'icon' => 'calendar',
+                'route' => route('events.index'),
+                'active' => request()->routeIs('events.*') || request()->routeIs('event-categories.*'),
+                'children' => $calendarNav,
+            ],
+            [
+                'label' => 'Geld & Rechnungen',
+                'hint' => 'Konten, Buchungen, Spenden',
+                'icon' => 'banknotes',
+                'route' => route('transactions.index'),
+                'active' => request()->routeIs('accounts.*')
+                    || request()->routeIs('transactions.*')
+                    || request()->routeIs('donations.*')
+                    || request()->routeIs('invoices.*')
+                    || request()->routeIs('vouchers.*')
+                    || request()->routeIs('payments.*')
+                    || request()->routeIs('budgets.*'),
+                'children' => $financeNav,
+            ],
+            [
+                'label' => 'Nachrichten & Vorlagen',
+                'hint' => 'Formulare, Protokolle, E-Mails',
+                'icon' => 'paper-airplane',
+                'route' => route('templates.index'),
+                'active' => request()->routeIs('forms.*')
+                    || request()->routeIs('protocols.*')
+                    || request()->routeIs('templates.*')
+                    || request()->routeIs('mail.*')
+                    || request()->routeIs('letters.*'),
+                'children' => collect([
+                    collect($workNav)->firstWhere('label', 'Formulare'),
+                    collect($workNav)->firstWhere('label', 'Protokolle'),
+                    collect($workNav)->firstWhere('label', 'Vorlagen & E-Mails'),
+                ])->filter()->values()->all(),
+            ],
+            [
+                'label' => 'Aufgaben & Ablage',
+                'hint' => 'Aufgaben, Projekte, Dokumente',
+                'icon' => 'rectangle-stack',
+                'route' => route('tasks.index'),
+                'active' => request()->routeIs('projects.*')
+                    || request()->routeIs('tasks.*')
+                    || request()->routeIs('documents.*'),
+                'children' => collect([
+                    collect($workNav)->firstWhere('label', 'Aufgaben'),
+                    collect($workNav)->firstWhere('label', 'Projekte'),
+                    collect($workNav)->firstWhere('label', 'Dokumente'),
+                ])->filter()->values()->all(),
+            ],
+            [
+                'label' => 'Verein verwalten',
+                'hint' => 'Benutzer, Rollen, Import, Datenschutz',
+                'icon' => 'building-office',
+                'route' => route('tenant.show'),
+                'active' => request()->routeIs('tenant.*')
+                    || request()->routeIs('users.*')
+                    || request()->routeIs('privacy.*')
+                    || request()->routeIs('memberships.*')
+                    || request()->routeIs('custom-fields.*')
+                    || request()->routeIs('tags.*')
+                    || request()->routeIs('import.*')
+                    || request()->routeIs('roles.*')
+                    || request()->is('settings/email'),
+                'children' => $organizationNav,
+            ],
+        ];
+    }
+
+    $moduleGroups = collect($moduleGroups)
+        ->map(function ($group) {
+            $group['children'] = collect($group['children'] ?? [])->filter()->values()->all();
+            $group['route'] = $group['children'][0]['route'] ?? $group['route'];
+
+            return $group;
+        })
+        ->filter(fn ($group) => !empty($group['children']))
+        ->values()
+        ->all();
+
+    $systemNav = collect($systemNav)->values()->all();
+
     $personalNav = collect($personalNav)
         ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
         ->values()
         ->all();
+
+    $iconComponent = fn (string $icon) => 'heroicon-o-' . match ($icon) {
+        'home' => 'home',
+        'users' => 'users',
+        'calendar' => 'calendar',
+        'plus' => 'plus',
+        'swatch' => 'swatch',
+        'printer' => 'printer',
+        'link' => 'link',
+        'identification' => 'identification',
+        'rectangle-stack' => 'rectangle-stack',
+        'check-circle' => 'check-circle',
+        'archive-box' => 'archive-box',
+        'document-duplicate' => 'document-duplicate',
+        'paper-airplane' => 'paper-airplane',
+        'clipboard-document-list' => 'clipboard-document-list',
+        'banknotes' => 'banknotes',
+        'document-text' => 'document-text',
+        'chart-bar' => 'chart-bar',
+        'receipt-percent' => 'receipt-percent',
+        'gift' => 'gift',
+        'building-office' => 'building-office',
+        'building-office-2' => 'building-office-2',
+        'user-group' => 'user-group',
+        'credit-card' => 'credit-card',
+        'puzzle-piece' => 'puzzle-piece',
+        'tag' => 'tag',
+        'user' => 'user',
+        'cloud-arrow-down' => 'cloud-arrow-down',
+        'envelope' => 'envelope',
+        'lock-closed' => 'lock-closed',
+        'shield-check' => 'shield-check',
+        'megaphone' => 'megaphone',
+        'presentation-chart-line' => 'presentation-chart-line',
+        default => 'circle-stack',
+    };
 @endphp
 
 <div :class="collapsed ? 'px-3 py-4' : 'px-5 py-5'" class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur transition-all duration-200">
@@ -379,14 +532,15 @@
     </div>
 </div>
 
-<nav :class="collapsed ? 'space-y-5 px-2 py-4' : 'space-y-6 px-4 py-5'" class="text-sm text-slate-700 transition-all duration-200" aria-label="Hauptnavigation">
-    @foreach($navGroups as $groupLabel => $items)
+<nav :class="collapsed ? 'space-y-4 px-2 py-4' : 'space-y-5 px-4 py-5'" class="text-sm text-slate-700 transition-all duration-200" aria-label="Hauptnavigation">
+    @if(!empty($dashboardNav))
         <section>
             <h2 x-show="!collapsed" class="px-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                {{ $groupLabel }}
+                Start
             </h2>
             <ul class="mt-2 space-y-1.5">
-                @foreach($items as $item)
+                @foreach($dashboardNav as $item)
+                    @php($iconColor = $item['active'] ? 'text-white' : 'text-slate-400 group-hover:text-slate-700')
                     <li>
                         <a href="{{ $item['route'] }}"
                            @if($item['active']) aria-current="page" @endif
@@ -394,148 +548,103 @@
                            :class="collapsed ? 'justify-center px-2' : 'justify-between px-3'"
                            class="group flex items-center gap-3 rounded-2xl py-2.5 transition-all duration-150 {{ $item['active'] ? 'bg-slate-950 text-white shadow-sm' : 'hover:bg-slate-100 text-slate-700' }}">
                             <span :class="collapsed ? 'justify-center' : ''" class="flex min-w-0 items-center gap-3">
-                                @php($iconColor = $item['active'] ? 'text-white' : 'text-slate-400 group-hover:text-slate-700')
-                                @switch($item['icon'])
-                                    @case('home')
-                                        <x-heroicon-o-home class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('users')
-                                        <x-heroicon-o-users class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('calendar')
-                                        <x-heroicon-o-calendar class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('plus')
-                                        <x-heroicon-o-plus class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('swatch')
-                                        <x-heroicon-o-swatch class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('printer')
-                                        <x-heroicon-o-printer class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('link')
-                                        <x-heroicon-o-link class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('identification')
-                                        <x-heroicon-o-identification class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('rectangle-stack')
-                                        <x-heroicon-o-rectangle-stack class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('check-circle')
-                                        <x-heroicon-o-check-circle class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('archive-box')
-                                        <x-heroicon-o-archive-box class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('document-duplicate')
-                                        <x-heroicon-o-document-duplicate class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('paper-airplane')
-                                        <x-heroicon-o-paper-airplane class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('clipboard-document-list')
-                                        <x-heroicon-o-clipboard-document-list class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('banknotes')
-                                        <x-heroicon-o-banknotes class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('document-text')
-                                        <x-heroicon-o-document-text class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('chart-bar')
-                                        <x-heroicon-o-chart-bar class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('receipt-percent')
-                                        <x-heroicon-o-receipt-percent class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('gift')
-                                        <x-heroicon-o-gift class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('building-office')
-                                        <x-heroicon-o-building-office class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('user-group')
-                                        <x-heroicon-o-user-group class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('credit-card')
-                                        <x-heroicon-o-credit-card class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('puzzle-piece')
-                                        <x-heroicon-o-puzzle-piece class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('tag')
-                                        <x-heroicon-o-tag class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('user')
-                                        <x-heroicon-o-user class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('cloud-arrow-down')
-                                        <x-heroicon-o-cloud-arrow-down class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('envelope')
-                                        <x-heroicon-o-envelope class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('lock-closed')
-                                        <x-heroicon-o-lock-closed class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                    @case('shield-check')
-                                        <x-heroicon-o-shield-check class="h-5 w-5 {{ $iconColor }}" />
-                                        @break
-                                @endswitch
+                                <x-dynamic-component :component="$iconComponent($item['icon'])" class="h-5 w-5 {{ $iconColor }}" />
                                 <span x-show="!collapsed" class="truncate font-medium">{{ $item['label'] }}</span>
                             </span>
                         </a>
-
-                        @if(($item['label'] ?? null) === 'Finanzen' && $item['active'])
-                            <div x-show="!collapsed" class="mt-2 ml-4 space-y-1 border-l border-slate-200 pl-4">
-                                <div class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                                    Was möchtest du erledigen?
-                                </div>
-                                @foreach($financeNav as $financeItem)
-                                    <a href="{{ $financeItem['route'] }}"
-                                       @if($financeItem['active']) aria-current="page" @endif
-                                       class="flex items-start justify-between rounded-xl px-3 py-2.5 text-sm transition {{ $financeItem['active'] ? 'bg-slate-100 text-slate-950' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
-                                        <span class="min-w-0">
-                                            <span class="block truncate font-medium {{ $financeItem['active'] ? 'font-semibold text-slate-950' : '' }}">{{ $financeItem['label'] }}</span>
-                                            @if(!empty($financeItem['hint']))
-                                                <span class="mt-0.5 block text-xs leading-5 {{ $financeItem['active'] ? 'text-slate-600' : 'text-slate-400' }}">
-                                                    {{ $financeItem['hint'] }}
-                                                </span>
-                                            @endif
-                                        </span>
-                                    </a>
-                                @endforeach
-                            </div>
-                        @endif
-
-                        @if(($item['label'] ?? null) === 'Kalender' && $item['active'])
-                            <div x-show="!collapsed" class="mt-2 ml-4 space-y-1 border-l border-slate-200 pl-4">
-                                <div class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                                    Was möchtest du tun?
-                                </div>
-                                @foreach($calendarNav as $calendarItem)
-                                    <a href="{{ $calendarItem['route'] }}"
-                                       @if($calendarItem['active']) aria-current="page" @endif
-                                       class="flex items-start justify-between rounded-xl px-3 py-2.5 text-sm transition {{ $calendarItem['active'] ? 'bg-slate-100 text-slate-950' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900' }}">
-                                        <span class="min-w-0">
-                                            <span class="block truncate font-medium {{ $calendarItem['active'] ? 'font-semibold text-slate-950' : '' }}">{{ $calendarItem['label'] }}</span>
-                                            @if(!empty($calendarItem['hint']))
-                                                <span class="mt-0.5 block text-xs leading-5 {{ $calendarItem['active'] ? 'text-slate-600' : 'text-slate-400' }}">
-                                                    {{ $calendarItem['hint'] }}
-                                                </span>
-                                            @endif
-                                        </span>
-                                    </a>
-                                @endforeach
-                            </div>
-                        @endif
                     </li>
                 @endforeach
             </ul>
         </section>
-    @endforeach
+    @endif
+
+    @if(!empty($moduleGroups))
+        <section x-show="!collapsed" class="space-y-2">
+            <h2 class="px-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Bereiche
+            </h2>
+
+            @foreach($moduleGroups as $group)
+                <div x-data="{ open: {{ $group['active'] ? 'true' : 'false' }} }" class="rounded-2xl border {{ $group['active'] ? 'border-slate-300 bg-slate-50' : 'border-transparent' }}">
+                    <button type="button"
+                            @click="open = !open"
+                            class="group flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-left transition {{ $group['active'] ? 'text-slate-950' : 'text-slate-700 hover:bg-slate-100' }}">
+                        <span class="flex min-w-0 items-center gap-3">
+                            <x-dynamic-component :component="$iconComponent($group['icon'])" class="h-5 w-5 {{ $group['active'] ? 'text-slate-900' : 'text-slate-400 group-hover:text-slate-700' }}" />
+                            <span class="min-w-0">
+                                <span class="block truncate font-semibold">{{ $group['label'] }}</span>
+                                @if(!empty($group['hint']))
+                                    <span class="mt-0.5 block truncate text-xs font-normal {{ $group['active'] ? 'text-slate-500' : 'text-slate-400' }}">
+                                        {{ $group['hint'] }}
+                                    </span>
+                                @endif
+                            </span>
+                        </span>
+                        <x-heroicon-o-chevron-down class="h-4 w-4 shrink-0 text-slate-400 transition" x-bind:class="open ? 'rotate-180' : ''" />
+                    </button>
+
+                    <div x-show="open" class="pb-2">
+                        <div class="ml-5 space-y-1 border-l border-slate-200 pl-3">
+                            @foreach($group['children'] as $child)
+                                <a href="{{ $child['route'] }}"
+                                   @if($child['active']) aria-current="page" @endif
+                                   class="flex items-start gap-2 rounded-xl px-3 py-2 text-sm transition {{ $child['active'] ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:bg-white hover:text-slate-900' }}">
+                                    <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full {{ $child['active'] ? 'bg-slate-950' : 'bg-slate-300' }}"></span>
+                                    <span class="min-w-0">
+                                        <span class="block truncate font-medium">{{ $child['label'] }}</span>
+                                        @if(!empty($child['hint']))
+                                            <span class="mt-0.5 block text-xs leading-5 {{ $child['active'] ? 'text-slate-600' : 'text-slate-400' }}">
+                                                {{ $child['hint'] }}
+                                            </span>
+                                        @endif
+                                    </span>
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        </section>
+
+        <section x-show="collapsed">
+            <ul class="space-y-1.5">
+                @foreach($moduleGroups as $group)
+                    <li>
+                        <a href="{{ $group['route'] }}"
+                           title="{{ $group['label'] }}"
+                           class="group flex justify-center rounded-2xl px-2 py-2.5 transition {{ $group['active'] ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700' }}">
+                            <x-dynamic-component :component="$iconComponent($group['icon'])" class="h-5 w-5" />
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        </section>
+    @endif
+
+    @if(!empty($systemNav))
+        <section>
+            <h2 x-show="!collapsed" class="px-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                System
+            </h2>
+            <ul class="mt-2 space-y-1.5">
+                @foreach($systemNav as $item)
+                    @php($iconColor = $item['active'] ? 'text-white' : 'text-slate-400 group-hover:text-slate-700')
+                    <li>
+                        <a href="{{ $item['route'] }}"
+                           @if($item['active']) aria-current="page" @endif
+                           title="{{ $item['label'] }}"
+                           :class="collapsed ? 'justify-center px-2' : 'justify-between px-3'"
+                           class="group flex items-center gap-3 rounded-2xl py-2.5 transition-all duration-150 {{ $item['active'] ? 'bg-slate-950 text-white shadow-sm' : 'hover:bg-slate-100 text-slate-700' }}">
+                            <span :class="collapsed ? 'justify-center' : ''" class="flex min-w-0 items-center gap-3">
+                                <x-dynamic-component :component="$iconComponent($item['icon'])" class="h-5 w-5 {{ $iconColor }}" />
+                                <span x-show="!collapsed" class="truncate font-medium">{{ $item['label'] }}</span>
+                            </span>
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+        </section>
+    @endif
 
     <div class="border-t border-slate-200 pt-4">
         @if(!empty($personalNav))
