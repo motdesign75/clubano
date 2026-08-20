@@ -236,6 +236,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/members/communication/export', [$cls, 'communicationExport'])->middleware('tenant.role:Mitarbeiter')->name('members.communication.export');
         Route::get('/members/{member}/photo', [$cls, 'photo'])->middleware('tenant.role:Lesen')->name('members.photo');
         Route::get('/members/{member}', [$cls, 'show'])->name('members.show');
+        Route::patch('/members/{member}/family-billing', [$cls, 'updateFamilyBilling'])->middleware('tenant.role:Mitarbeiter')->name('members.family-billing.update');
         Route::post('/members/{member}/credits', [$cls, 'storeCredit'])->middleware('tenant.role:Admin')->name('members.credits.store');
         Route::post('/members/{member}/communication-log', [$cls, 'storeCommunicationLog'])->middleware('tenant.role:Mitarbeiter')->name('members.communication-log.store');
         Route::post('/members/{member}/restore', [$cls, 'restore'])->middleware('tenant.role:Mitarbeiter')->name('members.restore');

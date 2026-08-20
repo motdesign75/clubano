@@ -164,6 +164,19 @@
                         <x-ui.input type="date" name="termination_date" label="Kündigungsdatum" :value="old('termination_date', optional($member->termination_date)->format('Y-m-d'))" />
                         <x-ui.input type="date" name="exit_date" label="Austritt" :value="old('exit_date', optional($member->exit_date)->format('Y-m-d'))" />
                         <x-ui.input type="date" name="next_membership_invoice_on" label="Nächste Beitragsrechnung" :value="old('next_membership_invoice_on', optional($member->next_membership_invoice_on)->format('Y-m-d'))" />
+                        <div class="md:col-span-2">
+                            <x-ui.label for="family_payer_id">Abrechnungszahler <span class="text-slate-400">(optional)</span></x-ui.label>
+                            <select name="family_payer_id" id="family_payer_id" class="w-full rounded-2xl border-gray-300">
+                                <option value="">Dieses Mitglied selbst abrechnen</option>
+                                @foreach(($familyPayerCandidates ?? collect()) as $payer)
+                                    <option value="{{ $payer->id }}" @selected((string) old('family_payer_id', $member->family_payer_id) === (string) $payer->id)>
+                                        {{ $payer->full_name ?: ($payer->organization ?: 'Mitglied #' . $payer->id) }}{{ $payer->member_id ? ' · ' . $payer->member_id : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="mt-2 text-sm text-slate-500">Wenn hier ein Zahler gewählt ist, wird dieses Mitglied bei Beitragsläufen nicht einzeln berechnet.</p>
+                            @error('family_payer_id')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
+                        </div>
                         <x-ui.input type="number" step="0.25" min="0" name="required_service_hours" label="Pflichtstunden Soll" :value="old('required_service_hours', number_format((float) $member->required_service_hours, 2, '.', ''))" />
                 </div>
             </div>

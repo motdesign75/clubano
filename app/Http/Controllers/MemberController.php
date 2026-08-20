@@ -20,6 +20,7 @@ use App\Services\MemberService;
 use App\Services\MembershipService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MemberController extends Controller
@@ -43,7 +44,7 @@ class MemberController extends Controller
         $upcomingExitWindow = now()->copy()->addDays($exitWindowDays)->toDateString();
 
         $query = Member::query()
-            ->with(['tags', 'membership'])
+            ->with(['tags', 'membership', 'familyPayer'])
             ->where('tenant_id', $tenantId);
 
         if (request()->filled('search')) {
@@ -198,10 +199,17 @@ class MemberController extends Controller
 
     public function create(MembershipService $membershipService)
     {
+        $tenantId = app('currentTenant')->id;
         $memberships = $membershipService->getForTenant();
-        $allTags = Tag::where('tenant_id', app('currentTenant')->id)->orderBy('name')->get();
+        $allTags = Tag::where('tenant_id', $tenantId)->orderBy('name')->get();
+        $familyPayerCandidates = Member::query()
+            ->where('tenant_id', $tenantId)
+            ->whereNull('archived_at')
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
 
-        return view('members.create', compact('memberships', 'allTags'));
+        return view('members.create', compact('memberships', 'allTags', 'familyPayerCandidates'));
     }
 
     public function lookupBic(Request $request, GermanIbanBicResolver $resolver)
@@ -236,7 +244,14 @@ class MemberController extends Controller
     public function show(Member $member)
     {
         $this->authorizeMember($member);
-        $member->load(['customValues', 'membership', 'tags']);
+        $member->load(['customValues', 'membership', 'tags', 'familyPayer', 'familyMembers']);
+        $familyPayerCandidates = Member::query()
+            ->where('tenant_id', $member->tenant_id)
+            ->where('id', '!=', $member->id)
+            ->whereNull('archived_at')
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
 
         $customFields = CustomMemberField::where('tenant_id', $member->tenant_id)
             ->where('visible', true)
@@ -354,8 +369,52 @@ class MemberController extends Controller
             'communicationLogs',
             'credits',
             'serviceAttendances',
-            'serviceHoursStats'
+            'serviceHoursStats',
+            'familyPayerCandidates'
         ));
+    }
+
+    public function updateFamilyBilling(Request $request, Member $member)
+    {
+        $this->authorizeMember($member);
+
+        $validated = $request->validate([
+            'family_payer_id' => [
+                'nullable',
+                Rule::exists('members', 'id')->where(fn ($query) => $query->where('tenant_id', $member->tenant_id)),
+                Rule::notIn([(string) $member->id]),
+            ],
+        ], [
+            'family_payer_id.exists' => 'Der gewählte Zahler gehört nicht zu diesem Verein.',
+            'family_payer_id.not_in' => 'Ein Mitglied kann nicht sein eigener Zahler sein.',
+        ]);
+
+        $payerId = ($validated['family_payer_id'] ?? null) ?: null;
+
+        if ($payerId) {
+            $payer = Member::query()
+                ->where('tenant_id', $member->tenant_id)
+                ->where('id', $payerId)
+                ->firstOrFail();
+
+            if ($payer->family_payer_id && (int) $payer->family_payer_id === (int) $member->id) {
+                return back()->withErrors([
+                    'family_payer_id' => 'Diese Zuordnung würde eine gegenseitige Familienabrechnung erzeugen.',
+                ]);
+            }
+        }
+
+        $member->forceFill([
+            'family_payer_id' => $payerId,
+        ])->save();
+
+        $message = $payerId
+            ? 'Familienabrechnung gespeichert. Dieses Mitglied wird jetzt über den gewählten Zahler abgerechnet.'
+            : 'Familienabrechnung aufgehoben. Dieses Mitglied wird wieder selbst abgerechnet.';
+
+        return redirect()
+            ->route('members.show', $member)
+            ->with('success', $message);
     }
 
     public function storeCredit(Request $request, Member $member)
@@ -399,7 +458,7 @@ class MemberController extends Controller
     {
         $this->authorizeMember($member);
         $memberships = $membershipService->getForTenant();
-        $member->load('customValues');
+        $member->load(['customValues', 'familyPayer', 'familyMembers']);
 
         $customFields = CustomMemberField::where('tenant_id', $member->tenant_id)
             ->where('visible', true)
@@ -407,8 +466,15 @@ class MemberController extends Controller
             ->get();
 
         $allTags = Tag::where('tenant_id', $member->tenant_id)->orderBy('name')->get();
+        $familyPayerCandidates = Member::query()
+            ->where('tenant_id', $member->tenant_id)
+            ->where('id', '!=', $member->id)
+            ->whereNull('archived_at')
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
 
-        return view('members.edit', compact('member', 'memberships', 'customFields', 'allTags'));
+        return view('members.edit', compact('member', 'memberships', 'customFields', 'allTags', 'familyPayerCandidates'));
     }
 
     public function update(UpdateMemberRequest $request, Member $member)

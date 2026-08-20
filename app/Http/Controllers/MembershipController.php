@@ -24,6 +24,7 @@ class MembershipController extends Controller
             ->where('tenant_id', $tenantId)
             ->whereNull('archived_at')
             ->whereNull('membership_id')
+            ->whereNull('family_payer_id')
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
@@ -31,7 +32,7 @@ class MembershipController extends Controller
         $billingMembers = Member::query()
             ->where('tenant_id', $tenantId)
             ->whereNull('archived_at')
-            ->with(['membership', 'latestMembershipInvoice'])
+            ->with(['membership', 'latestMembershipInvoice', 'familyPayer'])
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get()
@@ -45,7 +46,7 @@ class MembershipController extends Controller
                     'membership' => $member->membership,
                     'last_invoice' => $lastInvoice,
                     'next_date' => $nextDate,
-                    'is_due' => $member->membership_id && $nextDate && $nextDate->lte(now()->startOfDay()),
+                    'is_due' => !$member->family_payer_id && $member->membership_id && $nextDate && $nextDate->lte(now()->startOfDay()),
                     'missing_membership' => blank($member->membership_id),
                 ];
             });

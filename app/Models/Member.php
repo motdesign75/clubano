@@ -34,6 +34,7 @@ class Member extends Model
         'membership_amount',
         'membership_interval',
         'next_membership_invoice_on',
+        'family_payer_id',
         'required_service_hours',
 
         // Block: Zahlung
@@ -158,6 +159,19 @@ class Member extends Model
             ->where('status', '!=', 'storniert')
             ->whereNotNull('period_from')
             ->latestOfMany('invoice_date');
+    }
+
+    public function familyPayer()
+    {
+        return $this->belongsTo(Member::class, 'family_payer_id');
+    }
+
+    public function familyMembers()
+    {
+        return $this->hasMany(Member::class, 'family_payer_id')
+            ->whereNull('archived_at')
+            ->orderBy('last_name')
+            ->orderBy('first_name');
     }
 
     public function publicFormSubmissions()

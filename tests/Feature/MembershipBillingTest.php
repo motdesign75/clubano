@@ -410,3 +410,153 @@ test('membership drafts can be deleted in bulk without touching open invoices', 
     expect(Invoice::query()->whereKey($openInvoice->id)->exists())->toBeTrue();
     expect(Invoice::query()->whereKey($draftIds[1])->exists())->toBeFalse();
 });
+
+test('family members are billed through their selected payer', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Familienverein',
+        'slug' => 'familienverein',
+        'email' => 'familie@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $membership = Membership::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Familie',
+        'amount' => 120,
+        'interval' => 'jährlich',
+    ]);
+
+    $payer = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Max',
+        'last_name' => 'Familie',
+        'entry_date' => now()->subDay()->toDateString(),
+        'membership_id' => $membership->id,
+        'membership_amount' => 120,
+        'membership_interval' => 'jährlich',
+    ]);
+
+    $child = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Mia',
+        'last_name' => 'Familie',
+        'entry_date' => now()->subDay()->toDateString(),
+        'family_payer_id' => $payer->id,
+    ]);
+
+    $this->actingAs($admin)->post(route('members.membership-invoice.store', $child))
+        ->assertRedirect(route('members.show', $child));
+
+    expect(Invoice::query()->where('tenant_id', $tenant->id)->where('member_id', $child->id)->exists())->toBeFalse();
+
+    $this->actingAs($admin)->post(route('members.membership-invoice.store', $payer));
+
+    $invoice = Invoice::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('member_id', $payer->id)
+        ->with('items')
+        ->firstOrFail();
+
+    expect($invoice->items)->toHaveCount(1);
+    expect((float) $invoice->items->first()->unit_price)->toBe(120.0);
+    expect($invoice->items->first()->details)->toContain('Mia Familie');
+});
+
+test('membership batch generation skips family members with payer', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Familienlauf',
+        'slug' => 'familienlauf',
+        'email' => 'familienlauf@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $membership = Membership::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Familie',
+        'amount' => 120,
+        'interval' => 'jährlich',
+    ]);
+
+    $payer = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Zahler',
+        'last_name' => 'Person',
+        'entry_date' => now()->subDay()->toDateString(),
+        'membership_id' => $membership->id,
+        'membership_amount' => 120,
+        'membership_interval' => 'jährlich',
+    ]);
+
+    $child = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Kind',
+        'last_name' => 'Person',
+        'entry_date' => now()->subDay()->toDateString(),
+        'membership_id' => $membership->id,
+        'membership_amount' => 120,
+        'membership_interval' => 'jährlich',
+        'family_payer_id' => $payer->id,
+    ]);
+
+    $this->actingAs($admin)->post(route('invoices.generateMemberships'))
+        ->assertRedirect(route('invoices.index'));
+
+    expect(Invoice::query()->where('tenant_id', $tenant->id)->where('member_id', $payer->id)->count())->toBe(1);
+    expect(Invoice::query()->where('tenant_id', $tenant->id)->where('member_id', $child->id)->count())->toBe(0);
+});
+
+test('family billing can be assigned directly from member profile', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Profilfamilie',
+        'slug' => 'profilfamilie',
+        'email' => 'profilfamilie@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $payer = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Zahlende',
+        'last_name' => 'Person',
+        'entry_date' => now()->subDay()->toDateString(),
+    ]);
+
+    $familyMember = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Familien',
+        'last_name' => 'Mitglied',
+        'entry_date' => now()->subDay()->toDateString(),
+    ]);
+
+    $this->actingAs($admin)->get(route('members.show', $familyMember))
+        ->assertOk();
+
+    $this->actingAs($admin)->patch(route('members.family-billing.update', $familyMember), [
+        'family_payer_id' => $payer->id,
+    ])->assertRedirect(route('members.show', $familyMember));
+
+    expect($familyMember->refresh()->family_payer_id)->toBe($payer->id);
+
+    $this->actingAs($admin)->patch(route('members.family-billing.update', $familyMember), [
+        'family_payer_id' => '',
+    ])->assertRedirect(route('members.show', $familyMember));
+
+    expect($familyMember->refresh()->family_payer_id)->toBeNull();
+});

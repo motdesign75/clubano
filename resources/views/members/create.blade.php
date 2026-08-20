@@ -49,11 +49,23 @@
         {{-- Block: Mitgliedschaft --}}
         <x-ui.formblock icon="📝" title="Mitgliedschaft">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <x-ui.select name="membership_id" label="Mitgliedschaft" :options="$memberships->pluck('name', 'id')" :selected="old('membership_id')" required />
+                <x-ui.select name="membership_id" label="Mitgliedschaft" :options="$memberships->pluck('name', 'id')" :selected="old('membership_id')" />
                 <x-ui.input name="member_id" label="Mitgliedsnummer" :value="old('member_id')" />
                 <x-ui.input type="date" name="entry_date" label="Eintritt" :value="old('entry_date', now()->toDateString())" required />
                 <x-ui.input type="date" name="exit_date" label="Austritt" :value="old('exit_date')" />
                 <x-ui.input type="date" name="termination_date" label="Kündigungsdatum" :value="old('termination_date')" />
+                <div class="md:col-span-2">
+                    <x-ui.label for="family_payer_id">Abrechnungszahler <span class="text-slate-400">(optional)</span></x-ui.label>
+                    <select name="family_payer_id" id="family_payer_id" class="w-full rounded-2xl border-gray-300">
+                        <option value="">Dieses Mitglied selbst abrechnen</option>
+                        @foreach(($familyPayerCandidates ?? collect()) as $payer)
+                            <option value="{{ $payer->id }}" @selected((string) old('family_payer_id') === (string) $payer->id)>
+                                {{ $payer->full_name ?: ($payer->organization ?: 'Mitglied #' . $payer->id) }}{{ $payer->member_id ? ' · ' . $payer->member_id : '' }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <p class="mt-2 text-sm text-slate-500">Für Familienmitgliedschaften: Dieses Mitglied wird dann nicht einzeln abgerechnet.</p>
+                </div>
             </div>
         </x-ui.formblock>
 

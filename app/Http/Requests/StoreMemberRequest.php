@@ -28,6 +28,7 @@ class StoreMemberRequest extends FormRequest
             'entry_date'        => 'nullable|date',
             'exit_date'         => 'nullable|date',
             'termination_date'  => 'nullable|date',
+            'family_payer_id'   => ['nullable', Rule::exists('members', 'id')->where('tenant_id', $tenantId)],
             'payment_method'    => 'nullable|in:ueberweisung,bar,sepa_lastschrift',
             'iban'              => 'required_if:payment_method,sepa_lastschrift|nullable|string|max:34',
             'bic'               => 'nullable|string|max:11',
@@ -59,7 +60,7 @@ class StoreMemberRequest extends FormRequest
             'city'              => 'nullable|string|max:255',
             'country'           => 'nullable|string|max:255',
             'care_of'           => 'nullable|string|max:255',
-            'membership_id'     => ['required', Rule::exists('memberships', 'id')->where('tenant_id', $tenantId)],
+            'membership_id'     => ['required_without:family_payer_id', 'nullable', Rule::exists('memberships', 'id')->where('tenant_id', $tenantId)],
             'photo'             => 'nullable|image|max:2048',
         ];
     }
@@ -71,7 +72,7 @@ class StoreMemberRequest extends FormRequest
             'last_name.required'      => 'Der Nachname ist erforderlich.',
             'gender.required'         => 'Bitte wählen Sie ein Geschlecht.',
             'salutation.required'     => 'Bitte wählen Sie eine Anrede.',
-            'membership_id.required'  => 'Bitte wählen Sie eine Mitgliedschaft.',
+            'membership_id.required_without'  => 'Bitte wählen Sie eine Mitgliedschaft oder einen Abrechnungszahler.',
             'membership_id.exists'    => 'Die gewählte Mitgliedschaft ist ungültig.',
             'iban.required_if' => 'Bei SEPA-Lastschrift ist eine IBAN erforderlich.',
             'sepa_mandate_reference.required_if' => 'Bei SEPA-Lastschrift ist eine Mandatsreferenz erforderlich.',

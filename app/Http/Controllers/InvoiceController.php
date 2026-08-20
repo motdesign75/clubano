@@ -156,7 +156,14 @@ class InvoiceController extends Controller
     {
         abort_if($member->tenant_id !== auth()->user()->tenant_id, 403);
 
-        $member->loadMissing('membership');
+        $member->loadMissing(['membership', 'familyPayer', 'familyMembers']);
+
+        if ($member->family_payer_id) {
+            return redirect()
+                ->route('members.show', $member)
+                ->with('error', 'Dieses Mitglied wird über ein anderes Mitglied abgerechnet. Bitte erstelle den Beitragsentwurf beim hinterlegten Zahler.');
+        }
+
         $period = collect($this->getBillablePeriodsForMember($member))->last();
 
         if (!$period) {
@@ -292,7 +299,8 @@ class InvoiceController extends Controller
         $members = Member::where('tenant_id', $tenantId)
             ->when($validated['membership_id'] ?? null, fn ($query, $membershipId) => $query->where('membership_id', $membershipId))
             ->whereNull('archived_at')
-            ->with('membership')
+            ->whereNull('family_payer_id')
+            ->with(['membership', 'familyMembers'])
             ->get();
 
         foreach ($members as $member) {
@@ -362,6 +370,10 @@ class InvoiceController extends Controller
         $membershipName = $member->membership?->name ?: 'Mitgliedschaft';
 
         return DB::transaction(function () use ($member, $period, $status, $now, $tenant, $membershipName, $interval, $amount, $admissionFee) {
+            $familyMembers = $member->familyMembers()
+                ->whereNull('archived_at')
+                ->get();
+
             $invoice = $this->createInvoiceWithUniqueNumber([
                 'tenant_id' => $member->tenant_id,
                 'document_type' => 'invoice',
@@ -380,6 +392,11 @@ class InvoiceController extends Controller
             InvoiceItem::create([
                 'invoice_id' => $invoice->id,
                 'description' => 'Mitgliedsbeitrag ' . $membershipName . ' ' . $period['label'],
+                'details' => $familyMembers->isNotEmpty()
+                    ? 'Familienabrechnung für: ' . $familyMembers
+                        ->map(fn (Member $familyMember) => $familyMember->full_name ?: ($familyMember->organization ?: 'Mitglied #' . $familyMember->id))
+                        ->implode(', ')
+                    : null,
                 'quantity' => 1,
                 'unit' => $this->getIntervalLabel($interval),
                 'unit_price' => $amount,
@@ -514,6 +531,10 @@ class InvoiceController extends Controller
 
     private function getBillablePeriodsForMember(Member $member): array
     {
+        if ($member->family_payer_id) {
+            return [];
+        }
+
         if (!$member->membership) {
             return [];
         }

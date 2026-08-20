@@ -138,6 +138,28 @@
         </div>
     </section>
 
+    @if(session('success'))
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-800">
+            {{ session('success') }}
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-800">
+            {{ session('error') }}
+        </div>
+    @endif
+
+    @if($errors->any())
+        <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-800">
+            <ul class="list-disc space-y-1 pl-5">
+                @foreach($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     @if($member->is_archived)
         <section class="rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -162,11 +184,81 @@
         </section>
     @endif
 
+    <section id="familie" class="rounded-3xl border border-blue-200 bg-blue-50 p-5 shadow-sm scroll-mt-6">
+        <div class="grid gap-5 xl:grid-cols-[0.8fr_1.2fr] xl:items-start">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700">Familie & Abrechnung</div>
+                <h2 class="mt-2 text-2xl font-semibold tracking-tight text-blue-950">Wer zahlt den Beitrag?</h2>
+                <p class="mt-2 text-sm leading-6 text-blue-900">
+                    Für Familienmitgliedschaften wählst du hier einfach den Zahler. Familienmitglieder werden dann nicht doppelt abgerechnet.
+                </p>
+            </div>
+
+            <div class="rounded-2xl border border-blue-200 bg-white p-4 shadow-sm">
+                @if($canManageMembers)
+                    <form method="POST" action="{{ route('members.family-billing.update', $member) }}" class="space-y-4">
+                        @csrf
+                        @method('PATCH')
+
+                        <div>
+                            <label for="family_payer_id_quick" class="mb-1 block text-sm font-semibold text-slate-900">Abrechnungszahler</label>
+                            <select id="family_payer_id_quick" name="family_payer_id" class="w-full rounded-2xl border-blue-200 bg-white text-sm shadow-sm focus:border-blue-500 focus:ring-blue-200">
+                                <option value="">Dieses Mitglied zahlt selbst</option>
+                                @foreach(($familyPayerCandidates ?? collect()) as $payer)
+                                    <option value="{{ $payer->id }}" @selected((string) old('family_payer_id', $member->family_payer_id) === (string) $payer->id)>
+                                        {{ $payer->full_name ?: ($payer->organization ?: 'Mitglied #' . $payer->id) }}{{ $payer->member_id ? ' · ' . $payer->member_id : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="mt-2 text-xs leading-5 text-slate-500">
+                                Beispiel: Beim Kind wird Mutter oder Vater als Zahler gewählt.
+                            </p>
+                        </div>
+
+                        <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-blue-700 px-5 text-sm font-semibold text-white transition hover:bg-blue-800 sm:w-auto">
+                            Familienabrechnung speichern
+                        </button>
+                    </form>
+                @else
+                    <div class="text-sm text-slate-600">Familienabrechnung kann nur von berechtigten Nutzern geändert werden.</div>
+                @endif
+
+                <div class="mt-5 grid gap-3 md:grid-cols-2">
+                    <div class="rounded-2xl bg-blue-50 px-4 py-3">
+                        <div class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Dieses Mitglied</div>
+                        <div class="mt-2 text-sm font-semibold text-blue-950">
+                            @if($member->familyPayer)
+                                Wird über {{ $member->familyPayer->full_name ?: ($member->familyPayer->organization ?: 'Mitglied #' . $member->familyPayer->id) }} abgerechnet
+                            @else
+                                Zahlt selbst
+                            @endif
+                        </div>
+                    </div>
+                    <div class="rounded-2xl bg-blue-50 px-4 py-3">
+                        <div class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Zahlt für</div>
+                        @if($member->familyMembers->isNotEmpty())
+                            <div class="mt-2 flex flex-wrap gap-2">
+                                @foreach($member->familyMembers as $familyMember)
+                                    <a href="{{ route('members.show', $familyMember) }}" class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-900 ring-1 ring-blue-200">
+                                        {{ $familyMember->full_name ?: ($familyMember->organization ?: 'Mitglied #' . $familyMember->id) }}
+                                    </a>
+                                @endforeach
+                            </div>
+                        @else
+                            <div class="mt-2 text-sm font-semibold text-blue-950">Noch niemanden</div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <nav class="rounded-2xl border border-slate-200 bg-white px-5 py-4">
         <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Orientierung</div>
         <div class="mt-3 flex flex-wrap gap-2">
             <a href="#stammdaten" class="rounded-full bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white">Stammdaten</a>
             <a href="#mitgliedschaft" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Mitgliedschaft</a>
+            <a href="#familie" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Familie</a>
             <a href="#pflichtstunden" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Pflichtstunden</a>
             <a href="#datenschutz" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Datenschutz</a>
             <a href="#finanzen" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Finanzen</a>
@@ -504,7 +596,7 @@
                         </div>
                     @endif
                 </div>
-                @if($canManageFinance && $member->membership && ($member->membership_amount || $member->membership_interval) && !$member->is_archived)
+                @if($canManageFinance && !$member->family_payer_id && $member->membership && ($member->membership_amount || $member->membership_interval) && !$member->is_archived)
                     <form action="{{ route('members.membership-invoice.store', $member) }}" method="POST">
                         @csrf
                         <button type="submit" class="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
@@ -517,6 +609,31 @@
             @if(!$canManageFinance)
                 <p class="text-sm text-slate-500">Rechnungen und Zahlungsdaten sind nur für Admins sichtbar.</p>
             @else
+                @if($member->familyPayer || $member->familyMembers->isNotEmpty())
+                    <div class="mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                        <div class="text-sm font-semibold text-blue-950">Familienabrechnung</div>
+                        @if($member->familyPayer)
+                            <p class="mt-2 text-sm text-blue-900">
+                                Dieses Mitglied wird über
+                                <a href="{{ route('members.show', $member->familyPayer) }}" class="font-semibold underline">
+                                    {{ $member->familyPayer->full_name ?: ($member->familyPayer->organization ?: 'Mitglied #' . $member->familyPayer->id) }}
+                                </a>
+                                abgerechnet.
+                            </p>
+                        @endif
+                        @if($member->familyMembers->isNotEmpty())
+                            <p class="mt-2 text-sm text-blue-900">Dieses Mitglied ist Zahler für:</p>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                @foreach($member->familyMembers as $familyMember)
+                                    <a href="{{ route('members.show', $familyMember) }}" class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-900 ring-1 ring-blue-200">
+                                        {{ $familyMember->full_name ?: ($familyMember->organization ?: 'Mitglied #' . $familyMember->id) }}
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                @endif
+
                 <div class="mb-5 rounded-2xl border border-slate-200 bg-white p-4">
                     <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div class="max-w-xl">

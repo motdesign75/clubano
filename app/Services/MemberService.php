@@ -10,6 +10,7 @@ use App\Http\Requests\UpdateMemberRequest;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class MemberService
 {
@@ -21,6 +22,8 @@ class MemberService
     public function create(StoreMemberRequest $request): Member
     {
         $data = $request->validated();
+        $data['family_payer_id'] = ($data['family_payer_id'] ?? null) ?: null;
+        $this->guardFamilyPayer($data, null);
 
         $data['tenant_id'] = auth()->user()->tenant_id;
         $data['consent_email'] = $request->boolean('consent_email');
@@ -49,6 +52,8 @@ class MemberService
         $originalExitDate = optional($member->exit_date)?->toDateString();
 
         $data = $request->validated();
+        $data['family_payer_id'] = ($data['family_payer_id'] ?? null) ?: null;
+        $this->guardFamilyPayer($data, $member);
         $data['consent_email'] = $request->boolean('consent_email');
         $data['consent_phone'] = $request->boolean('consent_phone');
         $data['consent_post'] = $request->boolean('consent_post');
@@ -105,6 +110,34 @@ class MemberService
         $data['membership_interval'] = $membership->interval;
 
         return $data;
+    }
+
+    private function guardFamilyPayer(array $data, ?Member $member): void
+    {
+        $payerId = $data['family_payer_id'] ?? null;
+
+        if (!$payerId) {
+            return;
+        }
+
+        if ($member && (int) $payerId === (int) $member->id) {
+            throw ValidationException::withMessages([
+                'family_payer_id' => 'Ein Mitglied kann nicht sein eigener Zahler sein.',
+            ]);
+        }
+
+        if ($member) {
+            $payer = Member::query()
+                ->where('tenant_id', $member->tenant_id)
+                ->where('id', $payerId)
+                ->first();
+
+            if ($payer?->family_payer_id && (int) $payer->family_payer_id === (int) $member->id) {
+                throw ValidationException::withMessages([
+                    'family_payer_id' => 'Diese Zuordnung würde eine gegenseitige Familienabrechnung erzeugen.',
+                ]);
+            }
+        }
     }
 
     private function normalizePaymentData(array $data): array
