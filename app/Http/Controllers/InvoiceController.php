@@ -405,6 +405,10 @@ class InvoiceController extends Controller
                 ])->save();
             }
 
+            $member->forceFill([
+                'next_membership_invoice_on' => $period['to']->copy()->addDay()->toDateString(),
+            ])->save();
+
             return $invoice;
         });
     }
@@ -518,6 +522,10 @@ class InvoiceController extends Controller
         $interval = $this->normalizeMembershipInterval($member->membership_interval ?? $member->membership->interval);
 
         if (empty($amount) || !$interval) {
+            return [];
+        }
+
+        if ($member->next_membership_invoice_on && $member->next_membership_invoice_on->isFuture()) {
             return [];
         }
 
@@ -757,6 +765,70 @@ class InvoiceController extends Controller
             ->with('success', $message);
     }
 
+    public function destroyDraft(Invoice $invoice)
+    {
+        $this->authorizeAccess($invoice);
+
+        if (! $this->invoiceCanBeDeletedAsDraft($invoice)) {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with('error', 'Nur echte Entwürfe ohne Zahlungen können gelöscht werden. Freigegebene oder versendete Rechnungen müssen storniert werden.');
+        }
+
+        $this->deleteDraftInvoice($invoice);
+
+        return redirect()
+            ->route('invoices.index', ['status' => 'entwurf'])
+            ->with('success', 'Der Entwurf wurde gelöscht. Du kannst die Beitragsrechnung jetzt neu vorbereiten.');
+    }
+
+    public function bulkDestroyDrafts(Request $request)
+    {
+        $tenantId = auth()->user()->tenant_id;
+
+        $validated = $request->validate([
+            'invoice_ids' => ['required', 'array', 'min:1'],
+            'invoice_ids.*' => ['integer', Rule::exists('invoices', 'id')->where('tenant_id', $tenantId)],
+        ]);
+
+        $invoices = Invoice::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $validated['invoice_ids'])
+            ->with('payments')
+            ->get();
+
+        $deletedCount = 0;
+        $skippedCount = 0;
+
+        foreach ($invoices as $invoice) {
+            if (! $this->invoiceCanBeDeletedAsDraft($invoice)) {
+                $skippedCount++;
+                continue;
+            }
+
+            $this->deleteDraftInvoice($invoice);
+            $deletedCount++;
+        }
+
+        if ($deletedCount === 0) {
+            return redirect()
+                ->route('invoices.index')
+                ->with('error', 'Keine der markierten Rechnungen konnte gelöscht werden. Löschbar sind nur Entwürfe ohne Zahlungen.');
+        }
+
+        $message = $deletedCount === 1
+            ? '1 Entwurf wurde gelöscht.'
+            : $deletedCount . ' Entwürfe wurden gelöscht.';
+
+        if ($skippedCount > 0) {
+            $message .= ' ' . $skippedCount . ' Dokument(e) wurden übersprungen, weil sie keine löschbaren Entwürfe sind.';
+        }
+
+        return redirect()
+            ->route('invoices.index', ['status' => 'entwurf'])
+            ->with('success', $message);
+    }
+
     public function sendMail(Invoice $invoice)
     {
         return $this->sendInvoiceMessage($invoice, false);
@@ -984,6 +1056,66 @@ class InvoiceController extends Controller
     private function authorizeAccess(Invoice $invoice)
     {
         abort_if($invoice->tenant_id !== auth()->user()->tenant_id, 403);
+    }
+
+    private function invoiceCanBeDeletedAsDraft(Invoice $invoice): bool
+    {
+        return $invoice->isDraft()
+            && ! $invoice->payments()->exists()
+            && $invoice->status !== 'paid';
+    }
+
+    private function deleteDraftInvoice(Invoice $invoice): void
+    {
+        DB::transaction(function () use ($invoice) {
+            $invoice->loadMissing(['items', 'member']);
+
+            $applications = MemberCreditApplication::query()
+                ->where('tenant_id', $invoice->tenant_id)
+                ->where('invoice_id', $invoice->id)
+                ->with('credit')
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($applications as $application) {
+                if ($application->credit) {
+                    $application->credit->forceFill([
+                        'remaining_amount' => round((float) $application->credit->remaining_amount + (float) $application->amount, 2),
+                    ])->save();
+                }
+
+                $application->delete();
+            }
+
+            $member = $invoice->member;
+
+            $invoice->items()->delete();
+            $invoice->delete();
+
+            if ($member && $invoice->period_from && $invoice->period_to) {
+                $this->resetMemberNextMembershipInvoiceDate($member);
+            }
+        });
+    }
+
+    private function resetMemberNextMembershipInvoiceDate(Member $member): void
+    {
+        $lastInvoice = Invoice::query()
+            ->where('tenant_id', $member->tenant_id)
+            ->where('document_type', 'invoice')
+            ->where('member_id', $member->id)
+            ->where('status', '!=', 'storniert')
+            ->whereNotNull('period_to')
+            ->orderByDesc('period_to')
+            ->first();
+
+        $nextDate = $lastInvoice?->period_to
+            ? $lastInvoice->period_to->copy()->addDay()->toDateString()
+            : ($member->entry_date?->isFuture() ? $member->entry_date->toDateString() : now()->toDateString());
+
+        $member->forceFill([
+            'next_membership_invoice_on' => $nextDate,
+        ])->save();
     }
 
     private function validateInvoicePayload(Request $request, int $tenantId): array

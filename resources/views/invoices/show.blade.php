@@ -106,6 +106,13 @@
                                 Als offen freigeben
                             </button>
                         </form>
+                        <form action="{{ route('invoices.draft.destroy', $invoice) }}" method="POST" onsubmit="return confirm('Diesen Entwurf wirklich löschen? Danach kannst du die Beitragsrechnung neu vorbereiten.');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="rounded-full border border-amber-300 bg-white px-5 py-3 text-sm font-semibold text-amber-800 transition hover:bg-amber-50">
+                                Entwurf löschen
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>

@@ -464,6 +464,7 @@ class MemberController extends Controller
             'selected.*' => 'exists:members,id',
             'action' => 'required|string|in:set_status_aktiv,set_status_zukuenftig,set_status_ehemalig,assign_membership,delete',
             'membership_id' => 'nullable|integer|exists:memberships,id',
+            'next_membership_invoice_on' => 'nullable|date',
         ]);
 
         $tenantId = auth()->user()->tenant_id;
@@ -520,6 +521,9 @@ class MemberController extends Controller
                     $member->membership_id = $membership->id;
                     $member->membership_amount = $membership->amount;
                     $member->membership_interval = $membership->interval;
+                    $member->next_membership_invoice_on = $request->filled('next_membership_invoice_on')
+                        ? $request->date('next_membership_invoice_on')->toDateString()
+                        : now()->toDateString();
                     $member->save();
                     $count++;
                     break;

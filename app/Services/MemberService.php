@@ -88,6 +88,7 @@ class MemberService
         $data['membership_interval'] = null;
 
         if (empty($data['membership_id'])) {
+            $data['next_membership_invoice_on'] = null;
             return $data;
         }
 

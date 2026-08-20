@@ -252,6 +252,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     // Mitgliedschaften
     $when($C.'MembershipController', function($cls){
         Route::middleware('tenant.role:Admin')->group(function () use ($cls) {
+            Route::post('/memberships/member-billing/assign', [$cls, 'assignMemberBillingModels'])
+                ->name('memberships.member-billing.assign');
+            Route::patch('/memberships/member-billing/{member}', [$cls, 'updateMemberBillingSchedule'])
+                ->name('memberships.member-billing.update');
             Route::resource('memberships', $cls)->except(['show']);
         });
     });
@@ -470,6 +474,8 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             Route::get('/invoices/{invoice}/reminder', [$cls, 'reminderPreview'])->name('invoices.reminder.preview');
             Route::post('/invoices/{invoice}/reminder', [$cls, 'sendReminder'])->name('invoices.reminder');
             Route::post('/invoices/bulk-cancel', [$cls, 'bulkCancel'])->name('invoices.bulk-cancel');
+            Route::post('/invoices/bulk-destroy-drafts', [$cls, 'bulkDestroyDrafts'])->name('invoices.bulk-destroy-drafts');
+            Route::delete('/invoices/{invoice}/draft', [$cls, 'destroyDraft'])->name('invoices.draft.destroy');
             Route::patch('/invoices/{invoice}/status', [$cls, 'updateStatus'])->name('invoices.status.update');
             Route::post('/members/{member}/membership-invoice', [$cls, 'storeMembershipInvoiceForMember'])
                 ->name('members.membership-invoice.store');

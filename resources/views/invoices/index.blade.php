@@ -154,10 +154,13 @@
             <div class="mb-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div>
-                        <div class="text-sm font-semibold text-slate-900">Markierte Rechnungen sammeln stornieren</div>
-                        <div class="mt-1 text-sm text-slate-500">Ideal fuer versehentlich erzeugte Beitragsrechnungen. Bereits bezahlte oder schon weiterverarbeitete Dokumente werden nicht angetastet.</div>
+                        <div class="text-sm font-semibold text-slate-900">Markierte Rechnungen bearbeiten</div>
+                        <div class="mt-1 text-sm text-slate-500">Entwürfe kannst du löschen und neu beginnen. Freigegebene Rechnungen werden sauber storniert.</div>
                     </div>
                     <div class="flex flex-col gap-3 sm:flex-row">
+                        <button type="submit" formaction="{{ route('invoices.bulk-destroy-drafts') }}" onclick="return confirm('Markierte Entwürfe wirklich löschen? Nur Entwürfe ohne Zahlungen werden entfernt. Danach kannst du die Beitragsrechnungen neu vorbereiten.');" class="rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100">
+                            Entwürfe löschen
+                        </button>
                         <button type="submit" onclick="return confirm('Markierte Rechnungen wirklich gesammelt stornieren?');" class="rounded-full border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100">
                             Markierte stornieren
                         </button>

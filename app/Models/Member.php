@@ -33,6 +33,7 @@ class Member extends Model
         'membership_id',
         'membership_amount',
         'membership_interval',
+        'next_membership_invoice_on',
         'required_service_hours',
 
         // Block: Zahlung
@@ -80,6 +81,7 @@ class Member extends Model
         'entry_date'       => 'date',
         'exit_date'        => 'date',
         'termination_date' => 'date',
+        'next_membership_invoice_on' => 'date',
         'sepa_signed_at'   => 'date',
         'consent_email'    => 'boolean',
         'consent_phone'    => 'boolean',
@@ -147,6 +149,15 @@ class Member extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class)->latest('invoice_date');
+    }
+
+    public function latestMembershipInvoice()
+    {
+        return $this->hasOne(Invoice::class)
+            ->where('document_type', 'invoice')
+            ->where('status', '!=', 'storniert')
+            ->whereNotNull('period_from')
+            ->latestOfMany('invoice_date');
     }
 
     public function publicFormSubmissions()

@@ -335,7 +335,18 @@
         </form>
 
         @if($canManageMembers)
-            <div class="mb-3 mt-4 flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center">
+            <div class="mb-3 mt-4 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <div class="text-sm font-semibold text-slate-950">Mehrere Mitglieder bearbeiten</div>
+                        <p class="mt-1 text-sm text-slate-500">Markiere Mitglieder in der Liste und weise ihnen in einem Schritt ein Beitragsmodell zu.</p>
+                    </div>
+                    <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                        Auswahl über Checkboxen
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                     <select name="action" id="members-bulk-action-select" form="members-bulk-action-form" required class="w-full rounded-2xl border-gray-300 px-3 py-2 sm:w-auto">
                         <option value="">Aktion wählen</option>
                         <option value="set_status_aktiv">Status: Aktiv</option>
@@ -354,11 +365,14 @@
                         @endforeach
                     </select>
 
-                    <x-primary-button type="submit" form="members-bulk-action-form" class="w-full justify-center sm:w-auto">Ausführen</x-primary-button>
+                    <input type="date" name="next_membership_invoice_on" id="members-bulk-next-invoice-on" form="members-bulk-action-form" value="{{ now()->toDateString() }}" class="hidden w-full rounded-2xl border-gray-300 px-3 py-2 sm:w-auto">
+
+                    <x-primary-button type="submit" form="members-bulk-action-form" class="w-full justify-center sm:w-auto">Auf Auswahl anwenden</x-primary-button>
 
                     <div class="text-xs text-slate-500" id="members-bulk-action-hint">
-                        Löschen verschiebt markierte Mitglieder sicher ins Archiv.
+                        Erst Mitglieder markieren, dann Aktion wählen.
                     </div>
+                </div>
             </div>
         @endif
 
@@ -603,6 +617,7 @@
     const bulkActionForm = document.getElementById('members-bulk-action-form');
     const bulkActionSelect = document.getElementById('members-bulk-action-select');
     const bulkMembershipSelect = document.getElementById('members-bulk-membership-select');
+    const bulkNextInvoiceOn = document.getElementById('members-bulk-next-invoice-on');
     const bulkActionHint = document.getElementById('members-bulk-action-hint');
 
     if (bulkActionForm && bulkActionSelect) {
@@ -619,10 +634,15 @@
                 }
             }
 
+            if (bulkNextInvoiceOn) {
+                bulkNextInvoiceOn.classList.toggle('hidden', !needsMembership);
+                bulkNextInvoiceOn.disabled = !needsMembership;
+            }
+
             if (bulkActionHint) {
                 bulkActionHint.textContent = needsMembership
-                    ? 'Die gewählte Mitgliedschaft wird inkl. Beitrag und Rhythmus auf alle markierten Mitglieder übernommen.'
-                    : 'Löschen verschiebt markierte Mitglieder sicher ins Archiv.';
+                    ? 'Die gewählte Mitgliedschaft wird inkl. Beitrag, Rhythmus und nächstem Rechnungstermin auf alle markierten Mitglieder übernommen.'
+                    : 'Erst Mitglieder markieren, dann Aktion wählen. Löschen verschiebt markierte Mitglieder sicher ins Archiv.';
             }
         };
 
@@ -630,6 +650,14 @@
         bulkActionSelect.addEventListener('change', syncBulkActionState);
 
         bulkActionForm.addEventListener('submit', function (event) {
+            const selectedCount = document.querySelectorAll('.member-checkbox:checked').length;
+
+            if (selectedCount === 0) {
+                event.preventDefault();
+                window.alert('Bitte markiere zuerst mindestens ein Mitglied.');
+                return;
+            }
+
             if (bulkActionSelect.value === 'assign_membership' && bulkMembershipSelect && !bulkMembershipSelect.value) {
                 event.preventDefault();
                 window.alert('Bitte wähle zuerst eine Mitgliedschaft aus.');

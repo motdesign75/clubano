@@ -28,6 +28,7 @@ class UpdateMemberRequest extends FormRequest
             'entry_date'        => 'nullable|date',
             'exit_date'         => 'nullable|date',
             'termination_date'  => 'nullable|date',
+            'next_membership_invoice_on' => 'nullable|date',
             'required_service_hours' => 'nullable|numeric|min:0|max:999.99',
             'payment_method'    => 'nullable|in:ueberweisung,bar,sepa_lastschrift',
             'iban'              => 'required_if:payment_method,sepa_lastschrift|nullable|string|max:34',
