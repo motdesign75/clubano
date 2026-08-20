@@ -508,7 +508,7 @@
                     <form action="{{ route('members.membership-invoice.store', $member) }}" method="POST">
                         @csrf
                         <button type="submit" class="rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
-                            Beitragsrechnung anstoßen
+                            Beitragsentwurf erstellen
                         </button>
                     </form>
                 @endif

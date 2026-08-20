@@ -26,11 +26,13 @@ class MembershipController extends Controller
     public function store(Request $request)
     {
         $this->normalizeAmount($request);
+        $this->normalizeDecimalField($request, 'admission_fee');
         $this->normalizeInterval($request);
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0',
+            'admission_fee' => 'nullable|numeric|min:0',
             'interval' => 'required|in:monatlich,vierteljaehrlich,halbjaehrlich,jaehrlich,vierteljährlich,halbjährlich,jährlich',
         ]);
 
@@ -54,11 +56,13 @@ class MembershipController extends Controller
         $this->authorizeTenant($membership);
 
         $this->normalizeAmount($request);
+        $this->normalizeDecimalField($request, 'admission_fee');
         $this->normalizeInterval($request);
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'amount' => 'required|numeric|min:0',
+            'admission_fee' => 'nullable|numeric|min:0',
             'interval' => 'required|in:monatlich,vierteljaehrlich,halbjaehrlich,jaehrlich,vierteljährlich,halbjährlich,jährlich',
         ]);
 
@@ -89,7 +93,12 @@ class MembershipController extends Controller
 
     private function normalizeAmount(Request $request): void
     {
-        $amount = $request->input('amount');
+        $this->normalizeDecimalField($request, 'amount');
+    }
+
+    private function normalizeDecimalField(Request $request, string $field): void
+    {
+        $amount = $request->input($field);
 
         if ($amount === null) {
             return;
@@ -103,7 +112,7 @@ class MembershipController extends Controller
         }
 
         $request->merge([
-            'amount' => $normalized,
+            $field => $normalized,
         ]);
     }
 

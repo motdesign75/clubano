@@ -33,12 +33,9 @@
                     <a href="{{ route('sepa.create') }}" class="inline-flex w-full items-center justify-center rounded-full border border-emerald-300/30 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 sm:w-auto">
                     SEPA-Lastschriftlauf
                     </a>
-                    <form method="POST" action="{{ route('invoices.generateMemberships') }}">
-                        @csrf
-                        <button class="w-full rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 sm:w-auto">
-                        Beitragsrechnungen erzeugen
-                        </button>
-                    </form>
+                    <a href="{{ route('memberships.index') }}" class="inline-flex w-full items-center justify-center rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 sm:w-auto">
+                    Beiträge vorbereiten
+                    </a>
 
                     <a href="{{ route('invoices.create') }}" class="inline-flex w-full items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 sm:w-auto">
                     Neue Rechnung

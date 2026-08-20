@@ -61,6 +61,16 @@
                     </div>
 
                     <div>
+                        <label for="admission_fee" class="block text-sm font-semibold text-slate-800">Einmalige Aufnahmegebühr</label>
+                        <div class="relative mt-1 rounded-md shadow-sm">
+                            <input type="text" name="admission_fee" id="admission_fee" inputmode="decimal" value="{{ old('admission_fee', number_format($membership->admission_fee ?? 0, 2, ',', '.')) }}" class="block w-full rounded-2xl border-slate-300 pr-16 text-lg font-semibold shadow-sm focus:border-[#2954A3] focus:ring-[#2954A3]" placeholder="0,00">
+                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-sm text-slate-500">Euro</div>
+                        </div>
+                        <p class="mt-2 text-sm text-slate-500">Wird nur bei Mitgliedern ergänzt, die noch keine Aufnahmegebühr berechnet bekommen haben.</p>
+                        <x-input-error :messages="$errors->get('admission_fee')" class="mt-2" />
+                    </div>
+
+                    <div>
                         <div class="text-sm font-semibold text-slate-800">Abrechnungsrhythmus</div>
                         <div class="mt-3 grid gap-3 sm:grid-cols-2">
                             @foreach($intervals as $value => $option)
@@ -86,7 +96,7 @@
                     <div class="text-xs font-semibold uppercase tracking-[0.2em] text-white/50">Snapshot-Prinzip</div>
                     <h2 class="mt-4 text-2xl font-semibold">Änderungen bleiben kontrollierbar.</h2>
                     <p class="mt-3 text-sm leading-6 text-slate-300">
-                        Dieses Modell ist die Vorlage. Mitglieder speichern beim Zuordnen ihren eigenen Beitrag und Rhythmus, damit alte Rechnungen und Historien nachvollziehbar bleiben.
+                        Dieses Modell ist die Vorlage. Mitglieder speichern beim Zuordnen ihren eigenen Beitrag und Rhythmus. Die Aufnahmegebühr wird bewusst nur einmalig auf der ersten passenden Rechnung ergänzt.
                     </p>
                 </div>
 

@@ -15,11 +15,13 @@ class Membership extends Model
         'tenant_id',
         'name',
         'amount',
+        'admission_fee',
         'interval',
     ];
 
     protected $casts = [
        'amount' => 'float',
+       'admission_fee' => 'float',
     ];
 
     /**

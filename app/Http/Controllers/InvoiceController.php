@@ -297,18 +297,18 @@ class InvoiceController extends Controller
 
         foreach ($members as $member) {
             foreach ($this->getBillablePeriodsForMember($member) as $period) {
-                if ($this->createMembershipInvoiceForPeriod($member, $period, 'open')) {
+                if ($this->createMembershipInvoiceForPeriod($member, $period, 'entwurf')) {
                     $createdCount++;
                 }
             }
         }
 
         $message = $createdCount === 1
-            ? '1 Beitragsrechnung erstellt.'
-            : $createdCount . ' Beitragsrechnungen erstellt.';
+            ? '1 Beitragsrechnung als Entwurf vorbereitet.'
+            : $createdCount . ' Beitragsrechnungen als Entwurf vorbereitet.';
 
         if ($createdCount === 0) {
-            $message = 'Keine neuen Beitragsrechnungen erstellt. Für die aktuellen Perioden bestehen vermutlich bereits Rechnungen oder es fehlen Beitragsdaten.';
+            $message = 'Keine neuen Beitragsrechnungen vorbereitet. Für die aktuellen Perioden bestehen vermutlich bereits Rechnungen oder es fehlen Beitragsdaten.';
         }
 
         return redirect()
@@ -354,13 +354,14 @@ class InvoiceController extends Controller
             return null;
         }
 
-        $amount = $member->membership_amount ?? $member->membership?->amount;
+        $amount = (float) ($member->membership_amount ?? $member->membership?->amount);
+        $admissionFee = $this->resolveAdmissionFeeForMember($member);
         $interval = $this->normalizeMembershipInterval($member->membership_interval ?? $member->membership?->interval);
         $tenant = auth()->user()->tenant;
         $now = now();
         $membershipName = $member->membership?->name ?: 'Mitgliedschaft';
 
-        return DB::transaction(function () use ($member, $period, $status, $now, $tenant, $membershipName, $interval, $amount) {
+        return DB::transaction(function () use ($member, $period, $status, $now, $tenant, $membershipName, $interval, $amount, $admissionFee) {
             $invoice = $this->createInvoiceWithUniqueNumber([
                 'tenant_id' => $member->tenant_id,
                 'document_type' => 'invoice',
@@ -384,7 +385,18 @@ class InvoiceController extends Controller
                 'unit_price' => $amount,
             ]);
 
-            $appliedCredit = $this->applyMemberCreditsToInvoice($invoice, $member, (float) $amount, $period['label']);
+            if ($admissionFee > 0) {
+                InvoiceItem::create([
+                    'invoice_id' => $invoice->id,
+                    'description' => 'Aufnahmegebühr ' . $membershipName,
+                    'details' => 'Einmalige Aufnahmegebühr beim Eintritt in den Verein.',
+                    'quantity' => 1,
+                    'unit' => 'einmalig',
+                    'unit_price' => $admissionFee,
+                ]);
+            }
+
+            $appliedCredit = $this->applyMemberCreditsToInvoice($invoice, $member, $amount + $admissionFee, $period['label']);
 
             if ($appliedCredit > 0 && $invoice->fresh('items')->getTotal() <= 0.00001) {
                 $invoice->forceFill([
@@ -459,6 +471,30 @@ class InvoiceController extends Controller
         }
 
         return $applied;
+    }
+
+    private function resolveAdmissionFeeForMember(Member $member): float
+    {
+        $fee = (float) ($member->membership?->admission_fee ?? 0);
+
+        if ($fee <= 0 || $this->memberAlreadyHasAdmissionFeeInvoice($member)) {
+            return 0.0;
+        }
+
+        return round($fee, 2);
+    }
+
+    private function memberAlreadyHasAdmissionFeeInvoice(Member $member): bool
+    {
+        return InvoiceItem::query()
+            ->where('description', 'like', 'Aufnahmegebühr%')
+            ->whereHas('invoice', function ($query) use ($member) {
+                $query->where('tenant_id', $member->tenant_id)
+                    ->where('member_id', $member->id)
+                    ->where('document_type', 'invoice')
+                    ->where('status', '!=', 'storniert');
+            })
+            ->exists();
     }
 
     private function findMembershipInvoiceForPeriod(Member $member, array $period): ?Invoice

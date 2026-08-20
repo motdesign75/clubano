@@ -30,7 +30,7 @@
                     <div class="text-xs font-semibold uppercase tracking-[0.24em] text-white/50">Beitragszentrale</div>
                     <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Mitgliedschaften</h1>
                     <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
-                        Beitragsmodelle bestimmen, was bei Mitgliedern als Snapshot landet und welche Rechnungen später sauber entstehen.
+                        Beitragsmodelle bestimmen Beitrag, Rhythmus und eine mögliche einmalige Aufnahmegebühr. Abgerechnet wird zuerst als Entwurf, damit nichts versehentlich rausgeht.
                     </p>
                 </div>
 
@@ -39,7 +39,7 @@
                         <form method="POST" action="{{ route('invoices.generateMemberships') }}">
                             @csrf
                             <button type="submit" class="inline-flex w-full items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 sm:w-auto">
-                                Fällige Beiträge abrechnen
+                                Beitragsentwürfe vorbereiten
                             </button>
                         </form>
                     @endif
@@ -93,7 +93,7 @@
                 <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h2 class="text-base font-semibold text-slate-950">Modelle und Abrechnung</h2>
-                        <p class="mt-1 text-sm text-slate-500">Ein Klick erzeugt nur fehlende Beitragsrechnungen für fällige Perioden.</p>
+                        <p class="mt-1 text-sm text-slate-500">Clubano erzeugt fehlende Beitragsrechnungen zuerst als Entwurf. Prüfen, dann freigeben.</p>
                     </div>
                 </div>
                 <div class="overflow-x-auto">
@@ -102,6 +102,7 @@
                             <tr>
                                 <th class="px-5 py-3">Bezeichnung</th>
                                 <th class="px-5 py-3">Beitrag</th>
+                                <th class="px-5 py-3">Aufnahme</th>
                                 <th class="px-5 py-3">Abrechnung</th>
                                 <th class="px-5 py-3">Mitglieder</th>
                                 <th class="px-5 py-3 text-right">Aktionen</th>
@@ -122,6 +123,10 @@
                                             {{ number_format(($membership->amount ?? 0) * ($annualFactors[$membership->interval] ?? 1), 2, ',', '.') }} € pro Jahr
                                         </div>
                                     </td>
+                                    <td class="px-5 py-4">
+                                        <div class="font-semibold tabular-nums text-slate-950">{{ number_format($membership->admission_fee ?? 0, 2, ',', '.') }} €</div>
+                                        <div class="mt-1 text-xs text-slate-500">einmalig</div>
+                                    </td>
                                     <td class="px-5 py-4 text-slate-700">
                                         <span class="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                                             {{ $labels[$membership->interval] ?? ucfirst((string) $membership->interval) }}
@@ -135,8 +140,8 @@
                                             <form method="POST" action="{{ route('invoices.generateMemberships') }}">
                                                 @csrf
                                                 <input type="hidden" name="membership_id" value="{{ $membership->id }}">
-                                                <button type="submit" class="rounded-full bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-blue-700">
-                                                    Abrechnen
+                                                <button type="submit" onclick="return confirm('Für dieses Beitragsmodell jetzt fehlende Beitragsrechnungen als Entwurf vorbereiten?');" class="rounded-full bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-blue-700">
+                                                    Entwürfe vorbereiten
                                                 </button>
                                             </form>
                                             <a href="{{ route('memberships.edit', $membership) }}" class="text-sm font-medium text-slate-700 hover:text-slate-950">

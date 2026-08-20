@@ -71,3 +71,7 @@ Homestead.json
 /output
 /output/pdf
 /tmp
+
+# Lokale Planung/Marketing-Arbeitsstände, niemals deployen
+/docs/ninox-import/
+/marketing/

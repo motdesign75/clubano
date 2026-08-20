@@ -62,6 +62,16 @@
                     </div>
 
                     <div>
+                        <label for="admission_fee" class="block text-sm font-semibold text-slate-800">Einmalige Aufnahmegebühr</label>
+                        <div class="relative mt-1 rounded-md shadow-sm">
+                            <input type="text" name="admission_fee" id="admission_fee" inputmode="decimal" value="{{ old('admission_fee') }}" class="block w-full rounded-2xl border-slate-300 pr-16 text-lg font-semibold shadow-sm focus:border-[#2954A3] focus:ring-[#2954A3]" placeholder="0,00">
+                            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-sm text-slate-500">Euro</div>
+                        </div>
+                        <p class="mt-2 text-sm text-slate-500">Optional. Wird bei der ersten Beitragsrechnung eines neuen Mitglieds einmalig ergänzt.</p>
+                        <x-input-error :messages="$errors->get('admission_fee')" class="mt-2" />
+                    </div>
+
+                    <div>
                         <div class="text-sm font-semibold text-slate-800">Abrechnungsrhythmus</div>
                         <div class="mt-3 grid gap-3 sm:grid-cols-2">
                             @foreach($intervals as $value => $option)
@@ -87,7 +97,7 @@
                     <div class="text-xs font-semibold uppercase tracking-[0.2em] text-white/50">Warum sauber anlegen?</div>
                     <h2 class="mt-4 text-2xl font-semibold">Ein Modell. Viele saubere Rechnungen.</h2>
                     <p class="mt-3 text-sm leading-6 text-slate-300">
-                        Beim Zuordnen zu einem Mitglied speichert Clubano Beitrag und Rhythmus als Snapshot. So bleiben alte Mitgliedsdaten stabil, auch wenn du das Modell später änderst.
+                        Beim Zuordnen zu einem Mitglied speichert Clubano Beitrag und Rhythmus als Snapshot. Die Aufnahmegebühr bleibt am Modell und wird nur einmalig berechnet.
                     </p>
                 </div>
 
