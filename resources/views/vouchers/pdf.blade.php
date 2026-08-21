@@ -22,12 +22,15 @@
         .label { font-size: 6.5pt; font-weight: bold; letter-spacing: .24em; text-transform: uppercase; color: #64748b; }
         .code { margin-top: 1.4mm; font-size: 10pt; font-weight: bold; letter-spacing: .04em; line-height: 1.25; color: #0f172a; word-break: break-all; }
         .meta { margin-top: 1.8mm; font-size: 7.2pt; color: #475569; line-height: 1.4; }
-        .dedication { position: absolute; left: 0; top: {{ $voucherHeightMm }}mm; width: {{ $pageWidthMm }}mm; height: {{ $dedicationHeightMm }}mm; padding: 7mm 88mm 7mm 12mm; background: #fff; color: #0f172a; border-top: 1px solid rgba(15,23,42,.12); box-sizing: border-box; }
+        .dedication { position: absolute; left: 0; top: {{ $voucherHeightMm }}mm; width: {{ $pageWidthMm }}mm; height: {{ $dedicationHeightMm }}mm; padding: 6mm 10mm; background: #fff; color: #0f172a; border-top: 1px solid rgba(15,23,42,.12); box-sizing: border-box; }
+        .dedication-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .dedication-copy { width: {{ max(120, $pageWidthMm - 102) }}mm; padding-right: 10mm; vertical-align: top; }
+        .dedication-code { width: 72mm; vertical-align: top; }
         .dedication-label { font-size: 6pt; font-weight: bold; letter-spacing: .22em; text-transform: uppercase; color: #64748b; }
         .dedication-text { margin-top: 2mm; font-size: 11.5pt; line-height: 1.34; white-space: pre-line; }
         .qr { position: absolute; right: 4mm; top: 4mm; width: 18mm; height: 18mm; }
         .with-qr { padding-right: 25mm; min-height: 25mm; }
-        .code-panel { position: absolute; left: {{ max(12, $pageWidthMm - 104) }}mm; top: 6mm; width: 68mm; min-height: 26mm; padding: 3.8mm 24mm 3.8mm 4mm; border-radius: 4mm; background: #f8fafc; border: 1px solid #e2e8f0; box-sizing: border-box; }
+        .code-panel { position: relative; width: 68mm; min-height: 26mm; padding: 3.8mm 24mm 3.8mm 4mm; border-radius: 4mm; background: #f8fafc; border: 1px solid #e2e8f0; box-sizing: border-box; }
         .code-panel.no-qr { padding-right: 4mm; }
         .code-panel-qr { position: absolute; right: 4mm; top: 4mm; width: 17mm; height: 17mm; }
         .code-panel-hint { margin-top: 1.6mm; font-size: 6.5pt; line-height: 1.35; color: #64748b; }
@@ -71,31 +74,39 @@
 
         @if($usesExternalCodePanel || $voucher->dedication_message)
             <div class="dedication">
-                <div class="dedication-label">{{ $voucher->dedication_message ? 'Persönliche Widmung' : 'Einlösung' }}</div>
-                <div class="dedication-text">
-                    @if($voucher->dedication_message)
-                        {{ $voucher->dedication_message }}
-                    @else
-                        Dieser Gutschein ist nur mit dem rechts angegebenen Gutscheincode einlösbar.
-                    @endif
-                </div>
-                <div class="code-panel {{ $qrCodeDataUri ? '' : 'no-qr' }}">
-                    @if($qrCodeDataUri)
-                        <img src="{{ $qrCodeDataUri }}" alt="QR-Code" class="code-panel-qr">
-                    @endif
-                    <div class="label">Gutscheincode</div>
-                    <div class="code">{{ $voucher->code }}</div>
-                    <div class="meta">
-                        Wert: {{ number_format((float) $voucher->original_amount, 2, ',', '.') }} {{ strtoupper($voucher->currency ?: 'EUR') }}
-                        @if($voucher->recipient_name)
-                            <br>Für: {{ $voucher->recipient_name }}
-                        @endif
-                        @if($voucher->expires_at)
-                            <br>Gültig bis: {{ $voucher->expires_at->format('d.m.Y') }}
-                        @endif
-                    </div>
-                    <div class="code-panel-hint">Code scannen oder bei der Anmeldung eingeben.</div>
-                </div>
+                <table class="dedication-table">
+                    <tr>
+                        <td class="dedication-copy">
+                            <div class="dedication-label">{{ $voucher->dedication_message ? 'Persönliche Widmung' : 'Einlösung' }}</div>
+                            <div class="dedication-text">
+                                @if($voucher->dedication_message)
+                                    {{ $voucher->dedication_message }}
+                                @else
+                                    Dieser Gutschein ist nur mit dem rechts angegebenen Gutscheincode einlösbar.
+                                @endif
+                            </div>
+                        </td>
+                        <td class="dedication-code">
+                            <div class="code-panel {{ $qrCodeDataUri ? '' : 'no-qr' }}">
+                                @if($qrCodeDataUri)
+                                    <img src="{{ $qrCodeDataUri }}" alt="QR-Code" class="code-panel-qr">
+                                @endif
+                                <div class="label">Gutscheincode</div>
+                                <div class="code">{{ $voucher->code }}</div>
+                                <div class="meta">
+                                    Wert: {{ number_format((float) $voucher->original_amount, 2, ',', '.') }} {{ strtoupper($voucher->currency ?: 'EUR') }}
+                                    @if($voucher->recipient_name)
+                                        <br>Für: {{ $voucher->recipient_name }}
+                                    @endif
+                                    @if($voucher->expires_at)
+                                        <br>Gültig bis: {{ $voucher->expires_at->format('d.m.Y') }}
+                                    @endif
+                                </div>
+                                <div class="code-panel-hint">Code scannen oder bei der Anmeldung eingeben.</div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
             </div>
         @endif
     </div>
