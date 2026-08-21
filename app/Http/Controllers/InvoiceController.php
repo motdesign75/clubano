@@ -707,6 +707,7 @@ class InvoiceController extends Controller
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['entwurf', 'open', 'storniert'])],
+            'cancellation_reason' => ['required_if:status,storniert', 'nullable', 'string', 'min:5', 'max:1000'],
         ]);
 
         if ($invoice->status === 'paid') {
@@ -722,9 +723,12 @@ class InvoiceController extends Controller
         }
 
         if ($validated['status'] === 'storniert') {
-            $this->cancelInvoice($invoice);
+            $this->cancelInvoice($invoice, $validated['cancellation_reason']);
         } else {
             $invoice->status = $validated['status'];
+            $invoice->cancellation_reason = null;
+            $invoice->cancelled_at = null;
+            $invoice->cancelled_by = null;
 
             if ($validated['status'] !== 'paid') {
                 $invoice->paid_at = null;
@@ -746,6 +750,7 @@ class InvoiceController extends Controller
         $validated = $request->validate([
             'invoice_ids' => ['required', 'array', 'min:1'],
             'invoice_ids.*' => ['integer', Rule::exists('invoices', 'id')->where('tenant_id', $tenantId)],
+            'cancellation_reason' => ['required', 'string', 'min:5', 'max:1000'],
         ]);
 
         $invoices = Invoice::query()
@@ -763,7 +768,7 @@ class InvoiceController extends Controller
                 continue;
             }
 
-            $this->cancelInvoice($invoice);
+            $this->cancelInvoice($invoice, $validated['cancellation_reason']);
             $cancelledCount++;
         }
 
@@ -1448,9 +1453,9 @@ class InvoiceController extends Controller
         ]);
     }
 
-    private function cancelInvoice(Invoice $invoice): void
+    private function cancelInvoice(Invoice $invoice, ?string $reason = null): void
     {
-        $this->invoiceCancellationService->cancel($invoice);
+        $this->invoiceCancellationService->cancel($invoice, $reason);
     }
 
     private function generateUniqueInvoiceNumber(string $documentType = 'invoice', int $attempt = 0, ?int $tenantId = null): string

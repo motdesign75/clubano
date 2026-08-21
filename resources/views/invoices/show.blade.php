@@ -62,6 +62,15 @@
                         <form action="{{ route('invoices.status.update', $invoice) }}" method="POST" class="flex flex-wrap gap-2">
                             @csrf
                             @method('PATCH')
+                            @if($invoice->status !== 'storniert')
+                                <div class="basis-full">
+                                    <label for="cancellation_reason_header" class="sr-only">Stornogrund</label>
+                                    <input id="cancellation_reason_header" type="text" name="cancellation_reason" value="{{ old('cancellation_reason') }}" placeholder="Stornogrund, falls du stornierst" class="w-full rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-slate-300 focus:border-white focus:outline-none focus:ring-2 focus:ring-white/20">
+                                    @error('cancellation_reason')
+                                        <div class="mt-2 rounded-2xl bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            @endif
                             @if($invoice->status !== 'open')
                                 <button type="submit" name="status" value="open" class="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100">
                                     Als offen markieren
@@ -248,6 +257,19 @@
                                     @endif
                                 </div>
                             </div>
+                            @if($invoice->status === 'storniert')
+                                <div class="md:col-span-2">
+                                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-rose-500">Stornogrund</div>
+                                    <div class="mt-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-950">
+                                        {{ $invoice->cancellation_reason ?: 'Kein Grund hinterlegt' }}
+                                        @if($invoice->cancelled_at)
+                                            <div class="mt-2 text-xs font-normal text-rose-700">
+                                                Storniert am {{ $invoice->cancelled_at->format('d.m.Y H:i') }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endif
                             @if($invoice->status !== 'paid')
                                 <div>
                                     <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Naechster Schritt</div>

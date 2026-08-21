@@ -77,6 +77,13 @@
             </div>
 
             <div class="md:col-span-2">
+                <label for="dedication_message" class="mb-1 block text-sm font-medium text-slate-700">Widmung oder Wunschtext</label>
+                <textarea id="dedication_message" name="dedication_message" rows="4" maxlength="500" placeholder="z. B. Alles Liebe zum Geburtstag und viel Freude beim Braukurs!" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">{{ old('dedication_message') }}</textarea>
+                <p class="mt-1 text-sm text-slate-500">Erscheint im PDF und kann beim E-Mail-Versand noch angepasst werden.</p>
+                @error('dedication_message')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
+            </div>
+
+            <div class="md:col-span-2">
                 <label for="delivery_method" class="mb-1 block text-sm font-medium text-slate-700">Zustellung</label>
                 <select id="delivery_method" name="delivery_method" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                     <option value="pickup" @selected(old('delivery_method', 'pickup') === 'pickup')>Abholung</option>

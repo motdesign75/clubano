@@ -36,6 +36,9 @@ class Invoice extends Model
         'period_from',
         'period_to',
         'status',
+        'cancellation_reason',
+        'cancelled_at',
+        'cancelled_by',
         'paid_at',
         'sepa_exported_at',
         'sepa_sequence_type',
@@ -50,6 +53,7 @@ class Invoice extends Model
         'due_date' => 'date',
         'period_from' => 'date',
         'period_to' => 'date',
+        'cancelled_at' => 'datetime',
         'paid_at' => 'datetime',
         'sepa_exported_at' => 'datetime',
     ];

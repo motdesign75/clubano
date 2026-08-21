@@ -34,6 +34,7 @@ class Voucher extends Model
         'buyer_email',
         'recipient_name',
         'recipient_email',
+        'dedication_message',
         'delivery_method',
         'delivered_at',
         'legacy',

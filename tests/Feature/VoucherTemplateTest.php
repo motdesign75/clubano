@@ -5,6 +5,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Models\Voucher;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 test('finance user can configure voucher design and download voucher pdf', function () {
@@ -107,4 +108,52 @@ test('voucher creation stores delivery method without sending automatically', fu
     expect($voucher)->not->toBeNull();
     expect($voucher->delivery_method)->toBe(Voucher::DELIVERY_PICKUP);
     expect($voucher->delivered_at)->toBeNull();
+});
+
+test('voucher dedication can be stored and adjusted before email delivery', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    $tenant = Tenant::create([
+        'name' => 'Widmungsverein',
+        'slug' => 'widmungsverein',
+        'email' => 'vorstand@widmungsverein.test',
+    ]);
+
+    $user = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_TREASURER,
+        'email_verified_at' => now(),
+    ]);
+
+    $response = $this->actingAs($user)->post(route('vouchers.store'), [
+        'title' => 'Braukurs',
+        'original_amount' => '79.00',
+        'issued_at' => now()->toDateString(),
+        'buyer_name' => 'Erika Einkauf',
+        'buyer_email' => 'erika@example.test',
+        'recipient_name' => 'Max Muster',
+        'recipient_email' => 'max@example.test',
+        'dedication_message' => 'Alles Liebe zum Geburtstag!',
+        'delivery_method' => Voucher::DELIVERY_MAIL,
+    ]);
+
+    $response->assertRedirect(route('vouchers.index'));
+
+    $voucher = Voucher::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+
+    expect($voucher->dedication_message)->toBe('Alles Liebe zum Geburtstag!');
+
+    $this->actingAs($user)
+        ->post(route('vouchers.send', $voucher), [
+            'email' => 'max@example.test',
+            'dedication_message' => 'Viel Freude beim gemeinsamen Braukurs!',
+        ])
+        ->assertRedirect(route('vouchers.index'));
+
+    $voucher->refresh();
+
+    expect($voucher->delivery_method)->toBe(Voucher::DELIVERY_MAIL);
+    expect($voucher->delivered_at)->not->toBeNull();
+    expect($voucher->dedication_message)->toBe('Viel Freude beim gemeinsamen Braukurs!');
 });

@@ -16,7 +16,30 @@ class VoucherPdfService
         $templatePath = $tenant->voucher_template_path && Storage::disk('public')->exists($tenant->voucher_template_path)
             ? storage_path('app/public/' . $tenant->voucher_template_path)
             : null;
-        [$pageWidthMm, $pageHeightMm] = $this->pageSize($tenant);
+        [$pageWidthMm, $voucherHeightMm, $templateRatio] = $this->pageSize($tenant);
+        $dedicationHeightMm = filled($voucher->dedication_message) ? 34.0 : 0.0;
+        $usesExternalCodePanel = $templatePath !== null;
+        $templateWidthMm = $pageWidthMm;
+        $templateHeightMm = $voucherHeightMm;
+        $templateLeftMm = 0.0;
+
+        if ($usesExternalCodePanel) {
+            $pageWidthMm = 297.0;
+            $pageHeightMm = 210.0;
+            $voucherHeightMm = min($voucherHeightMm, 168.0);
+            $templateHeightMm = $voucherHeightMm;
+            $templateWidthMm = min($pageWidthMm, round($templateHeightMm * $templateRatio, 2));
+            $templateLeftMm = round(($pageWidthMm - $templateWidthMm) / 2, 2);
+            $dedicationHeightMm = $pageHeightMm - $voucherHeightMm;
+        } elseif ($dedicationHeightMm > 0) {
+            $pageWidthMm = 297.0;
+            $pageHeightMm = 210.0;
+            $voucherHeightMm = min($voucherHeightMm, 176.0);
+            $templateHeightMm = $voucherHeightMm;
+            $dedicationHeightMm = $pageHeightMm - $voucherHeightMm;
+        } else {
+            $pageHeightMm = $voucherHeightMm;
+        }
 
         $qrCodeDataUri = null;
 
@@ -35,6 +58,12 @@ class VoucherPdfService
             'codeColor' => $this->safeColor($tenant->voucher_code_color ?: '#0f172a'),
             'pageWidthMm' => $pageWidthMm,
             'pageHeightMm' => $pageHeightMm,
+            'voucherHeightMm' => $voucherHeightMm,
+            'dedicationHeightMm' => $dedicationHeightMm,
+            'usesExternalCodePanel' => $usesExternalCodePanel,
+            'templateWidthMm' => $templateWidthMm,
+            'templateHeightMm' => $templateHeightMm,
+            'templateLeftMm' => $templateLeftMm,
         ])
             ->setPaper([0, 0, $this->mmToPoint($pageWidthMm), $this->mmToPoint($pageHeightMm)])
             ->output();
@@ -63,7 +92,7 @@ class VoucherPdfService
     }
 
     /**
-     * @return array{0: float, 1: float}
+     * @return array{0: float, 1: float, 2: float}
      */
     private function pageSize(Tenant $tenant): array
     {
@@ -80,12 +109,12 @@ class VoucherPdfService
 
         if ($templateWidth > 0 && $templateHeight > 0) {
             $ratio = max(0.5, min(3.0, $templateWidth / $templateHeight));
-            $width = 210.0;
+            $width = 297.0;
 
-            return [$width, round($width / $ratio, 2)];
+            return [$width, round($width / $ratio, 2), $ratio];
         }
 
-        return [297.0, 210.0];
+        return [297.0, 210.0, 297.0 / 210.0];
     }
 
     private function mmToPoint(float $millimeters): float

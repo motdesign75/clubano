@@ -108,7 +108,7 @@
                 <div class="mt-4">
                     <label for="voucher_mail_body" class="mb-1 block text-sm font-medium text-slate-700">Nachricht</label>
                     <textarea id="voucher_mail_body" name="voucher_mail_body" rows="8" class="w-full rounded-xl border-slate-300 text-sm leading-6 shadow-sm focus:border-slate-500 focus:ring-slate-300" placeholder="<p>Guten Tag,</p><p>anbei senden wir den Gutschein @{{ code }}.</p>">{{ old('voucher_mail_body', $tenant->voucher_mail_body) }}</textarea>
-                    <p class="mt-2 text-xs leading-5 text-slate-500">Platzhalter: @{{ code }}, @{{ wert }}, @{{ empfaenger }}, @{{ verein }}</p>
+                    <p class="mt-2 text-xs leading-5 text-slate-500">Platzhalter: @{{ code }}, @{{ wert }}, @{{ empfaenger }}, @{{ widmung }}, @{{ verein }}</p>
                     @error('voucher_mail_body')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
                 </div>
             </section>

@@ -155,9 +155,10 @@
                 <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                         <div class="text-sm font-semibold text-slate-900">Markierte Rechnungen bearbeiten</div>
-                        <div class="mt-1 text-sm text-slate-500">Entwürfe kannst du löschen und neu beginnen. Freigegebene Rechnungen werden sauber storniert.</div>
+                        <div class="mt-1 text-sm text-slate-500">Entwürfe kannst du löschen und neu beginnen. Für Stornos ist ein Grund Pflicht.</div>
                     </div>
-                    <div class="flex flex-col gap-3 sm:flex-row">
+                    <div class="grid gap-3 lg:min-w-[520px] lg:grid-cols-[1fr_auto_auto]">
+                        <input type="text" name="cancellation_reason" value="{{ old('cancellation_reason') }}" placeholder="Stornogrund für markierte Rechnungen" class="rounded-full border border-slate-300 px-4 py-2 text-sm shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10">
                         <button type="submit" formaction="{{ route('invoices.bulk-destroy-drafts') }}" onclick="return confirm('Markierte Entwürfe wirklich löschen? Nur Entwürfe ohne Zahlungen werden entfernt. Danach kannst du die Beitragsrechnungen neu vorbereiten.');" class="rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100">
                             Entwürfe löschen
                         </button>
@@ -166,6 +167,9 @@
                         </button>
                     </div>
                 </div>
+                @error('cancellation_reason')
+                    <div class="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">{{ $message }}</div>
+                @enderror
             </div>
 
         <div class="space-y-4 md:hidden">

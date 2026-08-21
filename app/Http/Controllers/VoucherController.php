@@ -77,6 +77,7 @@ class VoucherController extends Controller
             'buyer_email' => ['nullable', 'email', 'max:255'],
             'recipient_name' => ['nullable', 'string', 'max:255'],
             'recipient_email' => ['nullable', 'email', 'max:255'],
+            'dedication_message' => ['nullable', 'string', 'max:500'],
             'delivery_method' => ['required', Rule::in([
                 Voucher::DELIVERY_PICKUP,
                 Voucher::DELIVERY_MAIL,
@@ -110,6 +111,7 @@ class VoucherController extends Controller
             'buyer_email' => $validated['buyer_email'] ?? null,
             'recipient_name' => $validated['recipient_name'] ?? null,
             'recipient_email' => $validated['recipient_email'] ?? null,
+            'dedication_message' => $validated['dedication_message'] ?? null,
             'delivery_method' => $validated['delivery_method'],
             'legacy' => $request->boolean('legacy'),
             'notes' => $validated['notes'] ?? null,
@@ -210,7 +212,14 @@ class VoucherController extends Controller
 
         $validated = $request->validate([
             'email' => ['required', 'email', 'max:255'],
+            'dedication_message' => ['nullable', 'string', 'max:500'],
         ]);
+
+        if ($request->has('dedication_message')) {
+            $voucher->forceFill([
+                'dedication_message' => $validated['dedication_message'] ?: null,
+            ])->save();
+        }
 
         $this->tenantMailConfigurator->apply($tenant);
 
@@ -220,6 +229,7 @@ class VoucherController extends Controller
             '{{ code }}' => e($voucher->code),
             '{{ wert }}' => e(number_format((float) $voucher->original_amount, 2, ',', '.') . ' ' . strtoupper($voucher->currency ?: 'EUR')),
             '{{ empfaenger }}' => e($voucher->recipient_name ?: ''),
+            '{{ widmung }}' => nl2br(e($voucher->dedication_message ?: '')),
             '{{ verein }}' => e($tenant->name),
         ]);
 

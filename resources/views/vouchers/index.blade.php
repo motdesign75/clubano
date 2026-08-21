@@ -93,6 +93,11 @@
                                 · gültig bis {{ $voucher->expires_at->format('d.m.Y') }}
                             @endif
                         </div>
+                        @if($voucher->dedication_message)
+                            <div class="mt-2 line-clamp-2 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                                {{ $voucher->dedication_message }}
+                            </div>
+                        @endif
                     </div>
                     <div>
                         <div class="text-sm font-semibold text-slate-950">{{ number_format((float) $voucher->remaining_amount, 2, ',', '.') }} €</div>
@@ -114,12 +119,11 @@
                         <a href="{{ route('vouchers.download', $voucher) }}" class="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                             PDF
                         </a>
-                        <form method="POST" action="{{ route('vouchers.send', $voucher) }}" class="flex min-w-0 flex-1 gap-1">
+                        <form method="POST" action="{{ route('vouchers.send', $voucher) }}" class="flex min-w-0 flex-1 flex-col gap-1">
                             @csrf
-                            <input type="email" name="email" value="{{ $voucher->recipient_email ?: $voucher->buyer_email }}" placeholder="E-Mail" class="min-w-0 flex-1 rounded-lg border-slate-300 text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                            <button type="submit" class="inline-flex min-h-9 items-center justify-center rounded-lg bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800">
-                                Senden
-                            </button>
+                            <input type="email" name="email" value="{{ $voucher->recipient_email ?: $voucher->buyer_email }}" placeholder="E-Mail" class="min-w-0 rounded-lg border-slate-300 text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                            <textarea name="dedication_message" rows="2" maxlength="500" placeholder="Widmung optional" class="min-w-0 rounded-lg border-slate-300 text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">{{ $voucher->dedication_message }}</textarea>
+                            <button type="submit" class="inline-flex min-h-9 items-center justify-center rounded-lg bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800">Senden</button>
                         </form>
                     </div>
                 </div>

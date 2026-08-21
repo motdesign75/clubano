@@ -6,6 +6,7 @@ use App\Models\Invoice;
 use App\Models\MemberCreditApplication;
 use App\Models\EventBooking;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class InvoiceCancellationService
 {
@@ -22,12 +23,20 @@ class InvoiceCancellationService
         return ! $invoice->isPaid() && ! $invoice->payments()->exists();
     }
 
-    public function cancel(Invoice $invoice): void
+    public function cancel(Invoice $invoice, ?string $reason = null): void
     {
-        DB::transaction(function () use ($invoice) {
+        DB::transaction(function () use ($invoice, $reason) {
             $invoice->loadMissing(['items', 'eventBookings']);
 
             if ($invoice->status === 'storniert') {
+                if (blank($invoice->cancellation_reason) && filled($reason)) {
+                    $invoice->forceFill([
+                        'cancellation_reason' => $reason,
+                        'cancelled_at' => $invoice->cancelled_at ?: now(),
+                        'cancelled_by' => $invoice->cancelled_by ?: Auth::id(),
+                    ])->save();
+                }
+
                 $this->syncEventBookingPaymentStatus($invoice);
 
                 return;
@@ -62,6 +71,9 @@ class InvoiceCancellationService
 
             $invoice->forceFill([
                 'status' => 'storniert',
+                'cancellation_reason' => filled($reason) ? trim($reason) : 'Automatisch storniert.',
+                'cancelled_at' => now(),
+                'cancelled_by' => Auth::id(),
                 'paid_at' => null,
                 'sepa_exported_at' => null,
                 'sepa_sequence_type' => null,
@@ -80,7 +92,7 @@ class InvoiceCancellationService
             return false;
         }
 
-        $this->cancel($booking->invoice);
+        $this->cancel($booking->invoice, 'Automatisch storniert, weil die verknüpfte Veranstaltungsbuchung storniert wurde.');
 
         return true;
     }
