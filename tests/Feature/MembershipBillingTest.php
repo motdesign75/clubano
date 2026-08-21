@@ -8,6 +8,7 @@ use App\Models\MemberCredit;
 use App\Models\Membership;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Support\Facades\Mail;
 
 test('single member contribution invoice includes admission fee once as draft', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
@@ -559,4 +560,56 @@ test('family billing can be assigned directly from member profile', function () 
     ])->assertRedirect(route('members.show', $familyMember));
 
     expect($familyMember->refresh()->family_payer_id)->toBeNull();
+});
+
+test('zero amount invoice is marked paid after sending instead of open', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    $tenant = Tenant::create([
+        'name' => 'Nullverein',
+        'slug' => 'nullverein',
+        'email' => 'nullverein@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'recipient_type' => 'free',
+        'recipient_name' => 'Max Muster',
+        'recipient_email' => 'max@example.test',
+        'recipient_street' => 'Musterstrasse 1',
+        'recipient_zip' => '12345',
+        'recipient_city' => 'Musterstadt',
+        'recipient_country' => 'Deutschland',
+        'invoice_number' => 'R-NULL-001',
+        'invoice_date' => now()->toDateString(),
+        'due_date' => now()->addDays(14)->toDateString(),
+        'status' => 'entwurf',
+        'discount' => 0,
+        'tax_rate' => 0,
+        'total' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Kostenfreie Teilnahme',
+        'quantity' => 1,
+        'unit' => 'Pauschale',
+        'unit_price' => 0,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('invoices.send', $invoice))
+        ->assertRedirect(route('invoices.show', $invoice));
+
+    $invoice->refresh();
+
+    expect($invoice->status)->toBe('paid');
+    expect($invoice->paid_at)->not->toBeNull();
 });

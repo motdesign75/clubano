@@ -1051,7 +1051,13 @@ class InvoiceController extends Controller
             });
 
             if ($invoice->status === 'entwurf' && $invoice->isInvoice()) {
-                $invoice->forceFill(['status' => 'open'])->save();
+                $invoice->forceFill(
+                    $invoice->getTotal() <= 0
+                        ? ['status' => 'paid', 'paid_at' => now()]
+                        : ['status' => 'open']
+                )->save();
+
+                $this->syncEventBookingPaymentStatus($invoice);
             }
         } catch (\Throwable $e) {
             $dispatchLog->delete();
