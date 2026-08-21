@@ -1,12 +1,15 @@
 <?php
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
+use App\Models\Account;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Member;
 use App\Models\MemberCredit;
 use App\Models\Membership;
+use App\Models\Payment;
 use App\Models\Tenant;
+use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 
@@ -612,4 +615,220 @@ test('zero amount invoice is marked paid after sending instead of open', functio
 
     expect($invoice->status)->toBe('paid');
     expect($invoice->paid_at)->not->toBeNull();
+});
+
+test('existing zero amount invoice can be completed without booking a zero payment', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Nullbestand',
+        'slug' => 'nullbestand',
+        'email' => 'nullbestand@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'recipient_type' => 'free',
+        'recipient_name' => 'Max Muster',
+        'recipient_email' => 'max@example.test',
+        'recipient_street' => 'Musterstrasse 1',
+        'recipient_zip' => '12345',
+        'recipient_city' => 'Musterstadt',
+        'recipient_country' => 'Deutschland',
+        'invoice_number' => 'R-NULL-ALT',
+        'invoice_date' => now()->toDateString(),
+        'due_date' => now()->addDays(14)->toDateString(),
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+        'total' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Kostenfreie Teilnahme',
+        'quantity' => 1,
+        'unit' => 'Pauschale',
+        'unit_price' => 0,
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('payments.create', $invoice))
+        ->assertRedirect(route('invoices.show', $invoice));
+
+    $invoice->refresh();
+
+    expect($invoice->status)->toBe('paid');
+    expect($invoice->paid_at)->not->toBeNull();
+    expect(Payment::query()->where('invoice_id', $invoice->id)->exists())->toBeFalse();
+    expect(Transaction::query()->where('tenant_id', $tenant->id)->exists())->toBeFalse();
+});
+
+test('partial invoice payment keeps invoice open and shows remaining amount', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Teilzahlungsverein',
+        'slug' => 'teilzahlungsverein',
+        'email' => 'teilzahlung@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Tina',
+        'last_name' => 'Teilzahlung',
+        'email' => 'tina@example.test',
+    ]);
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'active' => true,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8000',
+        'name' => 'Mitgliederbeiträge',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'active' => true,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'member_id' => $member->id,
+        'income_account_id' => $income->id,
+        'recipient_type' => 'member',
+        'recipient_name' => 'Tina Teilzahlung',
+        'recipient_email' => 'tina@example.test',
+        'invoice_number' => 'R-TEIL-001',
+        'invoice_date' => now()->toDateString(),
+        'due_date' => now()->addDays(14)->toDateString(),
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Mitgliedsbeitrag',
+        'quantity' => 1,
+        'unit' => 'Pauschale',
+        'unit_price' => 100,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('payments.store', $invoice), [
+            'account_id' => $bank->id,
+            'income_account_id' => $income->id,
+            'amount' => 60,
+            'payment_date' => now()->toDateString(),
+            'note' => 'Teilzahlung',
+        ])
+        ->assertRedirect(route('invoices.show', $invoice));
+
+    $invoice->refresh();
+
+    expect($invoice->status)->toBe('open');
+    expect($invoice->getPaidAmount())->toBe(60.0);
+    expect($invoice->getRemainingAmount())->toBe(40.0);
+    expect(MemberCredit::query()->where('member_id', $member->id)->exists())->toBeFalse();
+});
+
+test('overpaid invoice is marked paid and creates member credit', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Guthabenverein',
+        'slug' => 'guthabenverein',
+        'email' => 'guthaben@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Olga',
+        'last_name' => 'Überzahlung',
+        'email' => 'olga@example.test',
+    ]);
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'active' => true,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8000',
+        'name' => 'Mitgliederbeiträge',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'active' => true,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'member_id' => $member->id,
+        'income_account_id' => $income->id,
+        'recipient_type' => 'member',
+        'recipient_name' => 'Olga Überzahlung',
+        'recipient_email' => 'olga@example.test',
+        'invoice_number' => 'R-PLUS-001',
+        'invoice_date' => now()->toDateString(),
+        'due_date' => now()->addDays(14)->toDateString(),
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Mitgliedsbeitrag',
+        'quantity' => 1,
+        'unit' => 'Pauschale',
+        'unit_price' => 100,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('payments.store', $invoice), [
+            'account_id' => $bank->id,
+            'income_account_id' => $income->id,
+            'amount' => 120,
+            'payment_date' => now()->toDateString(),
+            'note' => 'Zu viel überwiesen',
+        ])
+        ->assertRedirect(route('invoices.show', $invoice));
+
+    $invoice->refresh();
+    $credit = MemberCredit::query()->where('member_id', $member->id)->firstOrFail();
+
+    expect($invoice->status)->toBe('paid');
+    expect($invoice->paid_at)->not->toBeNull();
+    expect($invoice->getPaidAmount())->toBe(120.0);
+    expect($invoice->getOverpaidAmount())->toBe(20.0);
+    expect((float) $credit->amount)->toBe(20.0);
+    expect((float) $credit->remaining_amount)->toBe(20.0);
 });

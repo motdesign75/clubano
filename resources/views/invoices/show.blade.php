@@ -11,6 +11,10 @@
         $reminderCount = $reminderCount ?? 0;
         $lastReminderLog = $lastReminderLog ?? null;
         $nextReminderLabel = $nextReminderLabel ?? 'Zahlungserinnerung';
+        $paidAmount = $invoice->getPaidAmount();
+        $remainingAmount = $invoice->getRemainingAmount();
+        $overpaidAmount = $invoice->getOverpaidAmount();
+        $overpaymentIsMemberCredit = $overpaidAmount > 0 && filled($invoice->member_id);
     @endphp
     <div class="mx-auto max-w-6xl space-y-6 px-4 py-6">
         @if (session('success'))
@@ -255,6 +259,67 @@
                         </div>
                     </div>
                 </div>
+
+                @if($invoice->isInvoice())
+                    <div class="rounded-3xl border {{ $overpaidAmount > 0 ? 'border-sky-200 bg-sky-50' : ($remainingAmount > 0 && $paidAmount > 0 ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white') }} p-6 shadow-sm">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <div class="text-xs font-semibold uppercase tracking-[0.18em] {{ $overpaidAmount > 0 ? 'text-sky-700' : ($remainingAmount > 0 && $paidAmount > 0 ? 'text-amber-700' : 'text-slate-400') }}">Zahlungsstand</div>
+                                <h2 class="mt-2 text-lg font-semibold text-slate-950">
+                                    @if($overpaidAmount > 0)
+                                        Überzahlung erkannt
+                                    @elseif($remainingAmount > 0 && $paidAmount > 0)
+                                        Teilzahlung erfasst
+                                    @elseif($invoice->status === 'paid')
+                                        Rechnung erledigt
+                                    @else
+                                        Noch kein Zahlungseingang
+                                    @endif
+                                </h2>
+                                <p class="mt-2 text-sm text-slate-600">
+                                    @if($overpaidAmount > 0)
+                                        @if($overpaymentIsMemberCredit)
+                                            Der zu viel gezahlte Betrag bleibt als Guthaben beim Mitglied nachvollziehbar.
+                                        @else
+                                            Der zu viel gezahlte Betrag muss manuell geklärt werden, weil diese Rechnung keinem Mitglied zugeordnet ist.
+                                        @endif
+                                    @elseif($remainingAmount > 0 && $paidAmount > 0)
+                                        Die Rechnung bleibt offen, bis der Restbetrag vollständig ausgeglichen ist.
+                                    @elseif($invoice->status === 'paid')
+                                        Für diese Rechnung ist kein offener Betrag mehr vorhanden.
+                                    @else
+                                        Sobald eine Zahlung erfasst wird, zeigt Clubano hier den Restbetrag.
+                                    @endif
+                                </p>
+                            </div>
+
+                            @if($invoice->status !== 'paid' && $invoice->status !== 'storniert')
+                                <a href="{{ route('payments.create', $invoice) }}" class="inline-flex min-h-11 items-center justify-center rounded-full bg-slate-950 px-5 text-sm font-semibold text-white transition hover:bg-slate-800">
+                                    Zahlung erfassen
+                                </a>
+                            @endif
+                        </div>
+
+                        <div class="mt-5 grid gap-3 sm:grid-cols-2">
+                            <div class="rounded-2xl bg-white/70 px-4 py-3">
+                                <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Rechnungsbetrag</div>
+                                <div class="mt-1 text-xl font-semibold text-slate-950">{{ number_format($invoice->getTotal(), 2, ',', '.') }} €</div>
+                            </div>
+                            <div class="rounded-2xl bg-white/70 px-4 py-3">
+                                <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Gezahlt</div>
+                                <div class="mt-1 text-xl font-semibold text-slate-950">{{ number_format($paidAmount, 2, ',', '.') }} €</div>
+                            </div>
+                            <div class="rounded-2xl bg-white/70 px-4 py-3">
+                                <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Noch offen</div>
+                                <div class="mt-1 text-xl font-semibold {{ $remainingAmount > 0 ? 'text-amber-800' : 'text-emerald-800' }}">{{ number_format($remainingAmount, 2, ',', '.') }} €</div>
+                            </div>
+                            <div class="rounded-2xl bg-white/70 px-4 py-3">
+                                <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Guthaben</div>
+                                <div class="mt-1 text-xl font-semibold {{ $overpaidAmount > 0 ? 'text-sky-800' : 'text-slate-950' }}">{{ number_format($overpaidAmount, 2, ',', '.') }} €</div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
 
                 <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                     <h2 class="text-lg font-semibold text-slate-900">Texte der Rechnung</h2>

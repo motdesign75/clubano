@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Payment;
 use App\Models\Invoice;
 use App\Models\Account;
+use App\Models\MemberCredit;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -27,6 +28,17 @@ class PaymentController extends Controller
         );
 
         $invoice->loadMissing(['items', 'eventBookings', 'incomeAccount']);
+
+        if ($invoice->isInvoice()
+            && ! in_array($invoice->status, ['paid', 'storniert'], true)
+            && $invoice->getTotal() <= 0
+        ) {
+            $invoice->markAsPaid();
+
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with('success', 'Diese 0,00-EUR-Rechnung wurde ohne Zahlungseingang als erledigt markiert.');
+        }
 
         $accounts = Account::where('tenant_id', auth()->user()->tenant_id)
             ->whereIn('type', ['bank', 'kasse'])
@@ -96,6 +108,12 @@ class PaymentController extends Controller
             $invoice->forceFill(['income_account_id' => $incomeAccount->id])->save();
         }
 
+        $invoiceTotal = round((float) $invoice->getTotal(), 2);
+        $paidBefore = round((float) $invoice->payments()->sum('amount'), 2);
+        $paymentAmount = round((float) $validated['amount'], 2);
+        $paidAfter = round($paidBefore + $paymentAmount, 2);
+        $overpaymentFromThisPayment = round(max(0, $paidAfter - max($invoiceTotal, $paidBefore)), 2);
+
 
         /*
         |--------------------------------------------------------------------------
@@ -109,7 +127,7 @@ class PaymentController extends Controller
             'invoice_id'   => $invoice->id,
             'account_id'   => $account->id,
 
-            'amount'       => $validated['amount'],
+            'amount'       => $paymentAmount,
             'payment_date' => $validated['payment_date'],
             'note'         => $validated['note'],
 
@@ -134,7 +152,7 @@ class PaymentController extends Controller
             'account_from_id' => $incomeAccount->id,
             'account_to_id'   => $account->id,
 
-            'amount' => $validated['amount'],
+            'amount' => $paymentAmount,
             'tax_area' => $incomeAccount->tax_area ?: 'ideell',
 
             'date' => $validated['payment_date'],
@@ -166,18 +184,39 @@ if ($toAccount) {
         |--------------------------------------------------------------------------
         */
 
-        $paid = $invoice->payments()->sum('amount');
-
-        if ($paid >= $invoice->getTotal()) {
-
+        if ($paidAfter >= $invoiceTotal) {
             $invoice->markAsPaid();
+        }
 
+        $successMessage = 'Zahlung gebucht.';
+
+        if ($overpaymentFromThisPayment > 0 && $invoice->member_id) {
+            MemberCredit::create([
+                'tenant_id' => $tenantId,
+                'member_id' => $invoice->member_id,
+                'created_by' => auth()->id(),
+                'description' => 'Überzahlung Rechnung ' . $invoice->invoice_number,
+                'notes' => 'Automatisch aus einer Überzahlung beim Zahlungseingang erstellt.',
+                'amount' => $overpaymentFromThisPayment,
+                'remaining_amount' => $overpaymentFromThisPayment,
+                'credited_at' => $validated['payment_date'],
+            ]);
+
+            $successMessage = 'Zahlung gebucht. Überzahlung von ' . number_format($overpaymentFromThisPayment, 2, ',', '.') . ' EUR wurde als Guthaben beim Mitglied gespeichert.';
+        } elseif ($overpaymentFromThisPayment > 0) {
+            $successMessage = 'Zahlung gebucht. Überzahlung von ' . number_format($overpaymentFromThisPayment, 2, ',', '.') . ' EUR erkannt. Bitte manuell klären.';
+        } elseif ($paidAfter < $invoiceTotal) {
+            $successMessage = 'Teilzahlung gebucht. Restbetrag: ' . number_format($invoiceTotal - $paidAfter, 2, ',', '.') . ' EUR.';
+        } elseif ($invoiceTotal <= 0) {
+            $successMessage = 'Rechnung ohne offenen Betrag erledigt.';
+        } else {
+            $successMessage = 'Zahlung gebucht. Rechnung ist bezahlt.';
         }
 
 
         return redirect()
             ->route('invoices.show', $invoice)
-            ->with('success', 'Zahlung gebucht');
+            ->with('success', $successMessage);
 
     }
 

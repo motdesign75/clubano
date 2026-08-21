@@ -154,6 +154,40 @@ class Invoice extends Model
         return round($this->getNetTotal() + $this->getTaxAmount(), 2);
     }
 
+    public function getPaidAmount(): float
+    {
+        $paid = $this->relationLoaded('payments')
+            ? $this->payments->sum('amount')
+            : $this->payments()->sum('amount');
+
+        return round((float) $paid, 2);
+    }
+
+    public function getRemainingAmount(): float
+    {
+        return round(max(0, $this->getTotal() - $this->getPaidAmount()), 2);
+    }
+
+    public function getOverpaidAmount(): float
+    {
+        return round(max(0, $this->getPaidAmount() - $this->getTotal()), 2);
+    }
+
+    public function isPartiallyPaid(): bool
+    {
+        $paid = $this->getPaidAmount();
+
+        return $this->isInvoice()
+            && $this->status === 'open'
+            && $paid > 0
+            && $paid < $this->getTotal();
+    }
+
+    public function hasOverpayment(): bool
+    {
+        return $this->getOverpaidAmount() > 0;
+    }
+
     public function isPaid(): bool
     {
         return $this->status === 'paid';
