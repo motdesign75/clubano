@@ -434,7 +434,9 @@ table.entries tbody tr:last-child td {
                     : ($t->status === 'abgeschlossen' ? 'Abgeschlossen' : 'Offen');
                 $receiptLabel = $t->hasOwnReceipt()
                     ? 'Eigenbeleg'
-                    : ($t->receipt_number ?: ($t->hasSystemReceipt() ? 'Clubano' : 'Fehlt'));
+                    : ($t->hasContractReceipt()
+                        ? 'Vertrag/Dauerbeleg'
+                        : ($t->receipt_number ?: ($t->hasSystemReceipt() ? 'Clubano' : 'Fehlt')));
                 $missingReceipt = !$t->hasAnyReceipt();
                 $amountClass = $isExpense ? 'amount-expense' : 'amount-income';
                 $amountPrefix = $isExpense ? '-' : '';

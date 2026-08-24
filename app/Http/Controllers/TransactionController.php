@@ -68,6 +68,9 @@ class TransactionController extends Controller
             })->where(function ($query) {
                 $query->where('description', 'not like', 'Zahlung Rechnung %')
                     ->where('description', 'not like', 'Zahlung Angebot %');
+            })->where(function ($query) {
+                $query->whereNull('receipt_kind')
+                    ->orWhere('receipt_kind', '!=', 'vertrag');
             });
         }
 
@@ -309,6 +312,47 @@ class TransactionController extends Controller
         return back()->with('success', $finalizedCount . ' Buchung(en) wurden abgeschlossen.');
     }
 
+    public function contractReceiptSelected(Request $request)
+    {
+        $validated = $request->validate([
+            'transaction_ids' => ['required', 'array', 'min:1'],
+            'transaction_ids.*' => ['integer'],
+            'contract_reference' => ['required', 'string', 'max:255'],
+            'contract_location' => ['nullable', 'string', 'max:255'],
+            'contract_date' => ['nullable', 'date'],
+        ]);
+
+        $transactions = Transaction::forCurrentTenant()
+            ->whereIn('id', $validated['transaction_ids'])
+            ->get();
+
+        if ($transactions->isEmpty()) {
+            return back()->with('error', 'Keine passenden Buchungen gefunden.');
+        }
+
+        $updatedCount = 0;
+
+        foreach ($transactions as $transaction) {
+            if ($transaction->isCancelled() || $transaction->hasAnyReceipt()) {
+                continue;
+            }
+
+            $transaction->forceFill([
+                'receipt_kind' => 'vertrag',
+                'receipt_meta' => $this->contractReceiptMeta($validated),
+                'updated_by' => auth()->id(),
+            ])->save();
+
+            $updatedCount++;
+        }
+
+        if ($updatedCount === 0) {
+            return back()->with('error', 'Keine markierten Buchungen konnten als Vertragsnachweis aktualisiert werden.');
+        }
+
+        return back()->with('success', $updatedCount . ' Buchung(en) wurden als Vertrag/Dauerbeleg markiert.');
+    }
+
     public function updateJournalCheck(Request $request, Transaction $transaction)
     {
         $this->authorizeTransaction($transaction);
@@ -454,6 +498,10 @@ class TransactionController extends Controller
             'account_to_id' => ['required', 'different:account_from_id', Rule::exists('accounts', 'id')->where('tenant_id', $tenantId)],
             'tax_area' => ['required', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
+            'receipt_kind' => ['nullable', Rule::in(['none', 'vertrag'])],
+            'contract_reference' => ['nullable', 'required_if:receipt_kind,vertrag', 'string', 'max:255'],
+            'contract_location' => ['nullable', 'string', 'max:255'],
+            'contract_date' => ['nullable', 'date'],
         ]);
 
         $affectedAccountIds = collect([
@@ -487,6 +535,21 @@ class TransactionController extends Controller
                     'public'
                 ),
                 'receipt_kind' => 'upload',
+                'receipt_meta' => null,
+            ]);
+        } elseif (($validated['receipt_kind'] ?? 'none') === 'vertrag') {
+            if ($transaction->receipt_file && Storage::disk('public')->exists($transaction->receipt_file)) {
+                Storage::disk('public')->delete($transaction->receipt_file);
+            }
+
+            $transaction->update([
+                'receipt_file' => null,
+                'receipt_kind' => 'vertrag',
+                'receipt_meta' => $this->contractReceiptMeta($validated),
+            ]);
+        } elseif (($validated['receipt_kind'] ?? null) === 'none' && $transaction->hasContractReceipt()) {
+            $transaction->update([
+                'receipt_kind' => null,
                 'receipt_meta' => null,
             ]);
         }
@@ -604,6 +667,9 @@ class TransactionController extends Controller
             })->where(function ($query) {
                 $query->where('description', 'not like', 'Zahlung Rechnung %')
                     ->where('description', 'not like', 'Zahlung Angebot %');
+            })->where(function ($query) {
+                $query->whereNull('receipt_kind')
+                    ->orWhere('receipt_kind', '!=', 'vertrag');
             });
         }
 
@@ -1002,6 +1068,10 @@ class TransactionController extends Controller
             'status' => ['required', Rule::in(['entwurf', 'abgeschlossen'])],
             'tax_area' => ['required', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
+            'receipt_kind' => ['nullable', Rule::in(['none', 'vertrag'])],
+            'contract_reference' => ['nullable', 'required_if:receipt_kind,vertrag', 'string', 'max:255'],
+            'contract_location' => ['nullable', 'string', 'max:255'],
+            'contract_date' => ['nullable', 'date'],
         ]);
 
         $latest = Transaction::orderBy('id', 'desc')->first();
@@ -1030,6 +1100,9 @@ class TransactionController extends Controller
             );
             $transaction->receipt_kind = 'upload';
             $transaction->receipt_meta = null;
+        } elseif (($validated['receipt_kind'] ?? 'none') === 'vertrag') {
+            $transaction->receipt_kind = 'vertrag';
+            $transaction->receipt_meta = $this->contractReceiptMeta($validated);
         }
 
         if (
@@ -1057,6 +1130,17 @@ class TransactionController extends Controller
         if (!$transaction || $transaction->tenant_id != auth()->user()->tenant_id) {
             abort(403, 'Kein Zugriff auf diese Buchung.');
         }
+    }
+
+    private function contractReceiptMeta(array $validated): array
+    {
+        return [
+            'contract_reference' => trim((string) ($validated['contract_reference'] ?? '')),
+            'contract_location' => blank($validated['contract_location'] ?? null) ? null : trim((string) $validated['contract_location']),
+            'contract_date' => blank($validated['contract_date'] ?? null) ? null : $validated['contract_date'],
+            'marked_at' => now()->toIso8601String(),
+            'marked_by' => auth()->id(),
+        ];
     }
 
     protected function recalculateAccountBalances(string $tenantId, iterable $accountIds): void

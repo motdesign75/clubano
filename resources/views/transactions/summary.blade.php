@@ -215,6 +215,8 @@
                             <td class="px-4 py-4">
                                 @if($transaction->hasOwnReceipt())
                                     <span class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">Eigenbeleg</span>
+                                @elseif($transaction->hasContractReceipt())
+                                    <span class="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">Vertrag/Dauerbeleg</span>
                                 @elseif($transaction->receipt_file)
                                     <span class="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">Beleg vorhanden</span>
                                 @elseif($transaction->hasSystemReceipt())
@@ -256,6 +258,8 @@
                     <div class="mt-3">
                         @if($transaction->hasOwnReceipt())
                             <span class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">Eigenbeleg</span>
+                        @elseif($transaction->hasContractReceipt())
+                            <span class="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">Vertrag/Dauerbeleg</span>
                         @elseif($transaction->receipt_file)
                             <span class="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">Beleg vorhanden</span>
                         @elseif($transaction->hasSystemReceipt())

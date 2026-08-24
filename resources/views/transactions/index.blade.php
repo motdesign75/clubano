@@ -257,6 +257,54 @@
             </div>
         @endif
 
+        @if($missingReceiptCount > 0)
+            <div class="rounded-2xl border border-indigo-200 bg-indigo-50/60 px-4 py-4 shadow-sm">
+                <div class="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto] xl:items-end">
+                    <div class="xl:col-span-4">
+                        <div class="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-700">Sammelaktion</div>
+                        <div class="mt-1 text-sm text-indigo-900">
+                            Markiere Buchungen ohne Beleg und hinterlege einmalig den Vertrag oder Dauerbeleg, der fuer diese Zahlungen gilt.
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="bulk_contract_reference" class="mb-1 block text-sm font-medium text-indigo-900">Vertrag / Grundlage</label>
+                        <input id="bulk_contract_reference"
+                               name="contract_reference"
+                               type="text"
+                               value="{{ old('contract_reference') }}"
+                               class="w-full rounded-xl border-indigo-200 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-300"
+                               placeholder="z. B. Mietvertrag Vereinsheim">
+                    </div>
+
+                    <div>
+                        <label for="bulk_contract_location" class="mb-1 block text-sm font-medium text-indigo-900">Ablageort</label>
+                        <input id="bulk_contract_location"
+                               name="contract_location"
+                               type="text"
+                               value="{{ old('contract_location') }}"
+                               class="w-full rounded-xl border-indigo-200 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-300"
+                               placeholder="z. B. Dokumente / Verträge">
+                    </div>
+
+                    <div>
+                        <label for="bulk_contract_date" class="mb-1 block text-sm font-medium text-indigo-900">Vertragsdatum</label>
+                        <input id="bulk_contract_date"
+                               name="contract_date"
+                               type="date"
+                               value="{{ old('contract_date') }}"
+                               class="w-full rounded-xl border-indigo-200 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-300">
+                    </div>
+
+                    <button type="submit"
+                            formaction="{{ route('transactions.contract-receipt-selected') }}"
+                            class="inline-flex w-full items-center justify-center rounded-xl bg-indigo-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-800 xl:w-auto">
+                        Markierte als Vertrag markieren
+                    </button>
+                </div>
+            </div>
+        @endif
+
     <div class="hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:block">
         <div class="grid grid-cols-[72px_minmax(0,2.25fr)_230px_220px_130px] gap-0 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <div class="text-center">Mark.</div>
@@ -307,7 +355,7 @@
             @endphp
             <article class="grid grid-cols-[72px_minmax(0,2.25fr)_230px_220px_130px] gap-0 border-b border-slate-100 px-4 py-4 transition hover:bg-slate-50/80 last:border-b-0">
                 <div class="flex items-start justify-center pt-1">
-                    @if($transaction->status === 'entwurf' && !$isStorno)
+                    @if(!$isStorno && ($transaction->status === 'entwurf' || !$transaction->hasAnyReceipt()))
                         <input type="checkbox"
                                name="transaction_ids[]"
                                value="{{ $transaction->id }}"
@@ -340,6 +388,10 @@
                                     <span class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
                                         Eigenbeleg
                                     </span>
+                                @elseif($transaction->hasContractReceipt())
+                                    <span class="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                                        Vertrag/Dauerbeleg
+                                    </span>
                                 @elseif($transaction->receipt_file)
                                     <span class="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
                                         Beleg
@@ -354,6 +406,9 @@
                                     </span>
                                 @endif
                             </div>
+                            @if($transaction->receiptEvidenceDetail())
+                                <div class="mt-2 text-xs text-slate-500">{{ $transaction->receiptEvidenceDetail() }}</div>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -558,7 +613,7 @@
                             <span class="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">Offen</span>
                         @endif
                     </div>
-                    @if($transaction->status === 'entwurf' && !$isStorno)
+                    @if(!$isStorno && ($transaction->status === 'entwurf' || !$transaction->hasAnyReceipt()))
                         <label class="inline-flex items-center gap-2 text-xs text-slate-500">
                             <input type="checkbox"
                                    name="transaction_ids[]"
@@ -581,6 +636,10 @@
                             <span class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
                                 Eigenbeleg
                             </span>
+                        @elseif($transaction->hasContractReceipt())
+                            <span class="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 font-medium text-indigo-700">
+                                Vertrag/Dauerbeleg
+                            </span>
                         @elseif($transaction->receipt_file)
                             <span class="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-medium text-blue-700">
                                 Beleg vorhanden
@@ -595,6 +654,9 @@
                             </span>
                         @endif
                     </div>
+                    @if($transaction->receiptEvidenceDetail())
+                        <div class="text-xs text-slate-500">{{ $transaction->receiptEvidenceDetail() }}</div>
+                    @endif
                     @if($transaction->updated_by && $transaction->updated_by !== $transaction->created_by)
                         <div class="text-xs text-slate-500">
                             Zuletzt geändert von {{ $transaction->updater?->name ?? 'Unbekannt' }}

@@ -158,9 +158,50 @@ class Transaction extends Model
             || str_starts_with((string) $this->receipt_file, 'receipts/' . $this->tenant_id . '/eigenbelege/');
     }
 
+    public function hasContractReceipt(): bool
+    {
+        return $this->receipt_kind === 'vertrag';
+    }
+
     public function hasAnyReceipt(): bool
     {
-        return !empty($this->receipt_file) || $this->hasSystemReceipt();
+        return !empty($this->receipt_file) || $this->hasSystemReceipt() || $this->hasContractReceipt();
+    }
+
+    public function receiptEvidenceLabel(): string
+    {
+        if ($this->hasOwnReceipt()) {
+            return 'Eigenbeleg';
+        }
+
+        if ($this->hasContractReceipt()) {
+            return 'Vertrag/Dauerbeleg';
+        }
+
+        if (!empty($this->receipt_file)) {
+            return 'Beleg vorhanden';
+        }
+
+        if ($this->hasSystemReceipt()) {
+            return 'Clubano-Rechnung vorhanden';
+        }
+
+        return 'Beleg fehlt';
+    }
+
+    public function receiptEvidenceDetail(): ?string
+    {
+        if (! $this->hasContractReceipt()) {
+            return null;
+        }
+
+        $meta = $this->receipt_meta ?? [];
+        $parts = array_filter([
+            $meta['contract_reference'] ?? null,
+            $meta['contract_location'] ?? null,
+        ]);
+
+        return $parts ? implode(' · ', $parts) : null;
     }
 
     public function isJournalReviewed(): bool

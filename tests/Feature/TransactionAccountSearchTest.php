@@ -267,3 +267,147 @@ test('account balances can be recalculated from finalized transactions', functio
     expect((float) $bank->refresh()->balance_current)->toBe(380.38)
         ->and((float) $income->refresh()->balance_current)->toBe(-280.38);
 });
+
+test('transactions can use a contract as recurring receipt evidence', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $rent = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4210',
+        'name' => 'Miete Vereinsheim',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'date' => '2026-08-01',
+            'description' => 'Miete Vereinsheim August',
+            'amount' => 450,
+            'account_from_id' => $bank->id,
+            'account_to_id' => $rent->id,
+            'status' => 'entwurf',
+            'tax_area' => 'ideell',
+            'receipt_kind' => 'vertrag',
+            'contract_reference' => 'Mietvertrag Vereinsheim',
+            'contract_location' => 'Dokumente / Verträge',
+            'contract_date' => '2026-01-01',
+        ])
+        ->assertRedirect(route('transactions.index'));
+
+    $transaction = Transaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('description', 'Miete Vereinsheim August')
+        ->first();
+
+    expect($transaction)->not->toBeNull()
+        ->and($transaction->receipt_kind)->toBe('vertrag')
+        ->and($transaction->hasAnyReceipt())->toBeTrue()
+        ->and($transaction->receiptEvidenceDetail())->toBe('Mietvertrag Vereinsheim · Dokumente / Verträge');
+
+    $this->actingAs($user)
+        ->get(route('transactions.index', ['filter' => 'missing_receipt']))
+        ->assertOk()
+        ->assertDontSee('Miete Vereinsheim August');
+});
+
+test('missing receipts can be bulk marked as contract evidence', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $rent = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4210',
+        'name' => 'Miete Vereinsheim',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $august = Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-08-01',
+        'description' => 'Miete August',
+        'amount' => 450,
+        'account_from_id' => $bank->id,
+        'account_to_id' => $rent->id,
+        'tax_area' => 'ideell',
+        'receipt_number' => 'TRX-MIETE-08',
+        'status' => 'abgeschlossen',
+        'finalized_at' => now(),
+        'finalized_by' => $user->id,
+    ]);
+
+    $september = Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-09-01',
+        'description' => 'Miete September',
+        'amount' => 450,
+        'account_from_id' => $bank->id,
+        'account_to_id' => $rent->id,
+        'tax_area' => 'ideell',
+        'receipt_number' => 'TRX-MIETE-09',
+        'status' => 'entwurf',
+    ]);
+
+    $withReceipt = Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-10-01',
+        'description' => 'Miete Oktober',
+        'amount' => 450,
+        'account_from_id' => $bank->id,
+        'account_to_id' => $rent->id,
+        'tax_area' => 'ideell',
+        'receipt_number' => 'TRX-MIETE-10',
+        'receipt_file' => 'receipts/test/beleg.pdf',
+        'receipt_kind' => 'upload',
+        'status' => 'entwurf',
+    ]);
+
+    $this->actingAs($user)
+        ->from(route('transactions.index', ['filter' => 'missing_receipt']))
+        ->post(route('transactions.contract-receipt-selected'), [
+            'transaction_ids' => [$august->id, $september->id, $withReceipt->id],
+            'contract_reference' => 'Mietvertrag Vereinsheim',
+            'contract_location' => 'Dokumente / Verträge',
+            'contract_date' => '2026-01-01',
+        ])
+        ->assertRedirect(route('transactions.index', ['filter' => 'missing_receipt']))
+        ->assertSessionHas('success', '2 Buchung(en) wurden als Vertrag/Dauerbeleg markiert.');
+
+    expect($august->refresh()->receipt_kind)->toBe('vertrag')
+        ->and($september->refresh()->receipt_kind)->toBe('vertrag')
+        ->and($withReceipt->refresh()->receipt_kind)->toBe('upload');
+});

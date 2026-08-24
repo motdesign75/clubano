@@ -431,6 +431,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     $when($C.'TransactionController', function($cls){
         Route::middleware('tenant.role:finance')->group(function () use ($cls) {
             Route::post('/transactions/datev-import', [$cls, 'importDatev'])->name('transactions.datev-import');
+            Route::post('/transactions/contract-receipt-selected', [$cls, 'contractReceiptSelected'])->name('transactions.contract-receipt-selected');
             Route::resource('transactions', $cls)->except(['show', 'destroy']);
             Route::get('/kassenbuch', [$cls, 'cashbook'])->name('transactions.cashbook');
             Route::get('/kassenbuch/drucken', [$cls, 'cashbookPrint'])->name('transactions.cashbook.print');

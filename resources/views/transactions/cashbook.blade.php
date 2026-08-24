@@ -268,6 +268,10 @@
                                                 <span class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
                                                     Eigenbeleg
                                                 </span>
+                                            @elseif($transaction->hasContractReceipt())
+                                                <span class="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                                                    Vertrag/Dauerbeleg
+                                                </span>
                                             @elseif($transaction->receipt_file)
                                                 <span class="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
                                                     Beleg vorhanden
@@ -316,6 +320,8 @@
                                         <dd class="mt-1 text-slate-700">
                                             @if($transaction->hasOwnReceipt())
                                                 Eigenbeleg
+                                            @elseif($transaction->hasContractReceipt())
+                                                Vertrag/Dauerbeleg
                                             @elseif($transaction->receipt_number)
                                                 {{ $transaction->receipt_number }}
                                             @elseif($transaction->hasSystemReceipt())
@@ -415,6 +421,10 @@
                             <span class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
                                 Eigenbeleg
                             </span>
+                        @elseif($transaction->hasContractReceipt())
+                            <span class="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                                Vertrag/Dauerbeleg
+                            </span>
                         @elseif($transaction->receipt_file)
                             <span class="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
                                 Beleg vorhanden
@@ -457,6 +467,8 @@
                             <div class="mt-1 font-medium text-slate-900">
                             @if($transaction->hasOwnReceipt())
                                 Eigenbeleg
+                            @elseif($transaction->hasContractReceipt())
+                                Vertrag/Dauerbeleg
                             @elseif($transaction->receipt_number)
                                 {{ $transaction->receipt_number }}
                             @elseif($transaction->hasSystemReceipt())

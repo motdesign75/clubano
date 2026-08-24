@@ -3,6 +3,10 @@
 @section('title', 'Buchung bearbeiten')
 
 @section('content')
+@php
+    $receiptMeta = $transaction->receipt_meta ?? [];
+    $selectedReceiptKind = old('receipt_kind', $transaction->hasContractReceipt() ? 'vertrag' : 'none');
+@endphp
 
 @if ($errors->any())
     <div class="mx-auto mb-6 max-w-xl px-4 sm:px-0">
@@ -115,6 +119,54 @@
                     <input type="file"
                            name="receipt_file"
                            class="w-full text-sm" />
+
+                    <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <input type="hidden" name="receipt_kind" value="none">
+                        <label class="flex items-start gap-3">
+                            <input type="checkbox"
+                                   name="receipt_kind"
+                                   value="vertrag"
+                                   @checked($selectedReceiptKind === 'vertrag')
+                                   class="mt-1 rounded border-slate-300 text-slate-900 focus:ring-slate-800">
+                            <span>
+                                <span class="block text-sm font-semibold text-slate-900">Vertrag oder Dauerbeleg liegt vor</span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-500">
+                                    Nutze das fuer Miete, Versicherungen oder wiederkehrende Zahlungen, bei denen der Vertrag der Nachweis ist.
+                                </span>
+                            </span>
+                        </label>
+
+                        <div class="mt-4 space-y-3">
+                            <div>
+                                <label for="contract_reference" class="text-xs uppercase tracking-wide text-slate-500">Vertrag / Grundlage</label>
+                                <input id="contract_reference"
+                                       name="contract_reference"
+                                       type="text"
+                                       value="{{ old('contract_reference', $receiptMeta['contract_reference'] ?? '') }}"
+                                       class="mt-1 w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500"
+                                       placeholder="z. B. Mietvertrag Vereinsheim">
+                            </div>
+
+                            <div>
+                                <label for="contract_location" class="text-xs uppercase tracking-wide text-slate-500">Ablageort</label>
+                                <input id="contract_location"
+                                       name="contract_location"
+                                       type="text"
+                                       value="{{ old('contract_location', $receiptMeta['contract_location'] ?? '') }}"
+                                       class="mt-1 w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500"
+                                       placeholder="z. B. Dokumente / Verträge">
+                            </div>
+
+                            <div>
+                                <label for="contract_date" class="text-xs uppercase tracking-wide text-slate-500">Vertragsdatum</label>
+                                <input id="contract_date"
+                                       name="contract_date"
+                                       type="date"
+                                       value="{{ old('contract_date', $receiptMeta['contract_date'] ?? '') }}"
+                                       class="mt-1 w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500">
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-900">
                         Wenn kein externer Beleg vorliegt, kannst du stattdessen direkt einen Eigenbeleg erzeugen.

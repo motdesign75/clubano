@@ -286,6 +286,57 @@
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                             @enderror
                         </div>
+
+                        <div class="lg:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <input type="hidden" name="receipt_kind" value="none">
+                            <label class="flex items-start gap-3">
+                                <input type="checkbox"
+                                       name="receipt_kind"
+                                       value="vertrag"
+                                       @checked(old('receipt_kind') === 'vertrag')
+                                       class="mt-1 rounded border-slate-300 text-slate-900 focus:ring-slate-800">
+                                <span>
+                                    <span class="block text-sm font-semibold text-slate-900">Vertrag oder Dauerbeleg liegt vor</span>
+                                    <span class="mt-1 block text-xs leading-5 text-slate-500">
+                                        Für Miete, Versicherungen oder feste Dienstleister, bei denen nicht jeden Monat ein neuer Beleg kommt.
+                                    </span>
+                                </span>
+                            </label>
+
+                            <div class="mt-4 grid gap-4 md:grid-cols-3">
+                                <div>
+                                    <label for="contract_reference" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Vertrag / Grundlage</label>
+                                    <input id="contract_reference"
+                                           name="contract_reference"
+                                           type="text"
+                                           value="{{ old('contract_reference') }}"
+                                           class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-900 focus:ring-slate-900"
+                                           placeholder="z. B. Mietvertrag Vereinsheim">
+                                    @error('contract_reference')
+                                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                    @enderror
+                                </div>
+
+                                <div>
+                                    <label for="contract_location" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Ablageort</label>
+                                    <input id="contract_location"
+                                           name="contract_location"
+                                           type="text"
+                                           value="{{ old('contract_location') }}"
+                                           class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-900 focus:ring-slate-900"
+                                           placeholder="z. B. Dokumente / Verträge">
+                                </div>
+
+                                <div>
+                                    <label for="contract_date" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Vertragsdatum</label>
+                                    <input id="contract_date"
+                                           name="contract_date"
+                                           type="date"
+                                           value="{{ old('contract_date') }}"
+                                           class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-900 focus:ring-slate-900">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
