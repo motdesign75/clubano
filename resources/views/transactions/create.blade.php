@@ -329,6 +329,26 @@
                             </label>
 
                             <div class="mt-4 grid gap-4 md:grid-cols-3">
+                                <div class="md:col-span-3">
+                                    <label for="contract_document_id" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Gespeicherter Vertrag</label>
+                                    <select id="contract_document_id"
+                                            name="contract_document_id"
+                                            class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-900 focus:ring-slate-900">
+                                        <option value="">Keinen gespeicherten Vertrag wählen</option>
+                                        @foreach($contractDocuments as $document)
+                                            <option value="{{ $document->id }}" @selected((string) old('contract_document_id') === (string) $document->id)>
+                                                {{ $document->title }}{{ $document->document_date ? ' · ' . $document->document_date->format('d.m.Y') : '' }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">
+                                        Vertrag einmal unter Dokumente mit Kategorie „Verträge“ ablegen und hier wiederverwenden.
+                                    </p>
+                                    @error('contract_document_id')
+                                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                    @enderror
+                                </div>
+
                                 <div>
                                     <label for="contract_reference" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Vertrag / Grundlage</label>
                                     <input id="contract_reference"
@@ -336,7 +356,7 @@
                                            type="text"
                                            value="{{ old('contract_reference') }}"
                                            class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-900 focus:ring-slate-900"
-                                           placeholder="z. B. Mietvertrag Vereinsheim">
+                                           placeholder="Nur nötig, wenn kein gespeicherter Vertrag gewählt ist">
                                     @error('contract_reference')
                                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                     @enderror

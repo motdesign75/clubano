@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\Document;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Transaction;
@@ -129,7 +130,9 @@ class TransactionController extends Controller
             'filtered_count' => $summaryTransactions->count(),
         ];
 
-        return view('transactions.index', compact('transactions', 'filter', 'year', 'month', 'search', 'summary'));
+        $contractDocuments = $this->contractDocumentChoices();
+
+        return view('transactions.index', compact('transactions', 'filter', 'year', 'month', 'search', 'summary', 'contractDocuments'));
     }
 
     public function importDatev(Request $request)
@@ -325,7 +328,8 @@ class TransactionController extends Controller
         $validated = $request->validate([
             'transaction_ids' => ['required', 'array', 'min:1'],
             'transaction_ids.*' => ['integer'],
-            'contract_reference' => ['required', 'string', 'max:255'],
+            'contract_document_id' => ['nullable', Rule::exists('documents', 'id')->where('tenant_id', auth()->user()->tenant_id)->where('category', Document::CATEGORY_CONTRACTS)],
+            'contract_reference' => [Rule::requiredIf(fn () => blank($request->input('contract_document_id'))), 'nullable', 'string', 'max:255'],
             'contract_location' => ['nullable', 'string', 'max:255'],
             'contract_date' => ['nullable', 'date'],
         ]);
@@ -415,8 +419,9 @@ class TransactionController extends Controller
             ->orderBy('number')
             ->get();
         $invoices = $this->invoiceChoices($transaction->invoice_id);
+        $contractDocuments = $this->contractDocumentChoices($transaction->receipt_meta['contract_document_id'] ?? null);
 
-        return view('transactions.edit', compact('transaction', 'accounts', 'invoices'));
+        return view('transactions.edit', compact('transaction', 'accounts', 'invoices', 'contractDocuments'));
     }
 
     public function ownReceipt(Transaction $transaction)
@@ -509,7 +514,8 @@ class TransactionController extends Controller
             'tax_area' => ['required', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
             'receipt_kind' => ['nullable', Rule::in(['none', 'vertrag'])],
-            'contract_reference' => ['nullable', 'required_if:receipt_kind,vertrag', 'string', 'max:255'],
+            'contract_document_id' => ['nullable', Rule::exists('documents', 'id')->where('tenant_id', $tenantId)->where('category', Document::CATEGORY_CONTRACTS)],
+            'contract_reference' => [Rule::requiredIf(fn () => ($request->input('receipt_kind') === 'vertrag') && blank($request->input('contract_document_id'))), 'nullable', 'string', 'max:255'],
             'contract_location' => ['nullable', 'string', 'max:255'],
             'contract_date' => ['nullable', 'date'],
         ]);
@@ -661,6 +667,7 @@ class TransactionController extends Controller
         $filter = $request->input('filter');
         $year = $request->input('year');
         $month = $request->input('month');
+        $contractDocuments = $this->contractDocumentChoices();
 
         $transactions = Transaction::forCurrentTenant()
             ->with(['account_from', 'account_to', 'creator', 'updater', 'finalizer', 'journalReviewer', 'journalReceiptChecker', 'invoice'])
@@ -728,7 +735,8 @@ class TransactionController extends Controller
             'tenant',
             'totalIncome',
             'totalExpense',
-            'saldo'
+            'saldo',
+            'contractDocuments'
         );
     }
 
@@ -1056,6 +1064,7 @@ class TransactionController extends Controller
         $incomeAccounts = $accounts->where('type', 'einnahme')->values();
         $expenseAccounts = $accounts->where('type', 'ausgabe')->values();
         $invoices = $this->invoiceChoices();
+        $contractDocuments = $this->contractDocumentChoices();
 
         $prefill = [
             'context' => $request->input('context'),
@@ -1077,6 +1086,7 @@ class TransactionController extends Controller
             'incomeAccounts',
             'expenseAccounts',
             'invoices',
+            'contractDocuments',
             'prefill',
             'guidedContext'
         ));
@@ -1097,7 +1107,8 @@ class TransactionController extends Controller
             'tax_area' => ['required', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
             'receipt_kind' => ['nullable', Rule::in(['none', 'vertrag'])],
-            'contract_reference' => ['nullable', 'required_if:receipt_kind,vertrag', 'string', 'max:255'],
+            'contract_document_id' => ['nullable', Rule::exists('documents', 'id')->where('tenant_id', $tenantId)->where('category', Document::CATEGORY_CONTRACTS)],
+            'contract_reference' => [Rule::requiredIf(fn () => ($request->input('receipt_kind') === 'vertrag') && blank($request->input('contract_document_id'))), 'nullable', 'string', 'max:255'],
             'contract_location' => ['nullable', 'string', 'max:255'],
             'contract_date' => ['nullable', 'date'],
         ]);
@@ -1169,10 +1180,26 @@ class TransactionController extends Controller
 
     private function contractReceiptMeta(array $validated): array
     {
+        $document = null;
+
+        if (! blank($validated['contract_document_id'] ?? null)) {
+            $document = Document::query()
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->where('category', Document::CATEGORY_CONTRACTS)
+                ->whereKey($validated['contract_document_id'])
+                ->first();
+        }
+
         return [
-            'contract_reference' => trim((string) ($validated['contract_reference'] ?? '')),
-            'contract_location' => blank($validated['contract_location'] ?? null) ? null : trim((string) $validated['contract_location']),
-            'contract_date' => blank($validated['contract_date'] ?? null) ? null : $validated['contract_date'],
+            'contract_document_id' => $document?->id,
+            'contract_document_title' => $document?->title,
+            'contract_reference' => trim((string) (($validated['contract_reference'] ?? null) ?: $document?->title ?: '')),
+            'contract_location' => blank($validated['contract_location'] ?? null)
+                ? ($document ? 'Dokumentenablage / Verträge' : null)
+                : trim((string) $validated['contract_location']),
+            'contract_date' => blank($validated['contract_date'] ?? null)
+                ? $document?->document_date?->toDateString()
+                : $validated['contract_date'],
             'marked_at' => now()->toIso8601String(),
             'marked_by' => auth()->id(),
         ];
@@ -1297,6 +1324,22 @@ class TransactionController extends Controller
             ->orderByDesc('invoice_date')
             ->orderByDesc('id')
             ->limit(200)
+            ->get();
+    }
+
+    private function contractDocumentChoices(?int $selectedDocumentId = null)
+    {
+        return Document::query()
+            ->where('tenant_id', auth()->user()->tenant_id)
+            ->where('category', Document::CATEGORY_CONTRACTS)
+            ->whereNull('archived_at')
+            ->when($selectedDocumentId, function ($query) use ($selectedDocumentId) {
+                $query->orWhere(function ($orQuery) use ($selectedDocumentId) {
+                    $orQuery->where('tenant_id', auth()->user()->tenant_id)
+                        ->whereKey($selectedDocumentId);
+                });
+            })
+            ->orderBy('title')
             ->get();
     }
 

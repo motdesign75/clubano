@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Account;
+use App\Models\Document;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Payment;
@@ -371,6 +372,70 @@ test('transactions can use a contract as recurring receipt evidence', function (
         ->get(route('transactions.index', ['filter' => 'missing_receipt']))
         ->assertOk()
         ->assertDontSee('Miete Vereinsheim August');
+});
+
+test('transactions can reuse a stored contract document as receipt evidence', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $rent = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4210',
+        'name' => 'Miete Vereinsheim',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $contract = Document::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'uploaded_by' => $user->id,
+        'title' => 'Mietvertrag Vereinsheim',
+        'category' => Document::CATEGORY_CONTRACTS,
+        'status' => Document::STATUS_ACTIVE,
+        'document_date' => '2026-01-01',
+        'disk' => 'local',
+        'path' => 'documents/test/mietvertrag.pdf',
+        'original_name' => 'mietvertrag.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 1234,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'date' => '2026-08-01',
+            'description' => 'Miete Vereinsheim August',
+            'amount' => 450,
+            'account_from_id' => $bank->id,
+            'account_to_id' => $rent->id,
+            'status' => 'entwurf',
+            'tax_area' => 'ideell',
+            'receipt_kind' => 'vertrag',
+            'contract_document_id' => $contract->id,
+        ])
+        ->assertRedirect(route('transactions.index'));
+
+    $transaction = Transaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('description', 'Miete Vereinsheim August')
+        ->firstOrFail();
+
+    expect($transaction->receipt_kind)->toBe('vertrag')
+        ->and($transaction->receipt_meta['contract_document_id'])->toBe($contract->id)
+        ->and($transaction->receipt_meta['contract_reference'])->toBe('Mietvertrag Vereinsheim')
+        ->and($transaction->receiptEvidenceDetail())->toBe('Mietvertrag Vereinsheim · Dokumentenablage / Verträge');
 });
 
 test('missing receipts can be bulk marked as contract evidence', function () {

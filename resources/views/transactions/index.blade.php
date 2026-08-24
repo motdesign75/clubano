@@ -259,12 +259,26 @@
 
         @if($missingReceiptCount > 0)
             <div class="rounded-2xl border border-indigo-200 bg-indigo-50/60 px-4 py-4 shadow-sm">
-                <div class="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto] xl:items-end">
-                    <div class="xl:col-span-4">
+                <div class="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.8fr)_auto] xl:items-end">
+                    <div class="xl:col-span-5">
                         <div class="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-700">Sammelaktion</div>
                         <div class="mt-1 text-sm text-indigo-900">
                             Markiere Buchungen ohne Beleg und hinterlege einmalig den Vertrag oder Dauerbeleg, der fuer diese Zahlungen gilt.
                         </div>
+                    </div>
+
+                    <div>
+                        <label for="bulk_contract_document_id" class="mb-1 block text-sm font-medium text-indigo-900">Gespeicherter Vertrag</label>
+                        <select id="bulk_contract_document_id"
+                                name="contract_document_id"
+                                class="w-full rounded-xl border-indigo-200 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-300">
+                            <option value="">Keinen gespeicherten Vertrag wählen</option>
+                            @foreach($contractDocuments as $document)
+                                <option value="{{ $document->id }}" @selected((string) old('contract_document_id') === (string) $document->id)>
+                                    {{ $document->title }}{{ $document->document_date ? ' · ' . $document->document_date->format('d.m.Y') : '' }}
+                                </option>
+                            @endforeach
+                        </select>
                     </div>
 
                     <div>
@@ -274,7 +288,7 @@
                                type="text"
                                value="{{ old('contract_reference') }}"
                                class="w-full rounded-xl border-indigo-200 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-300"
-                               placeholder="z. B. Mietvertrag Vereinsheim">
+                               placeholder="Nur nötig ohne Auswahl">
                     </div>
 
                     <div>

@@ -161,13 +161,33 @@
 
                         <div class="mt-4 space-y-3">
                             <div>
+                                <label for="contract_document_id" class="text-xs uppercase tracking-wide text-slate-500">Gespeicherter Vertrag</label>
+                                <select id="contract_document_id"
+                                        name="contract_document_id"
+                                        class="mt-1 w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500">
+                                    <option value="">Keinen gespeicherten Vertrag wählen</option>
+                                    @foreach($contractDocuments as $document)
+                                        @php
+                                            $selectedContractDocumentId = old('contract_document_id', $receiptMeta['contract_document_id'] ?? null);
+                                        @endphp
+                                        <option value="{{ $document->id }}" @selected((string) $selectedContractDocumentId === (string) $document->id)>
+                                            {{ $document->title }}{{ $document->document_date ? ' · ' . $document->document_date->format('d.m.Y') : '' }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <p class="mt-1 text-xs leading-5 text-slate-500">
+                                    Vertrag einmal unter Dokumente mit Kategorie „Verträge“ ablegen und hier wiederverwenden.
+                                </p>
+                            </div>
+
+                            <div>
                                 <label for="contract_reference" class="text-xs uppercase tracking-wide text-slate-500">Vertrag / Grundlage</label>
                                 <input id="contract_reference"
                                        name="contract_reference"
                                        type="text"
                                        value="{{ old('contract_reference', $receiptMeta['contract_reference'] ?? '') }}"
                                        class="mt-1 w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500"
-                                       placeholder="z. B. Mietvertrag Vereinsheim">
+                                       placeholder="Nur nötig, wenn kein gespeicherter Vertrag gewählt ist">
                             </div>
 
                             <div>
