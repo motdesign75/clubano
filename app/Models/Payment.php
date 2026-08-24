@@ -12,6 +12,7 @@ class Payment extends Model
     protected $fillable = [
         'tenant_id',
         'invoice_id',
+        'transaction_id',
         'account_id',
         'amount',
         'payment_date',
@@ -37,5 +38,10 @@ class Payment extends Model
     public function account()
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function transaction()
+    {
+        return $this->belongsTo(Transaction::class);
     }
 }

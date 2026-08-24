@@ -2,6 +2,9 @@
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Account;
+use App\Models\Invoice;
+use App\Models\InvoiceItem;
+use App\Models\Payment;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
@@ -159,8 +162,8 @@ test('editing a transaction recalculates old and new account balances', function
         ->assertRedirect(route('transactions.index'));
 
     expect((float) $oldBank->refresh()->balance_current)->toBe(50.0)
-        ->and((float) $newBank->refresh()->balance_current)->toBe(0.0)
-        ->and((float) $income->refresh()->balance_current)->toBe(-50.0);
+        ->and((float) $newBank->refresh()->balance_current)->toBe(25.0)
+        ->and((float) $income->refresh()->balance_current)->toBe(-75.0);
 });
 
 test('finalizing an income transaction updates the target bank account balance', function () {
@@ -213,6 +216,51 @@ test('finalizing an income transaction updates the target bank account balance',
     expect($transaction->refresh()->status)->toBe('abgeschlossen')
         ->and((float) $bank->refresh()->balance_current)->toBe(380.38)
         ->and((float) $income->refresh()->balance_current)->toBe(-280.38);
+});
+
+test('saving a draft transaction updates visible account balances', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8003',
+        'name' => 'Erlöse Maimarkt',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'online' => false,
+        'balance_start' => 0,
+        'balance_current' => 0,
+    ]);
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+        'balance_start' => 100,
+        'balance_current' => 100,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'date' => now()->toDateString(),
+            'description' => 'Offener Zahlungseingang',
+            'amount' => 42.50,
+            'account_from_id' => $income->id,
+            'account_to_id' => $bank->id,
+            'status' => 'entwurf',
+            'tax_area' => 'zweckbetrieb',
+        ])
+        ->assertRedirect(route('transactions.index'));
+
+    expect((float) $bank->refresh()->balance_current)->toBe(142.5)
+        ->and((float) $income->refresh()->balance_current)->toBe(-42.5);
 });
 
 test('account balances can be recalculated from finalized transactions', function () {
@@ -410,4 +458,169 @@ test('missing receipts can be bulk marked as contract evidence', function () {
     expect($august->refresh()->receipt_kind)->toBe('vertrag')
         ->and($september->refresh()->receipt_kind)->toBe('vertrag')
         ->and($withReceipt->refresh()->receipt_kind)->toBe('upload');
+});
+
+test('finalized transaction linked to an invoice counts as receipt and pays the invoice', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+        'balance_start' => 0,
+        'balance_current' => 0,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8006',
+        'name' => 'Mitgliedsbeiträge',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+        'balance_start' => 0,
+        'balance_current' => 0,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'income_account_id' => $income->id,
+        'recipient_type' => 'free',
+        'recipient_name' => 'Max Muster',
+        'recipient_email' => 'max@example.test',
+        'invoice_number' => 'R-TRX-001',
+        'invoice_date' => '2026-08-01',
+        'due_date' => '2026-08-15',
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Mitgliedsbeitrag',
+        'quantity' => 1,
+        'unit' => 'Pauschale',
+        'unit_price' => 100,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'date' => '2026-08-10',
+            'description' => 'Zahlung Max Muster',
+            'amount' => 100,
+            'account_from_id' => $income->id,
+            'account_to_id' => $bank->id,
+            'invoice_id' => $invoice->id,
+            'status' => 'abgeschlossen',
+            'tax_area' => 'ideell',
+        ])
+        ->assertRedirect(route('transactions.index'));
+
+    $transaction = Transaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('description', 'Zahlung Max Muster')
+        ->firstOrFail();
+
+    $payment = Payment::query()
+        ->where('tenant_id', $tenant->id)
+        ->where('transaction_id', $transaction->id)
+        ->firstOrFail();
+
+    expect($transaction->invoice_id)->toBe($invoice->id)
+        ->and($transaction->hasAnyReceipt())->toBeTrue()
+        ->and($transaction->receiptEvidenceDetail())->toBe('Rechnung R-TRX-001')
+        ->and((float) $payment->amount)->toBe(100.0)
+        ->and($invoice->refresh()->status)->toBe('paid')
+        ->and($invoice->paid_at)->not->toBeNull();
+
+    $this->actingAs($user)
+        ->get(route('transactions.index', ['filter' => 'missing_receipt']))
+        ->assertOk()
+        ->assertDontSee('Zahlung Max Muster');
+});
+
+test('draft transaction linked to an invoice pays it only after finalizing', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8006',
+        'name' => 'Mitgliedsbeiträge',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'income_account_id' => $income->id,
+        'recipient_type' => 'free',
+        'recipient_name' => 'Erika Muster',
+        'recipient_email' => 'erika@example.test',
+        'invoice_number' => 'R-TRX-002',
+        'invoice_date' => '2026-08-01',
+        'due_date' => '2026-08-15',
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Mitgliedsbeitrag',
+        'quantity' => 1,
+        'unit' => 'Pauschale',
+        'unit_price' => 80,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'date' => '2026-08-10',
+            'description' => 'Zahlung Erika Muster',
+            'amount' => 80,
+            'account_from_id' => $income->id,
+            'account_to_id' => $bank->id,
+            'invoice_id' => $invoice->id,
+            'status' => 'entwurf',
+            'tax_area' => 'ideell',
+        ])
+        ->assertRedirect(route('transactions.index'));
+
+    $transaction = Transaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('description', 'Zahlung Erika Muster')
+        ->firstOrFail();
+
+    expect(Payment::query()->where('transaction_id', $transaction->id)->exists())->toBeFalse()
+        ->and($invoice->refresh()->status)->toBe('open');
+
+    $this->actingAs($user)
+        ->post(route('transactions.finalize', $transaction))
+        ->assertSessionHas('success', 'Die Buchung wurde abgeschlossen.');
+
+    expect(Payment::query()->where('transaction_id', $transaction->id)->exists())->toBeTrue()
+        ->and($invoice->refresh()->status)->toBe('paid');
 });

@@ -25,6 +25,7 @@ class Transaction extends Model
         'receipt_file',
         'receipt_kind',
         'receipt_meta',
+        'invoice_id',
         'status',
         'finalized_at',
         'finalized_by',
@@ -106,6 +107,16 @@ class Transaction extends Model
         return $this->belongsTo(User::class, 'journal_receipt_checked_by');
     }
 
+    public function invoice()
+    {
+        return $this->belongsTo(Invoice::class);
+    }
+
+    public function payment()
+    {
+        return $this->hasOne(Payment::class);
+    }
+
     /**
      * Scope: Filter für aktuellen Mandanten
      */
@@ -147,7 +158,9 @@ class Transaction extends Model
 
     public function hasSystemReceipt(): bool
     {
-        return str_starts_with((string) $this->description, 'Zahlung Rechnung ')
+        return ! empty($this->invoice_id)
+            || $this->receipt_kind === 'system_invoice'
+            || str_starts_with((string) $this->description, 'Zahlung Rechnung ')
             || str_starts_with((string) $this->description, 'Zahlung Angebot ');
     }
 
@@ -191,6 +204,13 @@ class Transaction extends Model
 
     public function receiptEvidenceDetail(): ?string
     {
+        if ($this->hasSystemReceipt()) {
+            $invoiceNumber = $this->invoice?->invoice_number
+                ?: ($this->receipt_meta['invoice_number'] ?? null);
+
+            return $invoiceNumber ? 'Rechnung ' . $invoiceNumber : null;
+        }
+
         if (! $this->hasContractReceipt()) {
             return null;
         }

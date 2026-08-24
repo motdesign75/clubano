@@ -120,6 +120,29 @@
                            name="receipt_file"
                            class="w-full text-sm" />
 
+                    <div class="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                        <label for="invoice_id" class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Zahlung zu Clubano-Rechnung</label>
+                        <select id="invoice_id"
+                                name="invoice_id"
+                                class="mt-1 w-full rounded-xl border-emerald-200 bg-white text-sm shadow-sm focus:border-emerald-600 focus:ring-emerald-600">
+                            <option value="">Keine Rechnung verknüpfen</option>
+                            @foreach($invoices as $invoice)
+                                @php
+                                    $total = (float) $invoice->getTotal();
+                                    $paid = (float) ($invoice->paid_amount ?? 0);
+                                    $remaining = max($total - $paid, 0);
+                                    $selectedInvoiceId = old('invoice_id', $transaction->invoice_id);
+                                @endphp
+                                <option value="{{ $invoice->id }}" @selected((string) $selectedInvoiceId === (string) $invoice->id)>
+                                    {{ $invoice->invoice_number }} · {{ $invoice->recipient_name ?: 'Ohne Empfänger' }} · {{ number_format($remaining, 2, ',', '.') }} € offen
+                                </option>
+                            @endforeach
+                        </select>
+                        <p class="mt-2 text-xs leading-5 text-emerald-800">
+                            Diese Rechnung gilt als interner Beleg. Beim Abschließen wird daraus automatisch ein Zahlungseingang zur Rechnung.
+                        </p>
+                    </div>
+
                     <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                         <input type="hidden" name="receipt_kind" value="none">
                         <label class="flex items-start gap-3">

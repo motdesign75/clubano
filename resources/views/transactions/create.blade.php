@@ -287,6 +287,31 @@
                             @enderror
                         </div>
 
+                        <div class="lg:col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                            <label for="invoice_id" class="mb-1 block text-sm font-semibold text-emerald-950">Zahlung zu Clubano-Rechnung</label>
+                            <select id="invoice_id"
+                                    name="invoice_id"
+                                    class="w-full rounded-xl border-emerald-200 bg-white text-sm shadow-sm focus:border-emerald-600 focus:ring-emerald-600">
+                                <option value="">Keine Rechnung verknüpfen</option>
+                                @foreach($invoices as $invoice)
+                                    @php
+                                        $total = (float) $invoice->getTotal();
+                                        $paid = (float) ($invoice->paid_amount ?? 0);
+                                        $remaining = max($total - $paid, 0);
+                                    @endphp
+                                    <option value="{{ $invoice->id }}" @selected((string) old('invoice_id') === (string) $invoice->id)>
+                                        {{ $invoice->invoice_number }} · {{ $invoice->recipient_name ?: 'Ohne Empfänger' }} · {{ number_format($remaining, 2, ',', '.') }} € offen
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="mt-2 text-xs leading-5 text-emerald-800">
+                                Wenn der Zahlungseingang zu einer in Clubano gestellten Rechnung gehört, gilt diese Rechnung automatisch als Beleg. Beim Abschließen wird der Zahlungseingang an der Rechnung vermerkt.
+                            </p>
+                            @error('invoice_id')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
                         <div class="lg:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                             <input type="hidden" name="receipt_kind" value="none">
                             <label class="flex items-start gap-3">

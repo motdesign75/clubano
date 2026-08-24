@@ -121,7 +121,7 @@ class PaymentController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        Payment::create([
+        $payment = Payment::create([
 
             'tenant_id'    => $tenantId,
             'invoice_id'   => $invoice->id,
@@ -142,6 +142,7 @@ class PaymentController extends Controller
         $transaction = Transaction::create([
 
             'tenant_id' => auth()->user()->tenant_id,
+            'invoice_id' => $invoice->id,
             'created_by' => auth()->id(),
             'updated_by' => auth()->id(),
             'status' => 'abgeschlossen',
@@ -158,8 +159,16 @@ class PaymentController extends Controller
             'date' => $validated['payment_date'],
 
             'description' => $this->buildPaymentTransactionDescription($invoice),
+            'receipt_kind' => 'system_invoice',
+            'receipt_meta' => [
+                'invoice_number' => $invoice->invoice_number,
+                'linked_at' => now()->toIso8601String(),
+                'linked_by' => auth()->id(),
+            ],
 
         ]);
+
+        $payment->forceFill(['transaction_id' => $transaction->id])->save();
 
 
 /*

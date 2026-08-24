@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Transaction;
 use App\Models\Tenant;
 use Illuminate\Http\Request;
@@ -43,7 +45,7 @@ class TransactionController extends Controller
         $search = trim((string) $request->input('search'));
 
         $transactions = Transaction::forCurrentTenant()
-            ->with(['account_from', 'account_to', 'creator', 'updater', 'finalizer'])
+            ->with(['account_from', 'account_to', 'creator', 'updater', 'finalizer', 'invoice'])
             ->orderByDesc('date');
 
         if ($filter === 'income') {
@@ -68,6 +70,10 @@ class TransactionController extends Controller
             })->where(function ($query) {
                 $query->where('description', 'not like', 'Zahlung Rechnung %')
                     ->where('description', 'not like', 'Zahlung Angebot %');
+            })->whereNull('invoice_id')
+            ->where(function ($query) {
+                $query->whereNull('receipt_kind')
+                    ->orWhereNotIn('receipt_kind', ['vertrag', 'system_invoice']);
             })->where(function ($query) {
                 $query->whereNull('receipt_kind')
                     ->orWhere('receipt_kind', '!=', 'vertrag');
@@ -224,12 +230,10 @@ class TransactionController extends Controller
                 ],
             ]);
 
-            if ($transaction->isFinalized()) {
-                $this->recalculateAccountBalances($tenantId, [
-                    $transaction->account_from_id,
-                    $transaction->account_to_id,
-                ]);
-            }
+            $this->recalculateAccountBalances($tenantId, [
+                $transaction->account_from_id,
+                $transaction->account_to_id,
+            ]);
 
             $imported++;
         }
@@ -259,6 +263,8 @@ class TransactionController extends Controller
             'finalized_by' => auth()->id(),
             'updated_by' => auth()->id(),
         ])->save();
+
+        $this->syncInvoicePaymentForTransaction($transaction);
 
         $this->recalculateAccountBalances(auth()->user()->tenant_id, [
             $transaction->account_from_id,
@@ -296,6 +302,8 @@ class TransactionController extends Controller
                 'finalized_by' => auth()->id(),
                 'updated_by' => auth()->id(),
             ])->save();
+
+            $this->syncInvoicePaymentForTransaction($transaction);
 
             $this->recalculateAccountBalances(auth()->user()->tenant_id, [
                 $transaction->account_from_id,
@@ -406,8 +414,9 @@ class TransactionController extends Controller
         $accounts = Account::forCurrentTenant()
             ->orderBy('number')
             ->get();
+        $invoices = $this->invoiceChoices($transaction->invoice_id);
 
-        return view('transactions.edit', compact('transaction', 'accounts'));
+        return view('transactions.edit', compact('transaction', 'accounts', 'invoices'));
     }
 
     public function ownReceipt(Transaction $transaction)
@@ -496,6 +505,7 @@ class TransactionController extends Controller
             'amount' => ['required', 'numeric', 'min:0.01'],
             'account_from_id' => ['required', Rule::exists('accounts', 'id')->where('tenant_id', $tenantId)],
             'account_to_id' => ['required', 'different:account_from_id', Rule::exists('accounts', 'id')->where('tenant_id', $tenantId)],
+            'invoice_id' => ['nullable', Rule::exists('invoices', 'id')->where('tenant_id', $tenantId)->where('document_type', 'invoice')],
             'tax_area' => ['required', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
             'receipt_kind' => ['nullable', Rule::in(['none', 'vertrag'])],
@@ -517,6 +527,7 @@ class TransactionController extends Controller
             'amount' => $validated['amount'],
             'account_from_id' => $validated['account_from_id'],
             'account_to_id' => $validated['account_to_id'],
+            'invoice_id' => $validated['invoice_id'] ?? null,
             'tax_area' => $validated['tax_area'],
             'updated_by' => auth()->id(),
         ]);
@@ -552,6 +563,16 @@ class TransactionController extends Controller
                 'receipt_kind' => null,
                 'receipt_meta' => null,
             ]);
+        }
+
+        if ($transaction->invoice_id) {
+            $this->markTransactionAsInvoiceReceipt($transaction);
+            $transaction->save();
+        } elseif ($transaction->receipt_kind === 'system_invoice') {
+            $transaction->forceFill([
+                'receipt_kind' => null,
+                'receipt_meta' => null,
+            ])->save();
         }
 
         $this->recalculateAccountBalances($tenantId, $affectedAccountIds);
@@ -642,7 +663,7 @@ class TransactionController extends Controller
         $month = $request->input('month');
 
         $transactions = Transaction::forCurrentTenant()
-            ->with(['account_from', 'account_to', 'creator', 'updater', 'finalizer', 'journalReviewer', 'journalReceiptChecker'])
+            ->with(['account_from', 'account_to', 'creator', 'updater', 'finalizer', 'journalReviewer', 'journalReceiptChecker', 'invoice'])
             ->orderBy('date');
 
         if ($filter === 'income') {
@@ -667,6 +688,10 @@ class TransactionController extends Controller
             })->where(function ($query) {
                 $query->where('description', 'not like', 'Zahlung Rechnung %')
                     ->where('description', 'not like', 'Zahlung Angebot %');
+            })->whereNull('invoice_id')
+            ->where(function ($query) {
+                $query->whereNull('receipt_kind')
+                    ->orWhereNotIn('receipt_kind', ['vertrag', 'system_invoice']);
             })->where(function ($query) {
                 $query->whereNull('receipt_kind')
                     ->orWhere('receipt_kind', '!=', 'vertrag');
@@ -970,7 +995,7 @@ class TransactionController extends Controller
 
         $transactions = Transaction::where('tenant_id', $tenantId)
             ->whereBetween('date', [$start, $end])
-            ->with(['account_from', 'account_to', 'creator', 'updater', 'finalizer'])
+            ->with(['account_from', 'account_to', 'creator', 'updater', 'finalizer', 'invoice'])
             ->orderByDesc('date')
             ->get();
 
@@ -1030,6 +1055,7 @@ class TransactionController extends Controller
         $bankAccounts = $accounts->where('type', 'bank')->values();
         $incomeAccounts = $accounts->where('type', 'einnahme')->values();
         $expenseAccounts = $accounts->where('type', 'ausgabe')->values();
+        $invoices = $this->invoiceChoices();
 
         $prefill = [
             'context' => $request->input('context'),
@@ -1050,6 +1076,7 @@ class TransactionController extends Controller
             'bankAccounts',
             'incomeAccounts',
             'expenseAccounts',
+            'invoices',
             'prefill',
             'guidedContext'
         ));
@@ -1065,6 +1092,7 @@ class TransactionController extends Controller
             'amount' => ['required', 'numeric', 'min:0.01'],
             'account_from_id' => ['required', Rule::exists('accounts', 'id')->where('tenant_id', $tenantId)],
             'account_to_id' => ['required', 'different:account_from_id', Rule::exists('accounts', 'id')->where('tenant_id', $tenantId)],
+            'invoice_id' => ['nullable', Rule::exists('invoices', 'id')->where('tenant_id', $tenantId)->where('document_type', 'invoice')],
             'status' => ['required', Rule::in(['entwurf', 'abgeschlossen'])],
             'tax_area' => ['required', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
@@ -1087,6 +1115,7 @@ class TransactionController extends Controller
         $transaction->amount = $validated['amount'];
         $transaction->account_from_id = $validated['account_from_id'];
         $transaction->account_to_id = $validated['account_to_id'];
+        $transaction->invoice_id = $validated['invoice_id'] ?? null;
         $transaction->status = $validated['status'];
         $transaction->finalized_at = $validated['status'] === 'abgeschlossen' ? now() : null;
         $transaction->finalized_by = $validated['status'] === 'abgeschlossen' ? auth()->id() : null;
@@ -1105,6 +1134,10 @@ class TransactionController extends Controller
             $transaction->receipt_meta = $this->contractReceiptMeta($validated);
         }
 
+        if ($transaction->invoice_id) {
+            $this->markTransactionAsInvoiceReceipt($transaction);
+        }
+
         if (
             !Account::query()->where('tenant_id', $tenantId)->whereKey($validated['account_from_id'])->exists()
             || !Account::query()->where('tenant_id', $tenantId)->whereKey($validated['account_to_id'])->exists()
@@ -1115,11 +1148,13 @@ class TransactionController extends Controller
         $transaction->save();
 
         if ($transaction->isFinalized()) {
-            $this->recalculateAccountBalances($tenantId, [
-                $transaction->account_from_id,
-                $transaction->account_to_id,
-            ]);
+            $this->syncInvoicePaymentForTransaction($transaction);
         }
+
+        $this->recalculateAccountBalances($tenantId, [
+            $transaction->account_from_id,
+            $transaction->account_to_id,
+        ]);
 
         return redirect()->route('transactions.index')
             ->with('success', 'Buchung erfolgreich gespeichert.');
@@ -1141,6 +1176,128 @@ class TransactionController extends Controller
             'marked_at' => now()->toIso8601String(),
             'marked_by' => auth()->id(),
         ];
+    }
+
+    private function markTransactionAsInvoiceReceipt(Transaction $transaction): void
+    {
+        $invoice = Invoice::query()
+            ->where('tenant_id', $transaction->tenant_id)
+            ->whereKey($transaction->invoice_id)
+            ->first();
+
+        $transaction->forceFill([
+            'receipt_kind' => 'system_invoice',
+            'receipt_meta' => array_filter([
+                'invoice_number' => $invoice?->invoice_number,
+                'linked_at' => now()->toIso8601String(),
+                'linked_by' => auth()->id(),
+            ]),
+        ]);
+    }
+
+    private function syncInvoicePaymentForTransaction(Transaction $transaction): void
+    {
+        if (! $transaction->invoice_id) {
+            return;
+        }
+
+        $invoice = Invoice::query()
+            ->where('tenant_id', $transaction->tenant_id)
+            ->whereKey($transaction->invoice_id)
+            ->first();
+
+        if (! $invoice || ! $transaction->isFinalized()) {
+            return;
+        }
+
+        $paymentAccountId = $this->paymentAccountIdForTransaction($transaction);
+
+        Payment::updateOrCreate(
+            [
+                'tenant_id' => $transaction->tenant_id,
+                'transaction_id' => $transaction->id,
+            ],
+            [
+                'invoice_id' => $invoice->id,
+                'account_id' => $paymentAccountId,
+                'amount' => round((float) $transaction->amount, 2),
+                'payment_date' => $transaction->date?->toDateString() ?: now()->toDateString(),
+                'note' => 'Automatisch aus Geldbewegung ' . ($transaction->receipt_number ?: ('#' . $transaction->id)),
+            ]
+        );
+
+        $this->refreshInvoicePaymentStatus($invoice);
+    }
+
+    private function paymentAccountIdForTransaction(Transaction $transaction): ?int
+    {
+        $transaction->loadMissing(['account_from', 'account_to']);
+
+        if (in_array(optional($transaction->account_to)->type, ['bank', 'kasse'], true)) {
+            return $transaction->account_to_id;
+        }
+
+        if (in_array(optional($transaction->account_from)->type, ['bank', 'kasse'], true)) {
+            return $transaction->account_from_id;
+        }
+
+        return null;
+    }
+
+    private function refreshInvoicePaymentStatus(Invoice $invoice): void
+    {
+        $invoice->refresh();
+
+        if (! $invoice->isInvoice() || in_array($invoice->status, ['entwurf', 'storniert'], true)) {
+            return;
+        }
+
+        $total = round((float) $invoice->getTotal(), 2);
+        $paid = round((float) $invoice->payments()->sum('amount'), 2);
+
+        if ($total <= 0 || $paid >= $total) {
+            $invoice->forceFill([
+                'status' => 'paid',
+                'paid_at' => $invoice->paid_at ?: now(),
+            ])->save();
+
+            $invoice->eventBookings()->update(['payment_status' => 'paid']);
+
+            return;
+        }
+
+        if ($paid > 0) {
+            $invoice->forceFill([
+                'status' => 'open',
+                'paid_at' => null,
+            ])->save();
+
+            return;
+        }
+
+        $invoice->forceFill([
+            'status' => 'open',
+            'paid_at' => null,
+        ])->save();
+    }
+
+    private function invoiceChoices(?int $selectedInvoiceId = null)
+    {
+        return Invoice::query()
+            ->where('tenant_id', auth()->user()->tenant_id)
+            ->where('document_type', 'invoice')
+            ->whereNotIn('status', ['entwurf', 'storniert'])
+            ->when($selectedInvoiceId, function ($query) use ($selectedInvoiceId) {
+                $query->orWhere(function ($orQuery) use ($selectedInvoiceId) {
+                    $orQuery->where('tenant_id', auth()->user()->tenant_id)
+                        ->whereKey($selectedInvoiceId);
+                });
+            })
+            ->withSum('payments as paid_amount', 'amount')
+            ->orderByDesc('invoice_date')
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get();
     }
 
     protected function recalculateAccountBalances(string $tenantId, iterable $accountIds): void

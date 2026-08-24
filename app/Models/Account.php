@@ -79,11 +79,9 @@ class Account extends Model
     public function updateBalance(): void
     {
         $sumIn = $this->transactionsTo()
-            ->where('status', 'abgeschlossen')
             ->sum('amount');
 
         $sumOut = $this->transactionsFrom()
-            ->where('status', 'abgeschlossen')
             ->sum('amount');
 
         $this->balance_current = ($this->balance_start ?? 0) + $sumIn - $sumOut;
