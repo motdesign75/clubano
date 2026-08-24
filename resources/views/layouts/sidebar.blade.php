@@ -89,10 +89,18 @@
             'minRole' => 'Lesen',
         ],
         [
-            'label' => 'Vorlagen & E-Mails',
-            'hint' => 'Nachrichten vorbereiten und versenden',
+            'label' => 'E-Mail schreiben',
+            'hint' => 'Direkte Nachricht mit Anhängen senden',
+            'route' => route('mail.create'),
+            'active' => request()->routeIs('mail.*'),
+            'icon' => 'paper-airplane',
+            'minRole' => 'Mitarbeiter',
+        ],
+        [
+            'label' => 'Vorlagen',
+            'hint' => 'Wiederverwendbare Texte gestalten',
             'route' => route('templates.index'),
-            'active' => request()->routeIs('templates.*') || request()->routeIs('mail.*') || request()->routeIs('letters.*'),
+            'active' => request()->routeIs('templates.*') || request()->routeIs('letters.*'),
             'icon' => 'paper-airplane',
             'minRole' => 'Mitarbeiter',
         ],
@@ -392,7 +400,8 @@
                 'children' => collect([
                     collect($workNav)->firstWhere('label', 'Formulare'),
                     collect($workNav)->firstWhere('label', 'Protokolle'),
-                    collect($workNav)->firstWhere('label', 'Vorlagen & E-Mails'),
+                    collect($workNav)->firstWhere('label', 'E-Mail schreiben'),
+                    collect($workNav)->firstWhere('label', 'Vorlagen'),
                 ])->filter()->values()->all(),
             ],
             [

@@ -8,16 +8,16 @@
     class="mx-auto max-w-7xl space-y-6 px-4 py-6"
 >
     <div class="rounded-3xl bg-slate-950 px-6 py-6 text-white shadow-sm">
-        <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Vorlagenversand</div>
+        <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Kommunikation</div>
         <div class="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-                <h1 class="text-3xl font-semibold">Serienmail senden</h1>
+                <h1 class="text-3xl font-semibold">E-Mail schreiben</h1>
                 <p class="mt-2 max-w-3xl text-sm text-slate-300">
-                    Waehle eine Mail-Vorlage, pruefe die Vorschau und sende sie gezielt an Mitglieder, Kontakte oder freie E-Mail-Adressen.
+                    Schreibe direkt eine formatierte HTML-Mail, fuege bei Bedarf eine Vorlage ein und sende sie gezielt an Mitglieder, Kontakte oder freie E-Mail-Adressen.
                 </p>
             </div>
             <div class="rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white">
-                {{ $templates->count() }} Mail-Vorlagen verfuegbar
+                {{ $templates->count() }} Vorlagen optional
             </div>
         </div>
     </div>
@@ -57,15 +57,15 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('mail.send') }}" class="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+    <form id="mailSendForm" method="POST" action="{{ route('mail.send') }}" enctype="multipart/form-data" class="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
         @csrf
 
         <section class="space-y-6">
             <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <h2 class="text-lg font-semibold text-slate-900">Vorlage</h2>
-                        <p class="mt-1 text-sm text-slate-500">Nur Mail-Vorlagen stehen hier direkt fuer den Versand bereit.</p>
+                        <h2 class="text-lg font-semibold text-slate-900">Startpunkt</h2>
+                        <p class="mt-1 text-sm text-slate-500">Du kannst frei schreiben oder eine Vorlage als Grundlage einfuegen.</p>
                     </div>
                     <a href="{{ route('templates.index') }}" class="text-sm font-medium text-slate-500 hover:text-slate-900">
                         Zu den Vorlagen
@@ -81,6 +81,7 @@
                         @change="updateTemplate()"
                         class="w-full rounded-2xl border-slate-300"
                     >
+                        <option value="">Ohne Vorlage frei schreiben</option>
                         @foreach($templates as $template)
                             <option
                                 value="{{ $template->id }}"
@@ -95,9 +96,36 @@
                     </select>
                 </div>
 
+                <button type="button" @click="applyTemplate()" class="mt-4 inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100" x-bind:disabled="!templateId">
+                    Vorlage in E-Mail einfügen
+                </button>
+            </div>
+
+            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div class="flex flex-col gap-3 border-b border-slate-100 pb-5 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-900">Nachricht</h2>
+                        <p class="mt-1 text-sm text-slate-500">Formatiere Text, Links, Tabellen und Bilder direkt im Editor.</p>
+                    </div>
+                    <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                        <span id="mail-word-count">0</span> Wörter
+                    </div>
+                </div>
+
+                <div class="mt-5">
+                    <label for="subject" class="mb-1 block text-sm font-medium text-slate-700">Betreff</label>
+                    <input id="subject" name="subject" type="text" value="{{ old('subject') }}" required class="w-full rounded-2xl border-slate-300" placeholder="z. B. Einladung zum Sommerfest">
+                </div>
+
+                <div class="mt-5">
+                    <label for="body" class="sr-only">E-Mail-Text</label>
+                    <textarea id="body" name="body" rows="16" required class="w-full rounded-2xl border-slate-300 text-sm">{{ old('body') }}</textarea>
+                </div>
+
                 <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Betreff</div>
-                    <div class="mt-2 text-base font-semibold text-slate-900" x-text="templateSubject || 'Ohne Betreff'"></div>
+                    <label for="attachments" class="block text-sm font-semibold text-slate-800">Anhänge</label>
+                    <p class="mt-1 text-sm text-slate-500">Bis zu 5 Dateien, je maximal 10 MB. Erlaubt sind PDF, Office-Dateien, CSV, Text und Bilder.</p>
+                    <input id="attachments" name="attachments[]" type="file" multiple class="mt-3 block w-full text-sm text-slate-600 file:mr-4 file:rounded-full file:border-0 file:bg-white file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-700 hover:file:bg-slate-100">
                 </div>
             </div>
 
@@ -272,7 +300,7 @@
 
             <div class="flex flex-wrap gap-3">
                 <button class="rounded-full bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700">
-                    Serienmail senden
+                    E-Mail senden
                 </button>
                 <a href="{{ route('templates.index') }}" class="rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
                     Zurueck zu Vorlagen
@@ -285,11 +313,11 @@
                 <div class="flex items-start justify-between gap-4">
                     <div>
                         <h2 class="text-lg font-semibold text-slate-900">Vorschau</h2>
-                        <p class="mt-1 text-sm text-slate-500">Zur Orientierung mit dem Inhalt der gewaehlteten Vorlage.</p>
+                        <p class="mt-1 text-sm text-slate-500">So kommt die Nachricht grundsaetzlich an. Platzhalter werden beim Versand je Empfaenger ersetzt.</p>
                     </div>
                     <template x-if="templateId">
                         <a :href="`{{ url('/templates') }}/${templateId}/preview`" target="_blank" class="text-sm font-medium text-blue-600 hover:text-blue-800">
-                            Gross anzeigen
+                            Vorlage gross anzeigen
                         </a>
                     </template>
                 </div>
@@ -297,10 +325,10 @@
                 <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                     <div class="border-b border-slate-200 bg-white px-4 py-3">
                         <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Betreff</div>
-                        <div class="mt-1 text-sm font-semibold text-slate-900" x-text="templateSubject || 'Ohne Betreff'"></div>
+                        <div id="mail-preview-subject" class="mt-1 text-sm font-semibold text-slate-900">Ohne Betreff</div>
                     </div>
                     <div class="max-h-[620px] overflow-y-auto bg-white px-4 py-4">
-                        <div class="prose prose-sm max-w-none text-slate-700" x-html="templateBody || '<p>Bitte eine Vorlage auswählen.</p>'"></div>
+                        <div id="mail-preview-body" class="prose prose-sm max-w-none text-slate-700">Noch kein Inhalt.</div>
                     </div>
                 </div>
             </div>
@@ -321,15 +349,98 @@
             init() {
                 this.updateTemplate();
                 this.updateCount();
+                this.$nextTick(() => this.syncPreview());
             },
             updateTemplate() {
                 const select = document.getElementById('template_id');
                 const option = select?.selectedOptions?.[0];
-                if (!option) return;
+                if (!option || option.value === '') {
+                    this.templateSubject = '';
+                    this.templateBody = '';
+                    return;
+                }
 
                 this.templateSubject = option.dataset.subject || '';
                 const encoded = option.dataset.body || '';
                 this.templateBody = encoded ? atob(encoded) : '';
+            },
+            applyTemplate() {
+                this.updateTemplate();
+
+                const subjectInput = document.getElementById('subject');
+                const bodyTextarea = document.getElementById('body');
+
+                if (subjectInput && this.templateSubject) {
+                    subjectInput.value = this.templateSubject;
+                    subjectInput.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+
+                const editor = window.tinymce ? tinymce.get('body') : null;
+
+                if (editor && !editor.isHidden()) {
+                    editor.setContent(this.templateBody || '');
+                    editor.focus();
+                    this.syncPreview(editor);
+                    return;
+                }
+
+                if (bodyTextarea) {
+                    bodyTextarea.value = this.templateBody || '';
+                    bodyTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    bodyTextarea.focus();
+                }
+            },
+            syncPreview(editor = null) {
+                const subjectInput = document.getElementById('subject');
+                const bodyTextarea = document.getElementById('body');
+                const previewSubject = document.getElementById('mail-preview-subject');
+                const previewBody = document.getElementById('mail-preview-body');
+                const wordCount = document.getElementById('mail-word-count');
+                const rawBody = editor ? editor.getContent() : (bodyTextarea?.value || '');
+                const renderedBody = this.replacePreviewPlaceholders(rawBody);
+
+                if (previewSubject) {
+                    previewSubject.textContent = subjectInput?.value?.trim() || 'Ohne Betreff';
+                }
+
+                if (previewBody) {
+                    previewBody.classList.toggle('text-slate-400', renderedBody.trim() === '');
+                    previewBody.innerHTML = renderedBody.trim() || 'Noch kein Inhalt.';
+                }
+
+                if (wordCount) {
+                    wordCount.textContent = this.countWords(rawBody);
+                }
+            },
+            replacePreviewPlaceholders(content) {
+                const replacements = {
+                    '{anrede}': 'Guten Tag Max Mustermann',
+                    '{name}': 'Max Mustermann',
+                    '{vorname}': 'Max',
+                    '{nachname}': 'Mustermann',
+                    '{email}': 'max@example.org',
+                    '{telefon}': '05181 123456',
+                    '{mitgliedsnummer}': 'M-1001',
+                    '{firma}': 'Musterorganisation',
+                    '{strasse}': 'Musterweg 1',
+                    '{plz}': '31157',
+                    '{ort}': 'Sarstedt',
+                    '{land}': 'Deutschland',
+                    '{verein}': 'Musterverein',
+                    '{heute}': new Date().toLocaleDateString('de-DE'),
+                };
+
+                return Object.entries(replacements).reduce((text, [placeholder, value]) => {
+                    return text.split(placeholder).join(value);
+                }, String(content || ''));
+            },
+            countWords(content) {
+                const plainText = String(content || '')
+                    .replace(/<[^>]+>/g, ' ')
+                    .replace(/&nbsp;/g, ' ')
+                    .trim();
+
+                return plainText === '' ? 0 : plainText.split(/\s+/).length;
             },
             selectAll(selector) {
                 document.querySelectorAll(selector).forEach((element) => {
@@ -367,4 +478,70 @@
         }
     }
 </script>
+@push('scripts')
+    <script src="/tinymce/tinymce.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const pageRoot = document.querySelector('[x-data="mailSendPage()"]');
+
+            tinymce.init({
+                selector: '#body',
+                license_key: 'gpl',
+                height: 560,
+                menubar: false,
+                branding: false,
+                statusbar: true,
+                plugins: 'lists link image table code fullscreen autoresize',
+                toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image table | removeformat | code fullscreen',
+                block_formats: 'Absatz=p; Überschrift=h2; Zwischenüberschrift=h3',
+                image_title: true,
+                image_caption: true,
+                image_advtab: true,
+                paste_data_images: true,
+                automatic_uploads: true,
+                file_picker_types: 'image',
+                file_picker_callback: (callback, value, meta) => {
+                    if (meta.filetype !== 'image') {
+                        return;
+                    }
+
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.addEventListener('change', () => {
+                        const file = input.files && input.files[0];
+
+                        if (!file) {
+                            return;
+                        }
+
+                        const reader = new FileReader();
+                        reader.addEventListener('load', () => {
+                            callback(reader.result, {
+                                alt: file.name.replace(/\.[^.]+$/, ''),
+                                title: file.name,
+                            });
+                        });
+                        reader.readAsDataURL(file);
+                    });
+                    input.click();
+                },
+                content_style: 'body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:15px;line-height:1.65;color:#0f172a;} h2,h3{line-height:1.25;margin:1.2em 0 .5em;} p{margin:.7em 0;} img{max-width:100%;height:auto;border-radius:14px;} table{border-collapse:collapse;width:100%;} td,th{border:1px solid #cbd5e1;padding:8px;text-align:left;}',
+                setup: (editor) => {
+                    editor.on('init keyup change input undo redo setcontent', () => {
+                        pageRoot?._x_dataStack?.[0]?.syncPreview(editor);
+                    });
+                },
+            });
+
+            document.getElementById('subject')?.addEventListener('input', () => {
+                pageRoot?._x_dataStack?.[0]?.syncPreview(tinymce.get('body'));
+            });
+
+            document.getElementById('mailSendForm')?.addEventListener('submit', () => {
+                tinymce.triggerSave();
+            });
+        });
+    </script>
+@endpush
 @endsection

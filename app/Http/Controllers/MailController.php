@@ -9,6 +9,7 @@ use App\Models\TemplateDispatchLog;
 use App\Services\MailTrackingService;
 use App\Services\TemplateParser;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -55,9 +56,7 @@ class MailController extends Controller
             ->orderBy('organization')
             ->get();
 
-        $selectedTemplateId = request('template')
-            ? (int) request('template')
-            : optional($templates->first())->id;
+        $selectedTemplateId = request('template') ? (int) request('template') : null;
 
         $preselectedDirectEmails = trim((string) request('emails', ''));
 
@@ -76,12 +75,14 @@ class MailController extends Controller
     {
         $validated = $request->validate([
             'template_id' => [
-                'required',
+                'nullable',
                 Rule::exists('templates', 'id')->where(function ($query) {
                     $query->where('tenant_id', auth()->user()->tenant_id)
                         ->whereIn('type', [Template::TYPE_MAIL, Template::TYPE_MAIL_AND_LETTER]);
                 }),
             ],
+            'subject' => 'required|string|max:255',
+            'body' => 'required|string',
             'members' => 'nullable|array',
             'members.*' => [
                 'integer',
@@ -93,6 +94,8 @@ class MailController extends Controller
                 Rule::exists('contacts', 'id')->where('tenant_id', auth()->user()->tenant_id),
             ],
             'direct_emails' => 'nullable|string',
+            'attachments' => 'nullable|array|max:5',
+            'attachments.*' => 'file|max:10240|mimes:pdf,doc,docx,xls,xlsx,csv,txt,jpg,jpeg,png,webp',
         ]);
 
         $directEmailParts = $this->splitDirectEmails($validated['direct_emails'] ?? null);
@@ -120,9 +123,23 @@ class MailController extends Controller
 
         $tenant = auth()->user()->tenant;
 
-        $template = Template::where('tenant_id', $tenant->id)
-            ->whereIn('type', [Template::TYPE_MAIL, Template::TYPE_MAIL_AND_LETTER])
-            ->findOrFail($validated['template_id']);
+        $template = null;
+
+        if (! blank($validated['template_id'] ?? null)) {
+            $template = Template::where('tenant_id', $tenant->id)
+                ->whereIn('type', [Template::TYPE_MAIL, Template::TYPE_MAIL_AND_LETTER])
+                ->findOrFail($validated['template_id']);
+        }
+
+        $attachments = collect($request->file('attachments', []))
+            ->filter(fn ($file) => $file instanceof UploadedFile)
+            ->values()
+            ->all();
+
+        $attachmentNames = collect($attachments)
+            ->map(fn (UploadedFile $file) => $file->getClientOriginalName())
+            ->values()
+            ->all();
 
         $fromAddress = $tenant->mail_from_address ?: config('mail.from.address');
         $fromName = $tenant->mail_from_name ?: ($tenant->name ?: config('mail.from.name'));
@@ -145,6 +162,8 @@ class MailController extends Controller
                 recipient: $member,
                 template: $template,
                 tenant: $tenant,
+                subject: $validated['subject'],
+                body: $validated['body'],
                 toEmail: $member->email,
                 recipientType: 'member',
                 memberId: $member->id,
@@ -154,6 +173,11 @@ class MailController extends Controller
                 fromAddress: $fromAddress,
                 fromName: $fromName,
                 replyToAddress: $replyToAddress,
+                attachments: $attachments,
+                meta: [
+                    'attachment_count' => count($attachments),
+                    'attachment_names' => $attachmentNames,
+                ],
             );
 
             $sentCount++;
@@ -171,6 +195,8 @@ class MailController extends Controller
                 recipient: $contact,
                 template: $template,
                 tenant: $tenant,
+                subject: $validated['subject'],
+                body: $validated['body'],
                 toEmail: $contact->primary_email,
                 recipientType: 'contact',
                 memberId: null,
@@ -180,6 +206,11 @@ class MailController extends Controller
                 fromAddress: $fromAddress,
                 fromName: $fromName,
                 replyToAddress: $replyToAddress,
+                attachments: $attachments,
+                meta: [
+                    'attachment_count' => count($attachments),
+                    'attachment_names' => $attachmentNames,
+                ],
             );
 
             $sentCount++;
@@ -196,6 +227,8 @@ class MailController extends Controller
                 recipient: $recipient,
                 template: $template,
                 tenant: $tenant,
+                subject: $validated['subject'],
+                body: $validated['body'],
                 toEmail: $email,
                 recipientType: 'email',
                 memberId: null,
@@ -207,7 +240,10 @@ class MailController extends Controller
                 replyToAddress: $replyToAddress,
                 meta: [
                     'source' => 'manual_email',
+                    'attachment_count' => count($attachments),
+                    'attachment_names' => $attachmentNames,
                 ],
+                attachments: $attachments,
             );
 
             $sentCount++;
@@ -237,8 +273,10 @@ class MailController extends Controller
 
     private function sendTrackedTemplateMail(
         Member|Contact|array $recipient,
-        Template $template,
+        ?Template $template,
         $tenant,
+        string $subject,
+        string $body,
         string $toEmail,
         string $recipientType,
         ?int $memberId,
@@ -249,12 +287,14 @@ class MailController extends Controller
         string $fromName,
         ?string $replyToAddress = null,
         array $meta = [],
+        array $attachments = [],
     ): void {
-        $html = TemplateParser::parse($template->body, $recipient, $tenant);
+        $html = TemplateParser::parse($body, $recipient, $tenant);
+        $mailSubject = trim(strip_tags(TemplateParser::parse($subject, $recipient, $tenant)));
 
         $dispatchLog = TemplateDispatchLog::create([
             'tenant_id' => $tenant->id,
-            'template_id' => $template->id,
+            'template_id' => $template?->id,
             'created_by' => auth()->id(),
             'channel' => 'mail',
             'action' => 'sent',
@@ -263,11 +303,12 @@ class MailController extends Controller
             'contact_id' => $contactId,
             'recipient_name' => $recipientName,
             'recipient_reference' => $recipientReference,
-            'subject' => $template->subject ?: 'Nachricht',
+            'subject' => $mailSubject ?: 'Nachricht',
             'message_excerpt' => Str::limit(strip_tags($html), 240),
             'dispatched_at' => now(),
             'meta' => array_merge([
-                'template_type' => $template->type,
+                'template_type' => $template?->type,
+                'composition_mode' => $template ? 'template_applied' : 'direct',
             ], $meta),
         ]);
 
@@ -277,13 +318,22 @@ class MailController extends Controller
             Mail::send('mail.layout', [
                 'body' => $trackedHtml,
                 'tenant' => $tenant,
-            ], function ($mail) use ($toEmail, $template, $fromAddress, $fromName, $replyToAddress, $tenant, $recipientName) {
+            ], function ($mail) use ($toEmail, $mailSubject, $fromAddress, $fromName, $replyToAddress, $tenant, $recipientName, $attachments) {
                 $mail->to($toEmail, $recipientName !== $toEmail ? $recipientName : null)
-                    ->subject($template->subject ?? 'Nachricht')
+                    ->subject($mailSubject ?: 'Nachricht')
                     ->from($fromAddress, $fromName);
 
                 if ($replyToAddress) {
                     $mail->replyTo($replyToAddress, $tenant->name ?? $fromName);
+                }
+
+                foreach ($attachments as $attachment) {
+                    if ($attachment instanceof UploadedFile) {
+                        $mail->attach($attachment->getRealPath(), [
+                            'as' => $attachment->getClientOriginalName(),
+                            'mime' => $attachment->getMimeType(),
+                        ]);
+                    }
                 }
             });
         } catch (Throwable $e) {
