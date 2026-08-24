@@ -1814,6 +1814,8 @@ class EventController extends Controller
         $this->authorizeShift($event, $shift);
 
         $validated = $request->validate([
+            'member_ids' => 'nullable|array',
+            'member_ids.*' => 'integer|exists:members,id',
             'member_id' => 'nullable|exists:members,id',
             'helper_name' => 'nullable|string|max:255',
             'helper_email' => 'nullable|email|max:255',
@@ -1822,41 +1824,72 @@ class EventController extends Controller
             'notes' => 'nullable|string|max:2000',
         ]);
 
-        if (blank($validated['member_id'] ?? null) && blank($validated['helper_name'] ?? null)) {
+        $memberIds = collect($validated['member_ids'] ?? [])
+            ->when(!blank($validated['member_id'] ?? null), fn ($ids) => $ids->push((int) $validated['member_id']))
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($memberIds->isEmpty() && blank($validated['helper_name'] ?? null)) {
             return redirect()->route('events.schedule.manage', $event)->withErrors([
-                'helper_name' => 'Bitte Mitglied oder Helfername angeben.',
+                'member_ids' => 'Bitte mindestens ein Mitglied auswählen oder eine externe Helferperson eintragen.',
             ]);
         }
 
-        if (!blank($validated['member_id'] ?? null)) {
-            $member = Member::query()
+        $createdAssignments = 0;
+
+        if ($memberIds->isNotEmpty()) {
+            $members = Member::query()
                 ->where('tenant_id', $event->tenant_id)
-                ->findOrFail($validated['member_id']);
+                ->whereIn('id', $memberIds)
+                ->pluck('id');
 
-            $alreadyAssigned = $shift->assignments()
-                ->where('member_id', $member->id)
+            abort_if($members->count() !== $memberIds->count(), 404);
+
+            $alreadyAssignedMemberIds = $shift->assignments()
+                ->whereIn('member_id', $members)
                 ->where('status', '!=', 'cancelled')
-                ->exists();
+                ->pluck('member_id');
 
-            if ($alreadyAssigned) {
-                return redirect()->route('events.schedule.manage', $event)->withErrors([
-                    'member_id' => 'Dieses Mitglied ist dieser Schicht bereits zugeordnet.',
-                ]);
-            }
+            $members
+                ->diff($alreadyAssignedMemberIds)
+                ->each(function (int $memberId) use ($shift, $event, $validated, &$createdAssignments) {
+                    $shift->assignments()->create([
+                        'tenant_id' => $event->tenant_id,
+                        'event_id' => $event->id,
+                        'member_id' => $memberId,
+                        'status' => $validated['status'],
+                        'notes' => $validated['notes'] ?? null,
+                    ]);
+
+                    $createdAssignments++;
+                });
         }
 
-        $shift->assignments()->create([
-            'tenant_id' => $event->tenant_id,
-            'event_id' => $event->id,
-            'member_id' => $validated['member_id'] ?? null,
-            'helper_name' => $validated['helper_name'] ?? null,
-            'helper_email' => $validated['helper_email'] ?? null,
-            'helper_phone' => $validated['helper_phone'] ?? null,
-            'status' => $validated['status'],
-            'notes' => $validated['notes'] ?? null,
-        ]);
+        if (!blank($validated['helper_name'] ?? null)) {
+            $shift->assignments()->create([
+                'tenant_id' => $event->tenant_id,
+                'event_id' => $event->id,
+                'helper_name' => $validated['helper_name'] ?? null,
+                'helper_email' => $validated['helper_email'] ?? null,
+                'helper_phone' => $validated['helper_phone'] ?? null,
+                'status' => $validated['status'],
+                'notes' => $validated['notes'] ?? null,
+            ]);
 
-        return redirect()->route('events.schedule.manage', $event)->with('success', 'Helferzuordnung wurde gespeichert.');
+            $createdAssignments++;
+        }
+
+        if ($createdAssignments === 0) {
+            return redirect()->route('events.schedule.manage', $event)->withErrors([
+                'member_ids' => 'Die ausgewählten Mitglieder sind dieser Schicht bereits zugeordnet.',
+            ]);
+        }
+
+        return redirect()->route('events.schedule.manage', $event)->with('success', $createdAssignments === 1
+            ? 'Eine Helferzuordnung wurde gespeichert.'
+            : $createdAssignments . ' Helferzuordnungen wurden gespeichert.');
     }
 
     public function destroyShiftAssignment(Event $event, EventShift $shift, EventShiftAssignment $assignment)

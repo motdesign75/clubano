@@ -9,11 +9,13 @@ use App\Models\EventAttendance;
 use App\Models\EventCategory;
 use App\Models\EventChangeLog;
 use App\Models\EventInvitation;
+use App\Models\EventShiftAssignment;
 use App\Models\Member;
 use App\Models\Tag;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 test('event managers can create calendar event and audit log is written', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
@@ -768,6 +770,74 @@ test('staff can evaluate attendances and open duty hours', function () {
     $response->assertSee('6,00 h');
     $response->assertSee('2,50 h');
     $response->assertSee('3,50 h');
+});
+
+test('event managers can assign multiple members to a shift at once', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Dienstplanverein',
+        'slug' => 'dienstplanverein',
+        'email' => 'dienstplan@example.test',
+    ]);
+
+    $eventManager = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_EVENT_MANAGER,
+    ]);
+
+    $members = collect(['Anna Aufbau', 'Ben Theke', 'Clara Kasse'])->map(function (string $name) use ($tenant) {
+        [$firstName, $lastName] = explode(' ', $name, 2);
+
+        return Member::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id,
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'email' => Str::slug($name).'@example.test',
+            'entry_date' => now()->subYear()->toDateString(),
+        ]);
+    });
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Sommerfest',
+        'location' => 'Vereinsheim',
+        'start' => now()->addMonth()->setTime(10, 0),
+        'end' => now()->addMonth()->setTime(18, 0),
+        'is_public' => false,
+        'booking_enabled' => false,
+        'created_by' => $eventManager->id,
+        'updated_by' => $eventManager->id,
+    ]);
+
+    $shift = $event->shifts()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Theke',
+        'starts_at' => $event->start,
+        'ends_at' => $event->start->copy()->addHours(3),
+        'required_people' => 3,
+    ]);
+
+    $response = $this->actingAs($eventManager)->post(route('events.shifts.assignments.store', [$event, $shift]), [
+        'member_ids' => $members->take(2)->pluck('id')->all(),
+        'status' => 'confirmed',
+        'notes' => 'Erste Schicht',
+    ]);
+
+    $response->assertRedirect(route('events.schedule.manage', $event));
+    $response->assertSessionHas('success', '2 Helferzuordnungen wurden gespeichert.');
+
+    expect(EventShiftAssignment::query()->where('event_shift_id', $shift->id)->where('status', 'confirmed')->count())->toBe(2);
+
+    $secondResponse = $this->actingAs($eventManager)->post(route('events.shifts.assignments.store', [$event, $shift]), [
+        'member_ids' => $members->pluck('id')->all(),
+        'status' => 'confirmed',
+    ]);
+
+    $secondResponse->assertRedirect(route('events.schedule.manage', $event));
+    $secondResponse->assertSessionHas('success', 'Eine Helferzuordnung wurde gespeichert.');
+
+    expect(EventShiftAssignment::query()->where('event_shift_id', $shift->id)->where('status', 'confirmed')->count())->toBe(3);
 });
 
 test('club can define activity profiles and use them on events', function () {
