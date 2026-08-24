@@ -274,7 +274,7 @@
 
 <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
     <section class="overflow-hidden rounded-2xl bg-slate-950 text-white shadow-sm">
-        <div class="grid min-h-[360px] gap-8 bg-[linear-gradient(135deg,#020617_0%,#0f3a3a_52%,#1f2937_100%)] p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr),420px] lg:p-10">
+        <div class="grid min-h-[360px] min-w-0 gap-8 bg-[linear-gradient(135deg,#020617_0%,#0f3a3a_52%,#1f2937_100%)] p-6 sm:p-8 xl:grid-cols-[minmax(0,1fr),minmax(360px,420px)] xl:p-10">
             <div class="flex min-w-0 flex-col justify-between gap-8">
                 <div>
                     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-white/70">
@@ -376,7 +376,7 @@
                 </div>
             </div>
 
-            <aside class="self-stretch rounded-xl border border-white/15 bg-white/10 p-5 backdrop-blur">
+            <aside class="min-w-0 self-stretch rounded-xl border border-white/15 bg-white/10 p-5 backdrop-blur">
                 <div class="flex h-full flex-col">
                     <div class="flex items-center justify-between gap-4">
                         <div>
@@ -390,7 +390,7 @@
 
                     <p class="mt-4 text-sm leading-6 text-white/72">{{ $heroMeta }}</p>
 
-                    <div class="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                    <div class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                         @foreach($metrics as $metric)
                             <a href="{{ $metric['route'] }}" class="grid grid-cols-[42px,minmax(0,1fr),auto] items-center gap-3 rounded-lg border border-white/12 px-3 py-3 transition hover:bg-white/8">
                                 <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-white/12 text-white">
