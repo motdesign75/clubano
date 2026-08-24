@@ -80,17 +80,17 @@
                 </p>
             </div>
 
-            <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
-                <div class="grid min-h-11 grid-cols-1 gap-2 sm:grid-cols-3">
-                    <a href="{{ route('events.index', array_merge($baseQuery, $previousParams)) }}" class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <div class="flex flex-col gap-3 xl:items-end">
+                <div class="grid min-h-11 grid-cols-3 gap-2">
+                    <a href="{{ route('events.index', array_merge($baseQuery, $previousParams)) }}" aria-label="{{ $previousLabel }}" class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                         <x-heroicon-o-chevron-left class="h-4 w-4" />
-                        <span>{{ $previousLabel }}</span>
+                        <span class="hidden sm:inline">{{ $previousLabel }}</span>
                     </a>
                     <a href="{{ route('events.index', array_merge($baseQuery, $todayParams)) }}" class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">
                         {{ $todayLabel }}
                     </a>
-                    <a href="{{ route('events.index', array_merge($baseQuery, $nextParams)) }}" class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                        <span>{{ $nextLabel }}</span>
+                    <a href="{{ route('events.index', array_merge($baseQuery, $nextParams)) }}" aria-label="{{ $nextLabel }}" class="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                        <span class="hidden sm:inline">{{ $nextLabel }}</span>
                         <x-heroicon-o-chevron-right class="h-4 w-4" />
                     </a>
                 </div>
@@ -105,20 +105,10 @@
                 </div>
 
                 @if($canManageEvents)
-                    <div class="flex flex-col gap-2 sm:flex-row">
-                        <a href="{{ route('events.poster') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                            <x-heroicon-o-printer class="h-5 w-5" />
-                            Aushang erstellen
-                        </a>
-                        <a href="{{ route('events.attendance.report') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                            <x-heroicon-o-chart-bar class="h-5 w-5" />
-                            Anwesenheit auswerten
-                        </a>
-                        <a href="{{ route('events.create') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
-                            <x-heroicon-o-plus class="h-5 w-5" />
-                            Termin oder Serie planen
-                        </a>
-                    </div>
+                    <a href="{{ route('events.create') }}" class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 sm:w-auto">
+                        <x-heroicon-o-plus class="h-5 w-5" />
+                        Termin planen
+                    </a>
                 @endif
             </div>
         </div>
@@ -130,93 +120,71 @@
         </div>
     @endif
 
-    @if($canManageEvents)
-        <section class="grid gap-3 lg:grid-cols-5">
-            <a href="{{ route('events.create') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
-                <div class="flex items-start gap-3">
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-white">
-                        <x-heroicon-o-calendar-days class="h-5 w-5" />
-                    </div>
-                    <div>
-                        <h2 class="text-base font-semibold text-slate-950">Einzeltermin</h2>
-                        <p class="mt-1 text-sm leading-6 text-slate-500">Für Sommerfest, Sitzung oder einmalige Veranstaltung.</p>
-                    </div>
-                </div>
-            </a>
+    <section class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <form method="GET" action="{{ route('events.index') }}" class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <input type="hidden" name="view" value="{{ $calendarView }}">
+            @if($activeDateField === 'month')
+                <input type="hidden" name="month" value="{{ $filters['month'] }}">
+            @elseif($activeDateField === 'day')
+                <input type="hidden" name="day" value="{{ $filters['day'] }}">
+            @else
+                <input type="hidden" name="year" value="{{ $filters['year'] }}">
+            @endif
 
-            <a href="{{ route('events.create') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
-                <div class="flex items-start gap-3">
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
-                        <x-heroicon-o-arrow-path class="h-5 w-5" />
-                    </div>
-                    <div>
-                        <h2 class="text-base font-semibold text-slate-950">Serientermin</h2>
-                        <p class="mt-1 text-sm leading-6 text-slate-500">Für Training, Stammtisch oder regelmäßige Vorstandsrunden.</p>
-                    </div>
-                </div>
-            </a>
-
-            <a href="{{ route('event-categories.index') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
-                <div class="flex items-start gap-3">
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
-                        <x-heroicon-o-swatch class="h-5 w-5" />
-                    </div>
-                    <div>
-                        <h2 class="text-base font-semibold text-slate-950">Kategorien</h2>
-                        <p class="mt-1 text-sm leading-6 text-slate-500">Farben und Bereiche vorbereiten, damit der Kalender lesbar bleibt.</p>
-                    </div>
-                </div>
-            </a>
-
-            <a href="{{ route('events.poster') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
-                <div class="flex items-start gap-3">
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
-                        <x-heroicon-o-printer class="h-5 w-5" />
-                    </div>
-                    <div>
-                        <h2 class="text-base font-semibold text-slate-950">Aushang</h2>
-                        <p class="mt-1 text-sm leading-6 text-slate-500">Termine auswählen und als ruhige Übersicht für das Vereinsheim drucken.</p>
-                    </div>
-                </div>
-            </a>
-
-            <a href="{{ route('events.attendance.report') }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
-                <div class="flex items-start gap-3">
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
-                        <x-heroicon-o-chart-bar class="h-5 w-5" />
-                    </div>
-                    <div>
-                        <h2 class="text-base font-semibold text-slate-950">Anwesenheit</h2>
-                        <p class="mt-1 text-sm leading-6 text-slate-500">Pflichtstunden, Teilnehmer und offene Stunden auswerten.</p>
-                    </div>
-                </div>
-            </a>
-        </section>
-    @endif
+            <div class="relative">
+                <x-heroicon-o-magnifying-glass class="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                <input type="search" name="search" id="event_search" value="{{ $filters['search'] }}"
+                       class="w-full rounded-lg border-slate-300 pl-10 text-sm focus:border-slate-500 focus:ring-slate-300"
+                       placeholder="Termin suchen: Titel, Ort, Beschreibung oder Person">
+            </div>
+            <div class="flex flex-col gap-2 sm:flex-row">
+                <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+                    Suchen
+                </button>
+                @if(filled($filters['search']))
+                    <a href="{{ route('events.index', ['view' => $calendarView]) }}" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                        Suche zurücksetzen
+                    </a>
+                @endif
+            </div>
+        </form>
+    </section>
 
     <details class="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm" {{ $hasActiveFilters ? 'open' : '' }}>
         <summary class="flex cursor-pointer list-none items-center justify-between gap-4">
             <div>
-                <h2 class="text-base font-semibold text-slate-950">Kalenderwerkzeuge</h2>
-                <p class="mt-1 text-sm text-slate-500">Termine suchen, Ansicht feinsteuern oder Konflikte isolieren.</p>
+                <h2 class="text-base font-semibold text-slate-950">Filter & Werkzeuge</h2>
+                <p class="mt-1 text-sm text-slate-500">Nur öffnen, wenn du genauer eingrenzen oder Listen vorbereiten möchtest.</p>
             </div>
             <span class="rounded-md bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700 group-open:bg-slate-950 group-open:text-white">
-                {{ $hasActiveFilters ? 'Aktiv' : 'Filter' }}
+                {{ $hasActiveFilters ? 'Aktiv' : 'Öffnen' }}
             </span>
         </summary>
 
-        <form method="GET" action="{{ route('events.index') }}" class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
-            <input type="hidden" name="view" value="{{ $calendarView }}">
-
-            <div>
-                <label for="event_search" class="text-sm font-semibold text-slate-900">Suche</label>
-                <div class="relative mt-2">
-                    <x-heroicon-o-magnifying-glass class="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                    <input type="search" name="search" id="event_search" value="{{ $filters['search'] }}"
-                           class="w-full rounded-lg border-slate-300 pl-10 text-sm focus:border-slate-500 focus:ring-slate-300"
-                           placeholder="Titel, Ort, Beschreibung, Person">
-                </div>
+        @if($canManageEvents)
+            <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <a href="{{ route('events.create') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    <x-heroicon-o-arrow-path class="h-5 w-5" />
+                    Termin oder Serie
+                </a>
+                <a href="{{ route('event-categories.index') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    <x-heroicon-o-swatch class="h-5 w-5" />
+                    Kategorien
+                </a>
+                <a href="{{ route('events.poster') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    <x-heroicon-o-printer class="h-5 w-5" />
+                    Aushang
+                </a>
+                <a href="{{ route('events.attendance.report') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    <x-heroicon-o-chart-bar class="h-5 w-5" />
+                    Anwesenheit
+                </a>
             </div>
+        @endif
+
+        <form method="GET" action="{{ route('events.index') }}" class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+            <input type="hidden" name="view" value="{{ $calendarView }}">
+            <input type="hidden" name="search" value="{{ $filters['search'] }}">
 
             <div>
                 <label class="text-sm font-semibold text-slate-900">
@@ -271,44 +239,26 @@
         </form>
     </details>
 
-    <section class="grid gap-3 sm:grid-cols-3">
-        <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div class="text-sm font-medium text-slate-500">Termine im Ausschnitt</div>
-            <div class="mt-1 text-2xl font-semibold text-slate-950">{{ $events->count() }}</div>
-        </div>
-        <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div class="text-sm font-medium text-slate-500">Konflikte</div>
-            <div class="mt-1 text-2xl font-semibold {{ $conflictCount > 0 ? 'text-rose-700' : 'text-slate-950' }}">{{ $conflictCount }}</div>
-        </div>
-        <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div class="text-sm font-medium text-slate-500">Mit Zuständigkeit</div>
-            <div class="mt-1 text-2xl font-semibold text-slate-950">{{ $responsibleCount }}</div>
-        </div>
-    </section>
-
-    @if($calendarView === 'month' && $availableDayCount > 0)
-        <section class="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 shadow-sm">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                    <h2 class="text-base font-semibold text-emerald-950">Freie Termine sofort erkennen</h2>
-                    <p class="mt-1 text-sm leading-6 text-emerald-800">
-                        Grün bedeutet frei, rot bedeutet belegt. So siehst du sofort, wo noch Platz ist.
-                    </p>
-                </div>
-                @if($canManageEvents)
-                    <a href="{{ route('events.create', ['date' => $availableDays->first()->format('Y-m-d')]) }}"
-                       class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800">
-                        <x-heroicon-o-plus class="h-5 w-5" />
-                        Ersten freien Tag planen
-                    </a>
-                @endif
-            </div>
-        </section>
-    @endif
-
     @if($calendarView === 'month')
-        <section class="grid gap-5 xl:grid-cols-[minmax(0,1fr),360px]">
+        <section class="grid gap-5 xl:grid-cols-[minmax(0,1fr),300px]">
             <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div class="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-950">Monatsübersicht</h2>
+                        <p class="mt-1 text-sm text-slate-500">Grün ist frei, rot ist belegt. Ein Klick öffnet den Tag oder Termin.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+                            <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                            {{ $availableDayCount }} frei
+                        </span>
+                        <span class="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-rose-700">
+                            <span class="h-2 w-2 rounded-full bg-rose-500"></span>
+                            belegt
+                        </span>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
                     @foreach($dayNames as $dayName)
                         <div class="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{{ $dayName }}</div>
@@ -361,59 +311,74 @@
                 </div>
             </div>
 
-            <aside class="space-y-5">
-                <section class="rounded-xl border border-emerald-200 bg-white shadow-sm">
-                    <div class="border-b border-emerald-100 px-5 py-4">
-                        <h2 class="text-lg font-semibold text-slate-950">Freie Tage im {{ $monthContext }}</h2>
-                        <p class="mt-1 text-sm text-slate-500">Schnell sehen, wo in diesem Monat noch Luft ist.</p>
+            <aside class="min-w-0">
+                <section class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-6">
+                    <div class="border-b border-slate-200 px-4 py-4">
+                        <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Monatsinfo</div>
+                        <h2 class="mt-1 text-lg font-semibold text-slate-950">{{ $monthContext }}</h2>
+                        <p class="mt-1 text-sm text-slate-500">{{ $availableDayCount }} freie Tage · {{ $events->count() }} Termine</p>
                     </div>
 
-                    <div class="divide-y divide-emerald-50">
-                        @forelse($availableDays->take(8) as $availableDay)
-                            <div class="px-5 py-3.5">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div class="min-w-0">
-                                        <div class="text-sm font-semibold text-slate-950">{{ $availableDay->translatedFormat('l') }}</div>
-                                        <div class="mt-0.5 text-sm text-slate-500">{{ $availableDay->format('d.m.Y') }}</div>
-                                    </div>
+                    <div class="space-y-5 p-4">
+                        <section>
+                            <div class="flex items-center justify-between gap-3">
+                                <h3 class="text-sm font-semibold text-slate-950">Freie Tage</h3>
+                                @if($availableDayCount > 8)
+                                    <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">+{{ $availableDayCount - 8 }}</span>
+                                @endif
+                            </div>
+
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                @forelse($availableDays->take(8) as $availableDay)
                                     @if($canManageEvents)
                                         <a href="{{ route('events.create', ['date' => $availableDay->format('Y-m-d')]) }}"
-                                           class="inline-flex min-h-9 shrink-0 items-center justify-center rounded-lg border border-emerald-200 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-50">
-                                            Planen
+                                           class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">
+                                            <span class="text-xs uppercase text-emerald-600">{{ $availableDay->translatedFormat('D') }}</span>
+                                            <span>{{ $availableDay->format('d.m.') }}</span>
                                         </a>
+                                    @else
+                                        <span class="inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-sm font-semibold text-emerald-800">
+                                            <span class="text-xs uppercase text-emerald-600">{{ $availableDay->translatedFormat('D') }}</span>
+                                            <span>{{ $availableDay->format('d.m.') }}</span>
+                                        </span>
                                     @endif
-                                </div>
+                                @empty
+                                    <div class="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">In diesem Monat ist jeder kommende Tag belegt.</div>
+                                @endforelse
                             </div>
-                        @empty
-                            <div class="px-5 py-10 text-center text-sm text-slate-500">In diesem Monat ist jeder kommende Tag belegt.</div>
-                        @endforelse
-                    </div>
-                </section>
+                        </section>
 
-                <section class="rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <div class="border-b border-slate-200 px-5 py-4">
-                        <h2 class="text-lg font-semibold text-slate-950">Termine im {{ $monthContext }}</h2>
-                        <p class="mt-1 text-sm text-slate-500">Alle geplanten Termine in diesem Monat.</p>
-                    </div>
+                        <section class="border-t border-slate-100 pt-4">
+                            <div class="flex items-center justify-between gap-3">
+                                <h3 class="text-sm font-semibold text-slate-950">Termine im Monat</h3>
+                                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{{ $events->count() }}</span>
+                            </div>
 
-                    <div class="divide-y divide-slate-100">
-                        @forelse($events->take(12) as $event)
-                            <a href="{{ route('events.show', $event) }}" class="block px-5 py-3.5 hover:bg-slate-50">
-                                <div class="flex items-start gap-3">
-                                    <div class="w-14 shrink-0 rounded-lg bg-slate-50 px-2 py-2 text-center">
-                                        <div class="text-xs font-semibold uppercase text-slate-500">{{ $event->start->translatedFormat('D') }}</div>
-                                        <div class="text-lg font-semibold text-slate-950">{{ $event->start->format('d') }}</div>
-                                    </div>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="truncate text-sm font-semibold text-slate-950">{{ $event->title }}</div>
-                                        <div class="mt-1 text-sm text-slate-500">{{ $event->start->format('H:i') }} - {{ $event->end->format('H:i') }} Uhr</div>
-                                        <div class="mt-1 truncate text-xs text-slate-500">{{ $event->location ?: 'Ort folgt' }}</div>
-                                    </div>
-                                </div>
-                            </a>
-                        @empty
-                            <div class="px-5 py-10 text-center text-sm text-slate-500">Keine Termine gefunden.</div>
-                        @endforelse
+                            <div class="mt-3 space-y-2">
+                                @forelse($events->take(8) as $event)
+                                    <a href="{{ route('events.show', $event) }}" class="block rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 hover:bg-white">
+                                        <div class="flex items-start gap-2">
+                                            <div class="w-10 shrink-0 rounded-md bg-white px-1.5 py-1 text-center ring-1 ring-slate-200">
+                                                <div class="text-[10px] font-semibold uppercase text-slate-400">{{ $event->start->translatedFormat('D') }}</div>
+                                                <div class="text-sm font-semibold text-slate-950">{{ $event->start->format('d') }}</div>
+                                            </div>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="truncate text-sm font-semibold text-slate-950">{{ $event->title }}</div>
+                                                <div class="mt-0.5 truncate text-xs text-slate-500">
+                                                    {{ $event->start->format('H:i') }} Uhr · {{ $event->location ?: 'Ort folgt' }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </a>
+                                @empty
+                                    <div class="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">Keine Termine gefunden.</div>
+                                @endforelse
+
+                                @if($events->count() > 8)
+                                    <div class="px-1 text-xs font-semibold text-slate-500">+{{ $events->count() - 8 }} weitere Termine im Monat</div>
+                                @endif
+                            </div>
+                        </section>
                     </div>
                 </section>
             </aside>
