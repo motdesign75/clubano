@@ -30,6 +30,7 @@ use App\Models\User;
 use App\Services\MailTrackingService;
 use App\Services\InvoiceCancellationService;
 use App\Services\OnboardingService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Support\Str;
@@ -47,12 +48,31 @@ class EventController extends Controller
         $tenant = app('currentTenant');
         $tenantId = $tenant->id;
         $today = now();
+
+        $dashboardData = Cache::remember(
+            "tenant:{$tenantId}:dashboard:v2",
+            now()->addSeconds(75),
+            function () use ($tenant, $tenantId, $today) {
+                return $this->buildDashboardData($tenant, $tenantId, $today);
+            }
+        );
+
+        return view('dashboard', $dashboardData);
+    }
+
+    private function buildDashboardData(Tenant $tenant, int $tenantId, Carbon $today): array
+    {
         $yearStart = $today->copy()->startOfYear();
         $yearEnd = $today->copy()->endOfYear();
-        $onboarding = app(OnboardingService::class)->buildForTenant($tenant);
+        $onboarding = Cache::remember(
+            "tenant:{$tenantId}:onboarding:v1",
+            now()->addMinutes(5),
+            fn () => app(OnboardingService::class)->buildForTenant($tenant)
+        );
 
         // Kommende Events (max. 5)
         $events = Event::where('tenant_id', $tenantId)
+            ->select(['id', 'tenant_id', 'title', 'start', 'end', 'location'])
             ->whereDate('start', '>=', $today)
             ->orderBy('start')
             ->take(5)
@@ -75,10 +95,18 @@ class EventController extends Controller
         $monthStart = $today->copy()->startOfMonth();
         $monthEnd = $today->copy()->endOfMonth();
 
-        // Eintritte im aktuellen Monat
-        $entries = (clone $membersBaseQuery)
+        $entriesThisMonthCount = (clone $membersBaseQuery)
             ->whereNotNull('entry_date')
             ->whereBetween('entry_date', [$monthStart, $monthEnd])
+            ->count();
+
+        // Eintritte im aktuellen Monat
+        $entries = (clone $membersBaseQuery)
+            ->select(['id', 'tenant_id', 'title', 'first_name', 'last_name', 'organization', 'entry_date', 'created_at'])
+            ->whereNotNull('entry_date')
+            ->whereBetween('entry_date', [$monthStart, $monthEnd])
+            ->latest('entry_date')
+            ->take(5)
             ->get();
 
         $entriesThisYearCount = (clone $membersBaseQuery)
@@ -107,6 +135,7 @@ class EventController extends Controller
             ->count();
 
         $latestFormSubmissions = (clone $formSubmissionsBaseQuery)
+            ->select(['id', 'tenant_id', 'public_form_id', 'full_name', 'email', 'created_at'])
             ->with('form')
             ->latest()
             ->take(3)
@@ -127,6 +156,7 @@ class EventController extends Controller
             ->count();
 
         $latestEventBookings = (clone $eventBookingsBaseQuery)
+            ->select(['id', 'tenant_id', 'event_id', 'booker_name', 'created_at'])
             ->with('event')
             ->latest()
             ->take(3)
@@ -154,33 +184,43 @@ class EventController extends Controller
 
         // Austritte im aktuellen Monat
         $exits = (clone $membersBaseQuery)
+            ->select(['id', 'tenant_id', 'title', 'first_name', 'last_name', 'organization', 'exit_date'])
             ->whereNotNull('exit_date')
             ->whereBetween('exit_date', [$monthStart, $monthEnd])
+            ->latest('exit_date')
+            ->take(5)
             ->get();
 
-        // Geburtstage im aktuellen Monat
+        // Geburtstage heute
         $birthdays = (clone $membersBaseQuery)
+            ->select(['id', 'tenant_id', 'title', 'first_name', 'last_name', 'organization', 'birthday'])
             ->whereNotNull('birthday')
             ->whereMonth('birthday', $today->month)
+            ->whereDay('birthday', $today->day)
+            ->take(10)
             ->get();
 
         // Jubiläen (5, 10, 25, 50 Jahre)
         $anniversaries = (clone $membersBaseQuery)
+            ->select(['id', 'tenant_id', 'title', 'first_name', 'last_name', 'organization', 'entry_date'])
             ->whereNotNull('entry_date')
-            ->get()
-            ->filter(function ($member) use ($today) {
-                $years = $today->year - $member->entry_date->year;
-                return in_array($years, [5, 10, 25, 50]) &&
-                       $member->entry_date->format('m-d') === $today->format('m-d');
-            });
+            ->whereMonth('entry_date', $today->month)
+            ->whereDay('entry_date', $today->day)
+            ->where(function ($query) use ($today) {
+                foreach ([5, 10, 25, 50] as $years) {
+                    $query->orWhereYear('entry_date', $today->year - $years);
+                }
+            })
+            ->get();
 
-        return view('dashboard', compact(
+        return compact(
             'events',
             'timeline',
             'tenant',
             'membersCount',
             'licenseType',
             'entries',
+            'entriesThisMonthCount',
             'entriesThisYearCount',
             'exits',
             'birthdays',
@@ -198,7 +238,7 @@ class EventController extends Controller
             'overdueInvoicesCount',
             'documentsCount',
             'documentAttentionCount'
-        ));
+        );
     }
 
     /**

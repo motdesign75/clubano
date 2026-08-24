@@ -23,6 +23,7 @@
     $primaryNextStep = $onboarding['nextStep'] ?? null;
     $documentsCount = $documentsCount ?? 0;
     $documentAttentionCount = $documentAttentionCount ?? 0;
+    $entriesThisMonthCount = $entriesThisMonthCount ?? $entries->count();
     $currentUser = auth()->user();
     $canManageWork = $currentUser?->isStaff() ?? false;
     $canManageForms = $currentUser?->canManageForms() ?? false;
@@ -109,10 +110,10 @@
         ];
     }
 
-    if ($entries->count() > 0) {
+    if ($entriesThisMonthCount > 0) {
         $signals[] = [
             'label' => 'Mitglieder prüfen',
-            'text' => $entries->count() . ' neue Eintritte in diesem Monat',
+            'text' => $entriesThisMonthCount . ' neue Eintritte in diesem Monat',
             'route' => route('members.index'),
         ];
     }
