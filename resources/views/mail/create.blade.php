@@ -119,7 +119,7 @@
 
                 <div class="mt-5">
                     <label for="body" class="sr-only">E-Mail-Text</label>
-                    <textarea id="body" name="body" rows="16" required class="w-full rounded-2xl border-slate-300 text-sm">{{ old('body') }}</textarea>
+                    <textarea id="body" name="body" rows="16" class="w-full rounded-2xl border-slate-300 text-sm">{{ old('body') }}</textarea>
                 </div>
 
                 <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -299,7 +299,7 @@
             </div>
 
             <div class="flex flex-wrap gap-3">
-                <button class="rounded-full bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700">
+                <button type="submit" class="rounded-full bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700">
                     E-Mail senden
                 </button>
                 <a href="{{ route('templates.index') }}" class="rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">
