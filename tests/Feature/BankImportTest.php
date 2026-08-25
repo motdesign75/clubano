@@ -61,6 +61,145 @@ test('finance users can import csv bank statements and duplicates are skipped', 
     expect(BankTransaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(1);
 });
 
+test('bank csv imports understand common counterparty and purpose columns', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('csv-bank-columns');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $csv = "Buchungstag;Betrag;Währung;Auftraggeber/Empfänger;Verwendungszweck 1;Verwendungszweck 2;IBAN Auftraggeber/Empfänger\n"
+        . "24.08.2026;100,00;EUR;Max Muster;Rechnung R-20260824001;Braukurs;DE02120300000000202051\n";
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $bankAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('volksbank.csv', $csv),
+    ])->assertRedirect();
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+
+    expect($bankTransaction->counterparty_name)->toBe('Max Muster');
+    expect($bankTransaction->counterparty_iban)->toBe('DE02120300000000202051');
+    expect($bankTransaction->purpose)->toBe('Rechnung R-20260824001 · Braukurs');
+});
+
+test('camt imports read nested counterparty names from xml', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('camt-name');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $xml = <<<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">
+  <BkToCstmrStmt>
+    <Stmt>
+      <Ntry>
+        <Amt Ccy="EUR">100.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <BookgDt><Dt>2026-08-24</Dt></BookgDt>
+        <ValDt><Dt>2026-08-24</Dt></ValDt>
+        <AcctSvcrRef>CAMT123</AcctSvcrRef>
+        <NtryDtls>
+          <TxDtls>
+            <Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs>
+            <RltdPties>
+              <Dbtr>
+                <Pty>
+                  <Nm>Max Muster</Nm>
+                </Pty>
+              </Dbtr>
+              <DbtrAcct>
+                <Id><IBAN>DE02120300000000202051</IBAN></Id>
+              </DbtrAcct>
+            </RltdPties>
+            <RmtInf>
+              <Ustrd>Rechnung R-20260824001</Ustrd>
+              <Ustrd>Braukurs</Ustrd>
+            </RmtInf>
+          </TxDtls>
+        </NtryDtls>
+      </Ntry>
+    </Stmt>
+  </BkToCstmrStmt>
+</Document>
+XML;
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $bankAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('camt.xml', $xml),
+    ])->assertRedirect();
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+
+    expect($bankTransaction->counterparty_name)->toBe('Max Muster');
+    expect($bankTransaction->counterparty_iban)->toBe('DE02120300000000202051');
+    expect($bankTransaction->purpose)->toBe('Rechnung R-20260824001 · Braukurs');
+});
+
+test('bank import list uses purpose when no counterparty name exists', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('display-fallback');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bankAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'umsatz.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bankAccount->id,
+        'booking_date' => '2026-08-24',
+        'amount' => 100,
+        'currency' => 'EUR',
+        'direction' => 'credit',
+        'purpose' => 'Rechnung R-20260824001',
+        'fingerprint' => 'display-fallback-test',
+        'status' => BankTransaction::STATUS_PENDING,
+    ]);
+
+    $this->actingAs($user)->get(route('bank-imports.index'))
+        ->assertOk()
+        ->assertSee('Rechnung R-20260824001')
+        ->assertSee('Name im Export nicht enthalten')
+        ->assertDontSee('Ohne Namen');
+});
+
 test('assigned bank transactions create draft bookings and update account balances', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

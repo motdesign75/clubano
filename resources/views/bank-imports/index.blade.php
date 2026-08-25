@@ -211,6 +211,13 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100 bg-white">
                     @forelse($bankTransactions as $bankTransaction)
+                        @php
+                            $transactionTitle = $bankTransaction->counterparty_name
+                                ?: $bankTransaction->purpose
+                                ?: $bankTransaction->counterparty_iban
+                                ?: 'Bankumsatz ohne Beschreibung';
+                            $showPurpose = filled($bankTransaction->purpose) && $bankTransaction->purpose !== $transactionTitle;
+                        @endphp
                         <tr id="bank-transaction-{{ $bankTransaction->id }}" class="scroll-mt-24 align-top target:bg-blue-50/60">
                             <td class="px-5 py-4">
                                 @if($bankTransaction->status === \App\Models\BankTransaction::STATUS_READY)
@@ -219,10 +226,17 @@
                             </td>
                             <td class="max-w-md px-5 py-4">
                                 <div class="text-sm font-semibold text-slate-950">{{ $bankTransaction->booking_date?->format('d.m.Y') }}</div>
-                                <div class="mt-1 text-sm text-slate-700">{{ $bankTransaction->counterparty_name ?: 'Ohne Namen' }}</div>
-                                <div class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ $bankTransaction->purpose ?: 'Kein Verwendungszweck' }}</div>
+                                <div class="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-800">{{ $transactionTitle }}</div>
+                                @if(blank($bankTransaction->counterparty_name))
+                                    <div class="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+                                        Name im Export nicht enthalten
+                                    </div>
+                                @endif
+                                @if($showPurpose)
+                                    <div class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ $bankTransaction->purpose }}</div>
+                                @endif
                                 @if($bankTransaction->counterparty_iban)
-                                    <div class="mt-1 text-xs text-slate-400">{{ $bankTransaction->counterparty_iban }}</div>
+                                    <div class="mt-1 text-xs text-slate-400">IBAN {{ $bankTransaction->counterparty_iban }}</div>
                                 @endif
                             </td>
                             <td class="px-5 py-4 text-right">

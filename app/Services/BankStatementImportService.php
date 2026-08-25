@@ -68,15 +68,17 @@ class BankStatementImportService
 
             $details = $xpath->query('.//*[local-name()="TxDtls"]', $entry)->item(0);
             $counterparty = $details instanceof DOMElement
-                ? ($this->text($xpath, './/*[local-name()="RltdPties"]//*[local-name()="Dbtr"]/*[local-name()="Nm"]', $details)
-                    ?: $this->text($xpath, './/*[local-name()="RltdPties"]//*[local-name()="Cdtr"]/*[local-name()="Nm"]', $details))
+                ? ($this->text($xpath, './/*[local-name()="RltdPties"]//*[local-name()="Dbtr"]//*[local-name()="Nm"]', $details)
+                    ?: $this->text($xpath, './/*[local-name()="RltdPties"]//*[local-name()="Cdtr"]//*[local-name()="Nm"]', $details)
+                    ?: $this->text($xpath, './/*[local-name()="RltdPties"]//*[local-name()="UltmtDbtr"]//*[local-name()="Nm"]', $details)
+                    ?: $this->text($xpath, './/*[local-name()="RltdPties"]//*[local-name()="UltmtCdtr"]//*[local-name()="Nm"]', $details))
                 : null;
             $counterpartyIban = $details instanceof DOMElement
                 ? ($this->text($xpath, './/*[local-name()="RltdPties"]//*[local-name()="DbtrAcct"]//*[local-name()="IBAN"]', $details)
                     ?: $this->text($xpath, './/*[local-name()="RltdPties"]//*[local-name()="CdtrAcct"]//*[local-name()="IBAN"]', $details))
                 : null;
             $purpose = $details instanceof DOMElement
-                ? $this->text($xpath, './/*[local-name()="RmtInf"]//*[local-name()="Ustrd"]', $details)
+                ? $this->texts($xpath, './/*[local-name()="RmtInf"]//*[local-name()="Ustrd"]', $details)
                 : null;
             $endToEndId = $details instanceof DOMElement
                 ? $this->text($xpath, './/*[local-name()="Refs"]//*[local-name()="EndToEndId"]', $details)
@@ -134,14 +136,57 @@ class BankStatementImportService
                 continue;
             }
 
+            $counterpartyName = $this->first($data, [
+                'name',
+                'auftraggeberempfanger',
+                'auftraggeberempfaenger',
+                'empfanger',
+                'empfaenger',
+                'auftraggeber',
+                'begunstigter',
+                'beguenstigter',
+                'zahlungspflichtiger',
+                'begunstigterzahlungspflichtiger',
+                'beguenstigterzahlungspflichtiger',
+                'namezahlungsbeteiligter',
+                'zahlungsbeteiligter',
+                'nameauftraggeber',
+                'nameempfanger',
+                'nameempfaenger',
+                'kontoinhaber',
+                'partnername',
+            ]);
+
+            $purpose = $this->combine($data, [
+                'verwendungszweck',
+                'verwendungszweck1',
+                'verwendungszweck2',
+                'verwendungszweck3',
+                'vwz',
+                'vwz1',
+                'vwz2',
+                'zweck',
+                'buchungstext',
+                'text',
+                'umsatztext',
+                'beschreibung',
+            ]);
+
             $rows[] = $this->normalizeRow([
                 'booking_date' => $this->parseDate($this->first($data, ['buchungstag', 'buchungsdatum', 'datum'])),
                 'value_date' => $this->parseDate($this->first($data, ['wertstellung', 'valuta'])),
                 'amount' => $amount,
                 'currency' => strtoupper((string) ($this->first($data, ['waehrung', 'wahrung', 'currency']) ?: 'EUR')),
-                'counterparty_name' => $this->first($data, ['name', 'auftraggeberempfaenger', 'empfaenger', 'auftraggeber', 'beguenstigterzahlungspflichtiger']),
-                'counterparty_iban' => $this->first($data, ['iban', 'ibanauftraggeberempfaenger']),
-                'purpose' => $this->first($data, ['verwendungszweck', 'buchungstext', 'text', 'umsatztext', 'beschreibung']),
+                'counterparty_name' => $counterpartyName,
+                'counterparty_iban' => $this->first($data, [
+                    'iban',
+                    'ibanauftraggeberempfanger',
+                    'ibanauftraggeberempfaenger',
+                    'ibanbegunstigterzahlungspflichtiger',
+                    'ibanbeguenstigterzahlungspflichtiger',
+                    'kontonummeriban',
+                ]),
+                'purpose' => $purpose,
                 'end_to_end_id' => $this->first($data, ['endtoendid', 'mandatsreferenz']),
                 'bank_reference' => $this->first($data, ['kundenreferenz', 'referenz', 'bankreferenz']),
                 'raw' => $data,
@@ -192,6 +237,23 @@ class BankStatementImportService
     {
         $node = $xpath->query($query, $context)->item(0);
         return $node ? trim($node->textContent) : null;
+    }
+
+    private function texts(DOMXPath $xpath, string $query, DOMElement $context): ?string
+    {
+        $nodes = $xpath->query($query, $context);
+        $parts = [];
+
+        foreach ($nodes ?: [] as $node) {
+            $value = trim($node->textContent);
+            if ($value === '' || in_array($value, $parts, true)) {
+                continue;
+            }
+
+            $parts[] = $value;
+        }
+
+        return $parts === [] ? null : implode(' · ', $parts);
     }
 
     private function currency(DOMXPath $xpath, string $query, DOMElement $context): string
@@ -264,6 +326,26 @@ class BankStatementImportService
         }
 
         return null;
+    }
+
+    private function combine(array $data, array $keys): ?string
+    {
+        $parts = [];
+
+        foreach ($keys as $key) {
+            if (! array_key_exists($key, $data)) {
+                continue;
+            }
+
+            $value = trim((string) $data[$key]);
+            if ($value === '' || in_array($value, $parts, true)) {
+                continue;
+            }
+
+            $parts[] = $value;
+        }
+
+        return $parts === [] ? null : implode(' · ', $parts);
     }
 
     private function decimal(?string $value): float
