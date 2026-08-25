@@ -584,6 +584,7 @@ Route::get('/mail/tracking/open/{token}', [MailTrackingController::class, 'open'
 Route::get('/mail/tracking/click/{dispatchLog}', [MailTrackingController::class, 'click'])->name('mail.tracking.click');
 Route::get('/betreiber-mitteilungen/tracking/open/{token}', [MailTrackingController::class, 'operatorOpen'])->name('operator-announcements.tracking.open');
 Route::get('/betreiber-mitteilungen/tracking/click/{delivery}', [MailTrackingController::class, 'operatorClick'])->name('operator-announcements.tracking.click');
+Route::get('/betreiber-mitteilungen/abmelden/{delivery}', [MailTrackingController::class, 'operatorUnsubscribe'])->name('operator-announcements.unsubscribe');
 
 // Template
 Route::middleware(['auth', 'tenant.subscribed'])->group(function () {

@@ -66,6 +66,7 @@ class OperatorAnnouncementController extends Controller
             'tenantOptions' => $tenantOptions,
             'recipientOptions' => $recipientOptions,
             'recipientFilters' => $this->recipientFilters(),
+            'categories' => $this->categories(),
             'previewHtml' => $this->sanitizeBody($body),
             'defaultBody' => $body,
         ]);
@@ -79,6 +80,7 @@ class OperatorAnnouncementController extends Controller
             'body_markdown' => ['required', 'string', 'max:12000'],
             'cta_label' => ['nullable', 'string', 'max:80'],
             'cta_url' => ['nullable', 'url', 'max:2048'],
+            'category' => ['required', Rule::in(array_keys($this->categories()))],
             'test_email' => ['nullable', 'email', 'max:255'],
             'recipient_filter' => ['required', Rule::in(array_keys($this->recipientFilters()))],
             'tenant_ids' => ['nullable', 'array'],
@@ -93,12 +95,23 @@ class OperatorAnnouncementController extends Controller
             $validated['tenant_ids'] ?? [],
             $validated['recipient_user_ids'] ?? []
         );
-        $recipients = $recipientQuery->get();
+        $candidateRecipients = $recipientQuery->get();
+        $excludedByOptOut = 0;
+        $recipients = $candidateRecipients;
+
+        if ($validated['category'] === OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE) {
+            $recipients = $candidateRecipients
+                ->filter(fn (User $recipient) => $recipient->operator_updates_unsubscribed_at === null)
+                ->values();
+            $excludedByOptOut = $candidateRecipients->count() - $recipients->count();
+        }
 
         if ($validated['action'] === 'send' && $recipients->isEmpty()) {
             return back()
                 ->withInput()
-                ->with('error', 'Für diese Auswahl wurden keine Vereinsadmins gefunden.');
+                ->with('error', $excludedByOptOut > 0
+                    ? 'Für diese Auswahl bleiben keine zustellbaren Vereinsadmins übrig. Einige Empfänger haben Produktupdates abbestellt.'
+                    : 'Für diese Auswahl wurden keine Vereinsadmins gefunden.');
         }
 
         $announcement = OperatorAnnouncement::create([
@@ -108,12 +121,15 @@ class OperatorAnnouncementController extends Controller
             'body_html' => $bodyHtml,
             'cta_label' => $validated['cta_label'] ?? null,
             'cta_url' => $validated['cta_url'] ?? null,
+            'category' => $validated['category'],
             'recipient_filter' => $validated['recipient_filter'],
             'recipient_summary' => [
                 'filter' => $this->recipientFilters()[$validated['recipient_filter']],
+                'category' => $this->categories()[$validated['category']],
                 'tenant_ids' => $validated['tenant_ids'] ?? [],
                 'recipient_user_ids' => $validated['recipient_user_ids'] ?? [],
                 'recipient_count' => $validated['action'] === 'send' ? $recipients->count() : 1,
+                'excluded_by_opt_out' => $validated['action'] === 'send' ? $excludedByOptOut : 0,
             ],
             'status' => $validated['action'] === 'send' ? 'sending' : 'test',
         ]);
@@ -175,12 +191,13 @@ class OperatorAnnouncementController extends Controller
             'recipient_summary' => array_merge($announcement->recipient_summary ?? [], [
                 'sent' => $sent,
                 'failed' => $failed,
+                'excluded_by_opt_out' => $excludedByOptOut,
             ]),
         ]);
 
         return redirect()
             ->route('admin.announcements.index')
-            ->with('success', "Betreiber-Mitteilung versendet: {$sent} erfolgreich, {$failed} fehlgeschlagen.");
+            ->with('success', "Betreiber-Mitteilung versendet: {$sent} erfolgreich, {$failed} fehlgeschlagen, {$excludedByOptOut} wegen Abmeldung ausgeschlossen.");
     }
 
     public function uploadImage(Request $request): JsonResponse
@@ -207,6 +224,19 @@ class OperatorAnnouncementController extends Controller
             'without_members' => 'Vereine ohne Mitglieder',
             'import_issues' => 'Vereine mit Importbedarf',
             'selected' => 'Einzelne Empfänger auswählen',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function categories(): array
+    {
+        return [
+            OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE => 'Produktupdate / Neuigkeiten',
+            OperatorAnnouncement::CATEGORY_SECURITY => 'Wartung / Sicherheit',
+            OperatorAnnouncement::CATEGORY_CONTRACT => 'Vertrag / Abrechnung',
+            OperatorAnnouncement::CATEGORY_PRIVACY => 'Datenschutz / AVV',
         ];
     }
 
@@ -296,11 +326,24 @@ class OperatorAnnouncementController extends Controller
             'recipient' => $recipient,
             'bodyHtml' => $bodyHtml,
             'ctaUrl' => $ctaUrl,
+            'unsubscribeUrl' => $this->unsubscribeUrl($announcement, $delivery),
         ], function ($mail) use ($email, $name, $announcement) {
             $mail->to($email, $name)
                 ->subject($announcement->subject)
                 ->from(config('mail.from.address'), config('mail.from.name', 'Clubano'));
         });
+    }
+
+    private function unsubscribeUrl(OperatorAnnouncement $announcement, ?OperatorAnnouncementDelivery $delivery): ?string
+    {
+        if ($announcement->category !== OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE || ! $delivery || ! $delivery->user_id) {
+            return null;
+        }
+
+        return URL::signedRoute('operator-announcements.unsubscribe', [
+            'delivery' => $delivery->id,
+            'token' => $delivery->tracking_token,
+        ]);
     }
 
     private function instrumentBody(string $html, OperatorAnnouncementDelivery $delivery): string

@@ -39,6 +39,8 @@ test('operator superadmin can open the announcement editor', function () {
         ->assertSee('Bilder werden direkt in Clubano gespeichert')
         ->assertSee('Konkrete Empfänger')
         ->assertSee('Vorschau')
+        ->assertSee('Art der Mitteilung')
+        ->assertSee('Produktupdates respektieren Abmeldungen')
         ->assertSee('Testmail an')
         ->assertSee('Testmail senden');
 });
@@ -62,6 +64,7 @@ test('operator can send a test announcement to their own account', function () {
             'cta_label' => 'Clubano öffnen',
             'cta_url' => 'https://app.clubano.de',
             'test_email' => 'testziel@example.test',
+            'category' => OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE,
             'recipient_filter' => 'all_active',
         ])
         ->assertRedirect(route('admin.announcements.index'))
@@ -94,6 +97,7 @@ test('operator test announcement failures return to editor instead of crashing',
             'cta_label' => 'Clubano öffnen',
             'cta_url' => 'https://app.clubano.de',
             'test_email' => 'testziel@example.test',
+            'category' => OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE,
             'recipient_filter' => 'all_active',
         ])
         ->assertRedirect(route('admin.announcements.create'))
@@ -148,6 +152,7 @@ test('operator announcements are sent only to explicitly selected recipients', f
             'body_markdown' => '<p>Hallo,</p><p><strong>Wichtiges Update</strong></p><ul><li>Punkt eins</li></ul>',
             'cta_label' => 'Clubano öffnen',
             'cta_url' => 'https://app.clubano.de',
+            'category' => OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE,
             'recipient_filter' => 'selected',
             'recipient_user_ids' => [$selectedAdmin->id],
         ])
@@ -200,6 +205,7 @@ test('manual announcement selection does not send to every admin of a selected t
             'action' => 'send',
             'subject' => 'Clubano Update',
             'body_markdown' => '<p>Hallo</p>',
+            'category' => OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE,
             'recipient_filter' => 'selected',
             'tenant_ids' => [$tenant->id],
         ])
@@ -209,6 +215,131 @@ test('manual announcement selection does not send to every admin of a selected t
     expect(OperatorAnnouncementDelivery::query()->count())->toBe(0);
 });
 
+test('product update announcements skip admins who unsubscribed from operator updates', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    $operator = User::factory()->create([
+        'tenant_id' => null,
+        'role' => User::ROLE_SUPERADMIN,
+        'email_verified_at' => now(),
+    ]);
+
+    $tenant = createAnnouncementTenant('Opt-out Verein');
+
+    $activeAdmin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+        'email' => 'active-admin@example.test',
+        'email_verified_at' => now(),
+    ]);
+
+    $unsubscribedAdmin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+        'email' => 'unsubscribed-admin@example.test',
+        'email_verified_at' => now(),
+        'operator_updates_unsubscribed_at' => now(),
+    ]);
+
+    $this->actingAs($operator)
+        ->post(route('admin.announcements.store'), [
+            'action' => 'send',
+            'subject' => 'Clubano Update',
+            'body_markdown' => '<p>Hallo</p>',
+            'category' => OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE,
+            'recipient_filter' => 'selected',
+            'recipient_user_ids' => [$activeAdmin->id, $unsubscribedAdmin->id],
+        ])
+        ->assertRedirect(route('admin.announcements.index'))
+        ->assertSessionHas('success', 'Betreiber-Mitteilung versendet: 1 erfolgreich, 0 fehlgeschlagen, 1 wegen Abmeldung ausgeschlossen.');
+
+    $announcement = OperatorAnnouncement::query()->latest()->firstOrFail();
+
+    expect($announcement->deliveries()->count())->toBe(1)
+        ->and($announcement->recipient_summary['excluded_by_opt_out'])->toBe(1)
+        ->and($announcement->deliveries()->first()->email)->toBe('active-admin@example.test');
+});
+
+test('privacy announcements are still sent to admins who unsubscribed from product updates', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    $operator = User::factory()->create([
+        'tenant_id' => null,
+        'role' => User::ROLE_SUPERADMIN,
+        'email_verified_at' => now(),
+    ]);
+
+    $tenant = createAnnouncementTenant('Pflichtkommunikation Verein');
+
+    $unsubscribedAdmin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+        'email' => 'privacy-admin@example.test',
+        'email_verified_at' => now(),
+        'operator_updates_unsubscribed_at' => now(),
+    ]);
+
+    $this->actingAs($operator)
+        ->post(route('admin.announcements.store'), [
+            'action' => 'send',
+            'subject' => 'Datenschutzhinweis',
+            'body_markdown' => '<p>Wichtiger Hinweis</p>',
+            'category' => OperatorAnnouncement::CATEGORY_PRIVACY,
+            'recipient_filter' => 'selected',
+            'recipient_user_ids' => [$unsubscribedAdmin->id],
+        ])
+        ->assertRedirect(route('admin.announcements.index'));
+
+    $announcement = OperatorAnnouncement::query()->latest()->firstOrFail();
+
+    expect($announcement->deliveries()->count())->toBe(1)
+        ->and($announcement->recipient_summary['excluded_by_opt_out'])->toBe(0)
+        ->and($announcement->deliveries()->first()->email)->toBe('privacy-admin@example.test');
+});
+
+test('operator announcement unsubscribe link disables future product updates for the user', function () {
+    $tenant = createAnnouncementTenant('Abmeldung Verein');
+
+    $user = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+        'email' => 'unsubscribe@example.test',
+        'email_verified_at' => now(),
+    ]);
+
+    $announcement = OperatorAnnouncement::create([
+        'subject' => 'Produktupdate',
+        'body_markdown' => '<p>Hallo</p>',
+        'body_html' => '<p>Hallo</p>',
+        'category' => OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE,
+        'recipient_filter' => 'selected',
+        'status' => 'sent',
+        'sent_at' => now(),
+    ]);
+
+    $delivery = OperatorAnnouncementDelivery::create([
+        'operator_announcement_id' => $announcement->id,
+        'tenant_id' => $tenant->id,
+        'user_id' => $user->id,
+        'recipient_name' => $user->name,
+        'email' => $user->email,
+        'status' => 'sent',
+    ]);
+
+    $unsubscribeUrl = URL::signedRoute('operator-announcements.unsubscribe', [
+        'delivery' => $delivery->id,
+        'token' => $delivery->tracking_token,
+    ]);
+
+    $this->get($unsubscribeUrl)
+        ->assertOk()
+        ->assertSee('Produktupdates abbestellt');
+
+    expect($user->refresh()->operator_updates_unsubscribed_at)->not->toBeNull();
+});
+
 test('operator announcement opens and clicks are tracked', function () {
     $tenant = createAnnouncementTenant('Tracking Verein');
 
@@ -216,6 +347,7 @@ test('operator announcement opens and clicks are tracked', function () {
         'subject' => 'Tracking Update',
         'body_markdown' => '<p>Hallo</p>',
         'body_html' => '<p>Hallo</p>',
+        'category' => OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE,
         'recipient_filter' => 'selected',
         'status' => 'sent',
         'sent_at' => now(),

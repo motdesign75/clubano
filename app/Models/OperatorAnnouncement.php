@@ -6,6 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class OperatorAnnouncement extends Model
 {
+    public const CATEGORY_PRODUCT_UPDATE = 'product_update';
+    public const CATEGORY_SECURITY = 'security';
+    public const CATEGORY_CONTRACT = 'contract';
+    public const CATEGORY_PRIVACY = 'privacy';
+
     protected $fillable = [
         'created_by',
         'subject',
@@ -13,6 +18,7 @@ class OperatorAnnouncement extends Model
         'body_html',
         'cta_label',
         'cta_url',
+        'category',
         'recipient_filter',
         'recipient_summary',
         'status',

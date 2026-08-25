@@ -34,6 +34,14 @@
                             <br>Verein: <strong>{{ $tenant->name }}</strong>
                         @endif
                         <br>Clubano · Vereine einfach verwalten
+                        @if(! empty($unsubscribeUrl))
+                            <br><br>
+                            Du erhältst diese E-Mail, weil du als Vereinsadmin Produktupdates von Clubano bekommst.
+                            <br>
+                            <a href="{{ $unsubscribeUrl }}" style="color:#2563eb; text-decoration:underline;">
+                                Produktupdates nicht mehr per E-Mail erhalten
+                            </a>
+                        @endif
                     </td>
                 </tr>
             </table>

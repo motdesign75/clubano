@@ -66,6 +66,19 @@
                             <input id="cta_url" name="cta_url" value="{{ old('cta_url', config('app.url')) }}" class="mt-2 w-full rounded-2xl border-slate-200 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
                             @error('cta_url')<p class="mt-2 text-sm text-rose-700">{{ $message }}</p>@enderror
                         </div>
+
+                        <div class="md:col-span-2">
+                            <label for="category" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Art der Mitteilung</label>
+                            <select id="category" name="category" class="mt-2 w-full rounded-2xl border-slate-200 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                @foreach($categories as $value => $label)
+                                    <option value="{{ $value }}" @selected(old('category', 'product_update') === $value)>{{ $label }}</option>
+                                @endforeach
+                            </select>
+                            <p class="mt-2 text-xs leading-5 text-slate-500">
+                                Produktupdates respektieren Abmeldungen. Sicherheit, Vertrag und Datenschutz bleiben zustellbar.
+                            </p>
+                            @error('category')<p class="mt-2 text-sm text-rose-700">{{ $message }}</p>@enderror
+                        </div>
                     </div>
                 </section>
 

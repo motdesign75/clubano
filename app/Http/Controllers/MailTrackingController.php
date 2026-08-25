@@ -83,4 +83,24 @@ class MailTrackingController extends Controller
 
         return redirect()->away($target);
     }
+
+    public function operatorUnsubscribe(Request $request, OperatorAnnouncementDelivery $delivery): Response
+    {
+        abort_unless($request->hasValidSignature(), 403);
+        abort_unless(hash_equals((string) $delivery->tracking_token, (string) $request->query('token')), 403);
+
+        $user = $delivery->user;
+
+        abort_unless($user, 404);
+
+        if ($user->operator_updates_unsubscribed_at === null) {
+            $user->forceFill([
+                'operator_updates_unsubscribed_at' => now(),
+            ])->save();
+        }
+
+        return response()->view('admin.announcements.unsubscribed', [
+            'user' => $user,
+        ]);
+    }
 }

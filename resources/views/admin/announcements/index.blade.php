@@ -33,11 +33,14 @@
 
         <div class="divide-y divide-slate-100">
             @forelse($announcements as $announcement)
-                <article class="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_150px_120px_120px_120px_140px] lg:items-center">
+                <article class="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_140px_110px_110px_110px_120px_140px] lg:items-center">
                     <div class="min-w-0">
                         <div class="truncate text-base font-semibold text-slate-950">{{ $announcement->subject }}</div>
                         <div class="mt-1 text-sm text-slate-500">
                             {{ $announcement->recipient_summary['filter'] ?? 'Empfängerfilter' }} · erstellt {{ $announcement->created_at->format('d.m.Y H:i') }}
+                        </div>
+                        <div class="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                            {{ $announcement->recipient_summary['category'] ?? 'Produktupdate / Neuigkeiten' }}
                         </div>
                     </div>
                     <div>
@@ -55,6 +58,10 @@
                     <div>
                         <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Geklickt</div>
                         <div class="mt-1 text-sm font-semibold text-slate-800">{{ $announcement->clicked_count ?? 0 }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Abgemeldet</div>
+                        <div class="mt-1 text-sm font-semibold text-slate-800">{{ $announcement->recipient_summary['excluded_by_opt_out'] ?? 0 }}</div>
                     </div>
                     <div class="text-sm text-slate-500">
                         {{ $announcement->sent_at ? $announcement->sent_at->format('d.m.Y H:i') : 'nicht versendet' }}

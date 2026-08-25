@@ -36,6 +36,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'last_login_at',
         'last_login_ip',
         'update_notice_dismissed_version',
+        'operator_updates_unsubscribed_at',
     ];
 
     /**
@@ -67,6 +68,7 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'operator_updates_unsubscribed_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
