@@ -99,16 +99,16 @@ return [
     ],
 
     'update_notice' => [
-        'version' => env('CLUBANO_UPDATE_NOTICE_VERSION', '2026-08-10'),
+        'version' => env('CLUBANO_UPDATE_NOTICE_VERSION', '2026-08-25'),
         'title' => 'Clubano wurde aktualisiert',
-        'summary' => 'Wir haben den Finanzbereich deutlich erweitert: Kontenrahmen, Buchungsimporte und Kontostände sind jetzt besser vorbereitet und sicherer nachvollziehbar.',
+        'summary' => 'Wir haben die Bereiche Beiträge, Rechnungen, Bankumsätze, Gutscheine, Kommunikation und Kalender spürbar verbessert. Viele Abläufe sind jetzt klarer, sicherer und schneller.',
         'items' => [
-            'Kontenrahmen können importiert oder als einfacher Clubano-Standardrahmen angelegt werden',
-            'DATEV-Buchungsstapel können importiert und automatisch den richtigen Konten zugeordnet werden',
-            'Konten und Buchungskonten lassen sich schneller suchen, filtern und kompakt anzeigen',
-            'Kontostände werden zuverlässiger berechnet; negative Bankbestände werden klar rot dargestellt',
-            'Vor dem Import eines weiteren Kontenrahmens schützt eine deutliche Warnung vor unbeabsichtigten Änderungen',
-            'Ein neuer Wartungsbefehl kann Kontensalden aus abgeschlossenen Buchungen neu berechnen',
+            'Beiträge: fehlende Beitragsmodelle, nächste Abrechnung und Familienzahler sind leichter erkennbar',
+            'Rechnungen: Teilzahlungen, Überzahlungen und 0,00-Euro-Rechnungen werden sauberer behandelt',
+            'Bankumsätze: CAMT/CSV-Import, Gegenkonto-Zuordnung, Belege, Verträge und Clubano-Rechnungen als Nachweis',
+            'Gutscheine: PDF-Gutscheine mit Code, Widmung und verbesserter Darstellung',
+            'Kommunikation: HTML-Mails mit Editor, Anhängen, Vorlagen und Testmail vor dem Versand',
+            'Kalender und Dashboard: ruhigere Übersichten, bessere mobile Darstellung und schnelleres Laden',
         ],
     ],
 
