@@ -9,6 +9,7 @@ use App\Models\Transaction;
 use App\Services\BankStatementImportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class BankImportController extends Controller
@@ -187,15 +188,28 @@ class BankImportController extends Controller
                     ->where('is_postable', true)),
             ],
             'source_account_id' => ['required', 'integer', Rule::in([(int) $bankTransaction->account_id])],
+            'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
+            'receipt_kind' => ['nullable', Rule::in(['none', 'upload', 'vertrag'])],
+            'contract_reference' => [
+                Rule::requiredIf(fn () => $request->input('receipt_kind') === 'vertrag' && ! $request->hasFile('receipt_file')),
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'contract_location' => ['nullable', 'string', 'max:255'],
+            'contract_date' => ['nullable', 'date'],
         ]);
 
         if ($bankTransaction->status === BankTransaction::STATUS_BOOKED) {
             return back()->with('error', 'Dieser Bankumsatz wurde bereits gebucht.');
         }
 
+        $receiptData = $this->receiptData($request, $validated, $bankTransaction);
+
         $bankTransaction->update([
             'selected_account_id' => $validated['selected_account_id'],
             'status' => BankTransaction::STATUS_READY,
+            ...$receiptData,
         ]);
 
         return back()->with('success', 'Gegenkonto wurde gespeichert.');
@@ -292,7 +306,8 @@ class BankImportController extends Controller
             'tax_area' => $contraAccount->tax_area ?: $bankAccount->tax_area ?: 'ideell',
             'receipt_number' => 'BANK-' . $bankTransaction->booking_date?->format('Ymd') . '-' . str_pad((string) $bankTransaction->id, 6, '0', STR_PAD_LEFT),
             'receipt_kind' => 'bank_import',
-            'receipt_meta' => [
+            'receipt_file' => $bankTransaction->receipt_file,
+            'receipt_meta' => array_filter([
                 'source' => 'Bankumsatz-Import',
                 'bank_import_id' => $bankTransaction->bank_import_id,
                 'bank_transaction_id' => $bankTransaction->id,
@@ -300,9 +315,23 @@ class BankImportController extends Controller
                 'counterparty_iban' => $bankTransaction->counterparty_iban,
                 'bank_reference' => $bankTransaction->bank_reference,
                 'end_to_end_id' => $bankTransaction->end_to_end_id,
-            ],
+            ]),
             'status' => 'entwurf',
         ]);
+
+        if ($bankTransaction->receipt_kind === 'vertrag') {
+            $transaction->forceFill([
+                'receipt_kind' => 'vertrag',
+                'receipt_meta' => array_filter([
+                    ...($transaction->receipt_meta ?? []),
+                    ...($bankTransaction->receipt_meta ?? []),
+                ]),
+            ])->save();
+        } elseif ($bankTransaction->receipt_file) {
+            $transaction->forceFill([
+                'receipt_kind' => 'upload',
+            ])->save();
+        }
 
         $bankTransaction->update([
             'transaction_id' => $transaction->id,
@@ -329,5 +358,62 @@ class BankImportController extends Controller
     private function abortIfForeignTenant(BankTransaction $bankTransaction, int $tenantId): void
     {
         abort_unless((int) $bankTransaction->tenant_id === $tenantId, 404);
+    }
+
+    private function receiptData(Request $request, array $validated, BankTransaction $bankTransaction): array
+    {
+        $receiptKind = $validated['receipt_kind'] ?? 'none';
+        $data = [
+            'receipt_kind' => null,
+            'receipt_meta' => null,
+        ];
+
+        if ($receiptKind === 'none') {
+            if ($bankTransaction->receipt_file && Storage::disk('public')->exists($bankTransaction->receipt_file)) {
+                Storage::disk('public')->delete($bankTransaction->receipt_file);
+            }
+
+            return [
+                ...$data,
+                'receipt_file' => null,
+            ];
+        }
+
+        $receiptFile = $bankTransaction->receipt_file;
+
+        if ($request->hasFile('receipt_file')) {
+            if ($receiptFile && Storage::disk('public')->exists($receiptFile)) {
+                Storage::disk('public')->delete($receiptFile);
+            }
+
+            $receiptFile = $request->file('receipt_file')->store(
+                'receipts/' . auth()->user()->tenant_id . '/bank-imports',
+                'public'
+            );
+        }
+
+        if ($receiptKind === 'vertrag') {
+            return [
+                'receipt_file' => $receiptFile,
+                'receipt_kind' => 'vertrag',
+                'receipt_meta' => [
+                    'contract_document_id' => null,
+                    'contract_document_title' => null,
+                    'contract_reference' => trim((string) ($validated['contract_reference'] ?? '')),
+                    'contract_location' => blank($validated['contract_location'] ?? null)
+                        ? ($receiptFile ? 'Bankimport-Beleg' : null)
+                        : trim((string) $validated['contract_location']),
+                    'contract_date' => blank($validated['contract_date'] ?? null) ? null : $validated['contract_date'],
+                    'marked_at' => now()->toIso8601String(),
+                    'marked_by' => auth()->id(),
+                ],
+            ];
+        }
+
+        return [
+            'receipt_file' => $receiptFile,
+            'receipt_kind' => $receiptFile ? 'upload' : null,
+            'receipt_meta' => null,
+        ];
     }
 }

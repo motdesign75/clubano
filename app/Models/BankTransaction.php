@@ -36,6 +36,9 @@ class BankTransaction extends Model
         'fingerprint',
         'status',
         'raw_data',
+        'receipt_file',
+        'receipt_kind',
+        'receipt_meta',
     ];
 
     protected $casts = [
@@ -43,6 +46,7 @@ class BankTransaction extends Model
         'value_date' => 'date',
         'amount' => 'decimal:2',
         'raw_data' => 'array',
+        'receipt_meta' => 'array',
     ];
 
     public function bankImport()

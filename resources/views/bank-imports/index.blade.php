@@ -237,7 +237,7 @@
                             </td>
                             <td class="w-80 px-5 py-4">
                                 @if($bankTransaction->status !== \App\Models\BankTransaction::STATUS_BOOKED)
-                                    <form method="POST" action="{{ route('bank-imports.transactions.update', $bankTransaction) }}" class="space-y-2">
+                                    <form method="POST" action="{{ route('bank-imports.transactions.update', $bankTransaction) }}" enctype="multipart/form-data" class="space-y-3">
                                         @csrf
                                         @method('PATCH')
                                         <input type="hidden" name="source_account_id" value="{{ $bankTransaction->account_id }}">
@@ -254,12 +254,45 @@
                                                 </optgroup>
                                             @endforeach
                                         </select>
+
+                                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Beleg optional</label>
+                                            <select name="receipt_kind" class="w-full rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                <option value="none" @selected(blank($bankTransaction->receipt_kind))>Kein Beleg hinterlegen</option>
+                                                <option value="upload" @selected($bankTransaction->receipt_kind === 'upload')>Einzelbeleg hochladen</option>
+                                                <option value="vertrag" @selected($bankTransaction->receipt_kind === 'vertrag')>Vertrag / Dauerbeleg</option>
+                                            </select>
+
+                                            <input name="receipt_file" type="file" accept=".pdf,.jpg,.jpeg,.png" class="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700">
+
+                                            @if($bankTransaction->receipt_file)
+                                                <div class="mt-2 text-xs font-semibold text-emerald-700">Beleg ist vorbereitet.</div>
+                                            @endif
+
+                                            <div class="mt-2 grid gap-2">
+                                                <input name="contract_reference" value="{{ old('contract_reference', $bankTransaction->receipt_meta['contract_reference'] ?? '') }}" placeholder="Vertrag / Grundlage, z. B. Mietvertrag Vereinsheim" class="rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                <div class="grid gap-2 sm:grid-cols-2">
+                                                    <input name="contract_location" value="{{ old('contract_location', $bankTransaction->receipt_meta['contract_location'] ?? '') }}" placeholder="Ablageort" class="rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                    <input name="contract_date" type="date" value="{{ old('contract_date', $bankTransaction->receipt_meta['contract_date'] ?? '') }}" class="rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <button type="submit" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                                             Zuordnung speichern
                                         </button>
                                     </form>
                                 @else
                                     <div class="text-sm font-semibold text-slate-900">{{ $bankTransaction->selectedAccount?->number }} · {{ $bankTransaction->selectedAccount?->name }}</div>
+                                    <div class="mt-2 text-xs text-slate-500">
+                                        @if($bankTransaction->receipt_kind === 'vertrag')
+                                            Vertrag/Dauerbeleg übernommen
+                                        @elseif($bankTransaction->receipt_file)
+                                            Beleg übernommen
+                                        @else
+                                            Ohne Beleg übernommen
+                                        @endif
+                                    </div>
                                 @endif
                             </td>
                             <td class="px-5 py-4">
