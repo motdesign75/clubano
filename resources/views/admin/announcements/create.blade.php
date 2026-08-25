@@ -106,19 +106,6 @@
                         </select>
                     </div>
 
-                    <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <label for="test_email" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Testmail an</label>
-                        <input id="test_email"
-                               name="test_email"
-                               type="email"
-                               value="{{ old('test_email', auth()->user()->email) }}"
-                               class="mt-2 w-full rounded-2xl border-slate-200 bg-white text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                        <p class="mt-2 text-xs leading-5 text-slate-500">
-                            Nur für „Testmail senden“. Der echte Versand nutzt die ausgewählten Vereinsadmins.
-                        </p>
-                        @error('test_email')<p class="mt-2 text-sm text-rose-700">{{ $message }}</p>@enderror
-                    </div>
-
                     <div id="selected-recipient-panel" class="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
@@ -191,7 +178,17 @@
                 <a href="{{ route('admin.announcements.index') }}" class="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 transition hover:bg-slate-50">
                     Abbrechen
                 </a>
-                <div class="flex flex-col gap-3 sm:flex-row">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
+                    <div class="min-w-0 lg:w-80">
+                        <label for="test_email" class="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Testmail an</label>
+                        <input id="test_email"
+                               name="test_email"
+                               type="email"
+                               value="{{ old('test_email', auth()->user()->email) }}"
+                               placeholder="deine-adresse@example.de"
+                               class="mt-1 w-full rounded-2xl border-slate-200 bg-white text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        @error('test_email')<p class="mt-1 text-sm text-rose-700">{{ $message }}</p>@enderror
+                    </div>
                     <button name="action" value="test" class="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50">
                         Testmail senden
                     </button>
