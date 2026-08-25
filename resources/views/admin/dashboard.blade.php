@@ -112,13 +112,69 @@
         <div class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-lg font-semibold text-slate-950">Alle Vereine</h2>
-                <p class="mt-1 text-sm text-slate-500">Ruhige Betreiberliste mit Diagnose, Nutzung und nächstem Schritt.</p>
+                <p class="mt-1 text-sm text-slate-500">Suchen, filtern und gezielt in den nächsten Supportfall springen.</p>
             </div>
-            <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{{ $allTenants->count() }} Vereine</span>
+            <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                {{ $filteredTenants->count() }} von {{ $allTenants->count() }} Vereinen
+            </span>
+        </div>
+
+        <div class="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+            <form method="GET" action="{{ route('admin.dashboard') }}" class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
+                <div>
+                    <label for="tenant-search" class="sr-only">Verein suchen</label>
+                    <input
+                        id="tenant-search"
+                        type="search"
+                        name="q"
+                        value="{{ $tenantSearch }}"
+                        placeholder="Verein, Ort, E-Mail oder Ansprechpartner suchen"
+                        class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    >
+                </div>
+                <div>
+                    <label for="tenant-status" class="sr-only">Status filtern</label>
+                    <select id="tenant-status" name="status" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <option value="all" @selected($tenantStatus === 'all')>Alle Vereine</option>
+                        <option value="attention" @selected($tenantStatus === 'attention')>Handlungsbedarf</option>
+                        <option value="pending" @selected($tenantStatus === 'pending')>Prüfung offen</option>
+                        <option value="verified" @selected($tenantStatus === 'verified')>Geprüft</option>
+                        <option value="active" @selected($tenantStatus === 'active')>Aktiv in 30 Tagen</option>
+                        <option value="without_admin" @selected($tenantStatus === 'without_admin')>Ohne Admin</option>
+                        <option value="without_members" @selected($tenantStatus === 'without_members')>Ohne Mitglieder</option>
+                    </select>
+                </div>
+                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-[auto_auto]">
+                    <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800">
+                        Anwenden
+                    </button>
+                    <a href="{{ route('admin.dashboard') }}" class="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                        Zurücksetzen
+                    </a>
+                </div>
+            </form>
+
+            <div class="mt-3 flex flex-wrap gap-2">
+                @foreach([
+                    'all' => 'Alle',
+                    'attention' => 'Handlungsbedarf',
+                    'pending' => 'Prüfung offen',
+                    'active' => 'Aktiv',
+                    'without_admin' => 'Ohne Admin',
+                    'without_members' => 'Ohne Mitglieder',
+                ] as $statusKey => $statusLabel)
+                    <a
+                        href="{{ route('admin.dashboard', array_filter(['q' => $tenantSearch ?: null, 'status' => $statusKey === 'all' ? null : $statusKey])) }}"
+                        class="rounded-full px-3 py-1 text-xs font-semibold transition {{ $tenantStatus === $statusKey ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-blue-50 hover:text-blue-700' }}"
+                    >
+                        {{ $statusLabel }}
+                    </a>
+                @endforeach
+            </div>
         </div>
 
         <div class="divide-y divide-slate-100">
-            @forelse($allTenants as $tenant)
+            @forelse($paginatedTenants as $tenant)
                 @php
                     $metrics = $tenant->admin_metrics ?? [];
                     $health = $tenant->admin_health;
@@ -261,9 +317,17 @@
                     </div>
                 </article>
             @empty
-                <div class="px-5 py-12 text-center text-sm text-slate-500">Noch keine Vereine vorhanden.</div>
+                <div class="px-5 py-12 text-center text-sm text-slate-500">
+                    Keine Vereine für diese Suche gefunden.
+                </div>
             @endforelse
         </div>
+
+        @if($paginatedTenants->hasPages())
+            <div class="border-t border-slate-100 px-5 py-4">
+                {{ $paginatedTenants->links() }}
+            </div>
+        @endif
     </section>
 
     <section class="mt-8 grid gap-6 lg:grid-cols-2">

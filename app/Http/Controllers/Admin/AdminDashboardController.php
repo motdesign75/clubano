@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -16,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 
 class AdminDashboardController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $totalTenants = Tenant::count();
         $totalUsers = User::count();
@@ -117,6 +118,64 @@ class AdminDashboardController extends Controller
             'member_onboarding_risk' => $allTenants->filter(fn (Tenant $tenant) => ($tenant->admin_member_onboarding['level'] ?? 'ok') === 'risk')->count(),
         ];
 
+        $tenantSearch = trim((string) $request->query('q', ''));
+        $tenantStatus = (string) $request->query('status', 'all');
+        $allowedTenantStatuses = ['all', 'attention', 'pending', 'verified', 'active', 'without_admin', 'without_members'];
+
+        if (! in_array($tenantStatus, $allowedTenantStatuses, true)) {
+            $tenantStatus = 'all';
+        }
+
+        $filteredTenants = $allTenants
+            ->when($tenantSearch !== '', function ($tenants) use ($tenantSearch) {
+                $needle = Str::lower($tenantSearch);
+
+                return $tenants->filter(function (Tenant $tenant) use ($needle) {
+                    return Str::contains(Str::lower(implode(' ', array_filter([
+                        $tenant->name,
+                        $tenant->email,
+                        $tenant->city,
+                        $tenant->zip,
+                        $tenant->address,
+                        $tenant->registration_contact_name,
+                        $tenant->registration_role,
+                        $tenant->registration_website,
+                    ]))), $needle);
+                });
+            })
+            ->when($tenantStatus !== 'all', function ($tenants) use ($tenantStatus) {
+                return $tenants->filter(function (Tenant $tenant) use ($tenantStatus) {
+                    $metrics = $tenant->admin_metrics ?? [];
+
+                    return match ($tenantStatus) {
+                        'attention' => ($tenant->admin_health['level'] ?? 'ok') !== 'ok'
+                            || ($tenant->admin_registration_review['level'] ?? 'ok') !== 'ok'
+                            || ($tenant->admin_member_onboarding['level'] ?? 'ok') === 'risk',
+                        'pending' => ($tenant->verification_status ?? 'pending') === 'pending',
+                        'verified' => ($tenant->verification_status ?? null) === 'verified',
+                        'active' => $tenant->admin_last_activity_at?->greaterThanOrEqualTo(now()->subDays(30)) ?? false,
+                        'without_admin' => ($metrics['admin_users'] ?? 0) === 0,
+                        'without_members' => ($metrics['members'] ?? 0) === 0,
+                        default => true,
+                    };
+                });
+            })
+            ->values();
+
+        $tenantPage = LengthAwarePaginator::resolveCurrentPage('tenants_page');
+        $tenantsPerPage = 12;
+        $paginatedTenants = new LengthAwarePaginator(
+            $filteredTenants->forPage($tenantPage, $tenantsPerPage)->values(),
+            $filteredTenants->count(),
+            $tenantsPerPage,
+            $tenantPage,
+            [
+                'path' => $request->url(),
+                'pageName' => 'tenants_page',
+                'query' => $request->query(),
+            ]
+        );
+
         $latestUsers = User::with('tenant')
             ->latest()
             ->take(8)
@@ -128,6 +187,10 @@ class AdminDashboardController extends Controller
             'platformStats',
             'lifecycleStats',
             'allTenants',
+            'filteredTenants',
+            'paginatedTenants',
+            'tenantSearch',
+            'tenantStatus',
             'attentionTenants',
             'latestTenants',
             'latestUsers'
