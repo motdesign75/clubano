@@ -42,6 +42,67 @@ test('operator superadmin can open the announcement editor', function () {
         ->assertSee('Testmail an mich');
 });
 
+test('operator can send a test announcement to their own account', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::shouldReceive('send')->once();
+
+    $operator = User::factory()->create([
+        'tenant_id' => null,
+        'role' => User::ROLE_SUPERADMIN,
+        'email' => 'operator@example.test',
+        'email_verified_at' => now(),
+    ]);
+
+    $this->actingAs($operator)
+        ->post(route('admin.announcements.store'), [
+            'action' => 'test',
+            'subject' => 'Clubano Update',
+            'body_markdown' => '<p>Hallo,</p><p>das ist eine Testmail.</p>',
+            'cta_label' => 'Clubano öffnen',
+            'cta_url' => 'https://app.clubano.de',
+            'recipient_filter' => 'all_active',
+        ])
+        ->assertRedirect(route('admin.announcements.index'))
+        ->assertSessionHas('success', 'Testmail wurde an dein Betreiberkonto gesendet.');
+
+    $announcement = OperatorAnnouncement::query()->latest()->firstOrFail();
+
+    expect($announcement->status)->toBe('test')
+        ->and($announcement->recipient_summary['recipient_count'])->toBe(1);
+
+});
+
+test('operator test announcement failures return to editor instead of crashing', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::shouldReceive('send')->once()->andThrow(new RuntimeException('SMTP nicht erreichbar'));
+
+    $operator = User::factory()->create([
+        'tenant_id' => null,
+        'role' => User::ROLE_SUPERADMIN,
+        'email' => 'operator@example.test',
+        'email_verified_at' => now(),
+    ]);
+
+    $this->actingAs($operator)
+        ->from(route('admin.announcements.create'))
+        ->post(route('admin.announcements.store'), [
+            'action' => 'test',
+            'subject' => 'Clubano Update',
+            'body_markdown' => '<p>Hallo,</p><p>das ist eine Testmail.</p>',
+            'cta_label' => 'Clubano öffnen',
+            'cta_url' => 'https://app.clubano.de',
+            'recipient_filter' => 'all_active',
+        ])
+        ->assertRedirect(route('admin.announcements.create'))
+        ->assertSessionHas('error', 'Die Testmail konnte nicht versendet werden. Bitte prüfe die Mail-Einstellungen oder den Inhalt der Nachricht.');
+
+    $announcement = OperatorAnnouncement::query()->latest()->firstOrFail();
+
+    expect($announcement->status)->toBe('failed')
+        ->and($announcement->recipient_summary['failed'])->toBe(1)
+        ->and($announcement->recipient_summary['error'])->toContain('SMTP nicht erreichbar');
+});
+
 test('operator announcements are sent only to explicitly selected recipients', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
     Mail::fake();

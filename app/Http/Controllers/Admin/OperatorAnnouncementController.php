@@ -118,7 +118,21 @@ class OperatorAnnouncementController extends Controller
         ]);
 
         if ($validated['action'] === 'test') {
-            $this->sendMail($request->user()->email, $request->user()->name, null, null, $announcement, null);
+            try {
+                $this->sendMail($request->user()->email, $request->user()->name, null, null, $announcement, null);
+            } catch (Throwable $e) {
+                $announcement->update([
+                    'status' => 'failed',
+                    'recipient_summary' => array_merge($announcement->recipient_summary ?? [], [
+                        'failed' => 1,
+                        'error' => Str::limit($e->getMessage(), 1000),
+                    ]),
+                ]);
+
+                return back()
+                    ->withInput()
+                    ->with('error', 'Die Testmail konnte nicht versendet werden. Bitte prüfe die Mail-Einstellungen oder den Inhalt der Nachricht.');
+            }
 
             return redirect()
                 ->route('admin.announcements.index')
