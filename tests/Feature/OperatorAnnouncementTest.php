@@ -39,7 +39,8 @@ test('operator superadmin can open the announcement editor', function () {
         ->assertSee('Bilder werden direkt in Clubano gespeichert')
         ->assertSee('Konkrete Empfänger')
         ->assertSee('Vorschau')
-        ->assertSee('Testmail an mich');
+        ->assertSee('Testmail an')
+        ->assertSee('Testmail senden');
 });
 
 test('operator can send a test announcement to their own account', function () {
@@ -60,6 +61,7 @@ test('operator can send a test announcement to their own account', function () {
             'body_markdown' => '<p>Hallo,</p><p>das ist eine Testmail.</p>',
             'cta_label' => 'Clubano öffnen',
             'cta_url' => 'https://app.clubano.de',
+            'test_email' => 'testziel@example.test',
             'recipient_filter' => 'all_active',
         ])
         ->assertRedirect(route('admin.announcements.index'))
@@ -91,6 +93,7 @@ test('operator test announcement failures return to editor instead of crashing',
             'body_markdown' => '<p>Hallo,</p><p>das ist eine Testmail.</p>',
             'cta_label' => 'Clubano öffnen',
             'cta_url' => 'https://app.clubano.de',
+            'test_email' => 'testziel@example.test',
             'recipient_filter' => 'all_active',
         ])
         ->assertRedirect(route('admin.announcements.create'))

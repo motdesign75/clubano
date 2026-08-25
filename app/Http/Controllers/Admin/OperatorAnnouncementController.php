@@ -79,6 +79,7 @@ class OperatorAnnouncementController extends Controller
             'body_markdown' => ['required', 'string', 'max:12000'],
             'cta_label' => ['nullable', 'string', 'max:80'],
             'cta_url' => ['nullable', 'url', 'max:2048'],
+            'test_email' => ['nullable', 'email', 'max:255'],
             'recipient_filter' => ['required', Rule::in(array_keys($this->recipientFilters()))],
             'tenant_ids' => ['nullable', 'array'],
             'tenant_ids.*' => ['integer', Rule::exists('tenants', 'id')],
@@ -118,8 +119,10 @@ class OperatorAnnouncementController extends Controller
         ]);
 
         if ($validated['action'] === 'test') {
+            $testEmail = $validated['test_email'] ?? $request->user()->email;
+
             try {
-                $this->sendMail($request->user()->email, $request->user()->name, null, null, $announcement, null);
+                $this->sendMail($testEmail, $request->user()->name, null, null, $announcement, null);
             } catch (Throwable $e) {
                 $announcement->update([
                     'status' => 'failed',
