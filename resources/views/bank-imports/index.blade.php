@@ -211,7 +211,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100 bg-white">
                     @forelse($bankTransactions as $bankTransaction)
-                        <tr class="align-top">
+                        <tr id="bank-transaction-{{ $bankTransaction->id }}" class="scroll-mt-24 align-top target:bg-blue-50/60">
                             <td class="px-5 py-4">
                                 @if($bankTransaction->status === \App\Models\BankTransaction::STATUS_READY)
                                     <input type="checkbox" form="bulk-book-form" name="bank_transaction_ids[]" value="{{ $bankTransaction->id }}" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">

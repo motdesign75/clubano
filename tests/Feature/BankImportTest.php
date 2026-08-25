@@ -115,9 +115,10 @@ test('assigned bank transactions create draft bookings and update account balanc
     $this->actingAs($user)->patch(route('bank-imports.transactions.update', $bankTransaction), [
         'source_account_id' => $bankAccount->id,
         'selected_account_id' => $incomeAccount->id,
-    ])->assertRedirect();
+    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
 
-    $this->actingAs($user)->post(route('bank-imports.transactions.book', $bankTransaction))->assertRedirect();
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $bankTransaction))
+        ->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
 
     $transaction = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
 
@@ -189,7 +190,7 @@ test('bank transactions can carry optional contract receipts into created bookin
         'contract_reference' => 'Mietvertrag Vereinsheim',
         'contract_location' => 'Clubano Bankimport',
         'contract_date' => '2026-01-01',
-    ])->assertRedirect();
+    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
 
     $bankTransaction = BankTransaction::withoutGlobalScopes()->find($bankTransaction->id);
 

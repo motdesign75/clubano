@@ -212,7 +212,8 @@ class BankImportController extends Controller
             ...$receiptData,
         ]);
 
-        return back()->with('success', 'Gegenkonto wurde gespeichert.');
+        return $this->backToBankTransaction($bankTransaction)
+            ->with('success', 'Gegenkonto wurde gespeichert.');
     }
 
     public function book(BankTransaction $bankTransaction)
@@ -230,8 +231,7 @@ class BankImportController extends Controller
 
         $transaction = DB::transaction(fn () => $this->createTransactionFromBankTransaction($bankTransaction));
 
-        return redirect()
-            ->route('bank-imports.index', request()->only(['status', 'import']))
+        return $this->backToBankTransaction($bankTransaction)
             ->with('success', 'Buchungsentwurf ' . $transaction->receipt_number . ' wurde erstellt.');
     }
 
@@ -278,7 +278,8 @@ class BankImportController extends Controller
 
         $bankTransaction->update(['status' => BankTransaction::STATUS_IGNORED]);
 
-        return back()->with('success', 'Bankumsatz wurde ausgeblendet.');
+        return $this->backToBankTransaction($bankTransaction)
+            ->with('success', 'Bankumsatz wurde ausgeblendet.');
     }
 
     private function createTransactionFromBankTransaction(BankTransaction $bankTransaction): Transaction
@@ -358,6 +359,14 @@ class BankImportController extends Controller
     private function abortIfForeignTenant(BankTransaction $bankTransaction, int $tenantId): void
     {
         abort_unless((int) $bankTransaction->tenant_id === $tenantId, 404);
+    }
+
+    private function backToBankTransaction(BankTransaction $bankTransaction)
+    {
+        $previous = url()->previous();
+        $withoutFragment = explode('#', $previous, 2)[0];
+
+        return redirect()->to($withoutFragment . '#bank-transaction-' . $bankTransaction->id);
     }
 
     private function receiptData(Request $request, array $validated, BankTransaction $bankTransaction): array
