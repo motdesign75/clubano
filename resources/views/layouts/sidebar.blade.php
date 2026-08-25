@@ -30,6 +30,7 @@
             'route' => route('transactions.index'),
             'active' => request()->routeIs('accounts.*')
                 || request()->routeIs('transactions.*')
+                || request()->routeIs('bank-imports.*')
                 || request()->routeIs('donations.*')
                 || request()->routeIs('invoices.*')
                 || request()->routeIs('vouchers.*')
@@ -129,6 +130,14 @@
             'route' => route('transactions.index'),
             'active' => request()->routeIs('transactions.index') || request()->routeIs('transactions.create') || request()->routeIs('transactions.edit') || request()->routeIs('transactions.cancel*'),
             'icon' => 'document-text',
+            'minRole' => 'finance',
+        ],
+        [
+            'label' => 'Bankumsätze',
+            'hint' => 'Kontoauszüge importieren und sicher verbuchen',
+            'route' => route('bank-imports.index'),
+            'active' => request()->routeIs('bank-imports.*'),
+            'icon' => 'arrow-down-tray',
             'minRole' => 'finance',
         ],
         [

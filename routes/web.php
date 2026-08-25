@@ -10,6 +10,7 @@ use App\Http\Controllers\MailController;
 use App\Http\Controllers\MailTrackingController;
 use App\Http\Controllers\LetterController;
 use App\Http\Controllers\TransactionController;
+use App\Http\Controllers\BankImportController;
 use App\Http\Controllers\DonationController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\EventController;
@@ -430,6 +431,12 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
 
     $when($C.'TransactionController', function($cls){
         Route::middleware('tenant.role:finance')->group(function () use ($cls) {
+            Route::get('/bankumsaetze/import', [BankImportController::class, 'index'])->name('bank-imports.index');
+            Route::post('/bankumsaetze/import', [BankImportController::class, 'store'])->name('bank-imports.store');
+            Route::patch('/bankumsaetze/{bankTransaction}', [BankImportController::class, 'update'])->name('bank-imports.transactions.update');
+            Route::post('/bankumsaetze/{bankTransaction}/buchen', [BankImportController::class, 'book'])->name('bank-imports.transactions.book');
+            Route::post('/bankumsaetze/{bankTransaction}/ignorieren', [BankImportController::class, 'ignore'])->name('bank-imports.transactions.ignore');
+            Route::post('/bankumsaetze/sammel-buchen', [BankImportController::class, 'bulkBook'])->name('bank-imports.transactions.bulk-book');
             Route::post('/transactions/datev-import', [$cls, 'importDatev'])->name('transactions.datev-import');
             Route::post('/transactions/contract-receipt-selected', [$cls, 'contractReceiptSelected'])->name('transactions.contract-receipt-selected');
             Route::resource('transactions', $cls)->except(['show', 'destroy']);
