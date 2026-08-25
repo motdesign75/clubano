@@ -217,6 +217,7 @@
                                 ?: $bankTransaction->counterparty_iban
                                 ?: 'Bankumsatz ohne Beschreibung';
                             $showPurpose = filled($bankTransaction->purpose) && $bankTransaction->purpose !== $transactionTitle;
+                            $selectedInvoiceId = old('invoice_id', $bankTransaction->receipt_meta['invoice_id'] ?? null);
                         @endphp
                         <tr id="bank-transaction-{{ $bankTransaction->id }}" class="scroll-mt-24 align-top target:bg-blue-50/60">
                             <td class="px-5 py-4">
@@ -273,9 +274,30 @@
                                             <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Beleg optional</label>
                                             <select name="receipt_kind" class="w-full rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
                                                 <option value="none" @selected(blank($bankTransaction->receipt_kind))>Kein Beleg hinterlegen</option>
+                                                <option value="system_invoice" @selected($bankTransaction->receipt_kind === 'system_invoice')>Clubano-Rechnung als Beleg</option>
                                                 <option value="upload" @selected($bankTransaction->receipt_kind === 'upload')>Einzelbeleg hochladen</option>
                                                 <option value="vertrag" @selected($bankTransaction->receipt_kind === 'vertrag')>Vertrag / Dauerbeleg</option>
                                             </select>
+
+                                            <div class="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                                                <label class="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Rechnung auswählen</label>
+                                                <select name="invoice_id" class="w-full rounded-xl border-emerald-200 bg-white text-xs shadow-sm focus:border-emerald-600 focus:ring-emerald-600">
+                                                    <option value="">Keine Rechnung verknüpfen</option>
+                                                    @foreach($invoices as $invoice)
+                                                        @php
+                                                            $total = (float) $invoice->getTotal();
+                                                            $paid = (float) ($invoice->paid_amount ?? 0);
+                                                            $remaining = max($total - $paid, 0);
+                                                        @endphp
+                                                        <option value="{{ $invoice->id }}" @selected((string) $selectedInvoiceId === (string) $invoice->id)>
+                                                            {{ $invoice->invoice_number }} · {{ $invoice->recipient_name ?: 'Ohne Empfänger' }} · {{ number_format($remaining, 2, ',', '.') }} € offen
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                <p class="mt-2 text-[11px] leading-5 text-emerald-800">
+                                                    Wenn dieser Zahlungseingang zu einer Clubano-Rechnung gehört, gilt die Rechnung als interner Beleg.
+                                                </p>
+                                            </div>
 
                                             <input name="receipt_file" type="file" accept=".pdf,.jpg,.jpeg,.png" class="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700">
 
@@ -301,6 +323,8 @@
                                     <div class="mt-2 text-xs text-slate-500">
                                         @if($bankTransaction->receipt_kind === 'vertrag')
                                             Vertrag/Dauerbeleg übernommen
+                                        @elseif($bankTransaction->receipt_kind === 'system_invoice')
+                                            Rechnung {{ $bankTransaction->receipt_meta['invoice_number'] ?? '' }} übernommen
                                         @elseif($bankTransaction->receipt_file)
                                             Beleg übernommen
                                         @else

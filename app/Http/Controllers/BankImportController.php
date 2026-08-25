@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Account;
 use App\Models\BankImport;
 use App\Models\BankTransaction;
+use App\Models\Invoice;
 use App\Models\Transaction;
 use App\Services\BankStatementImportService;
 use Illuminate\Http\Request;
@@ -34,6 +35,8 @@ class BankImportController extends Controller
             ->orderBy('type')
             ->orderBy('number')
             ->get();
+
+        $invoices = $this->invoiceChoices();
 
         $imports = BankImport::query()
             ->with('account')
@@ -78,6 +81,7 @@ class BankImportController extends Controller
             'postingAccounts',
             'imports',
             'bankTransactions',
+            'invoices',
             'summary',
             'status',
             'importId'
@@ -189,7 +193,15 @@ class BankImportController extends Controller
             ],
             'source_account_id' => ['required', 'integer', Rule::in([(int) $bankTransaction->account_id])],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
-            'receipt_kind' => ['nullable', Rule::in(['none', 'upload', 'vertrag'])],
+            'receipt_kind' => ['nullable', Rule::in(['none', 'upload', 'vertrag', 'system_invoice'])],
+            'invoice_id' => [
+                Rule::requiredIf(fn () => $request->input('receipt_kind') === 'system_invoice'),
+                'nullable',
+                Rule::exists('invoices', 'id')->where(fn ($query) => $query
+                    ->where('tenant_id', $tenantId)
+                    ->where('document_type', 'invoice')
+                    ->whereNotIn('status', ['entwurf', 'storniert'])),
+            ],
             'contract_reference' => [
                 Rule::requiredIf(fn () => $request->input('receipt_kind') === 'vertrag' && ! $request->hasFile('receipt_file')),
                 'nullable',
@@ -294,6 +306,7 @@ class BankImportController extends Controller
 
         $amount = abs((float) $bankTransaction->amount);
         $isCredit = $bankTransaction->isCredit();
+        $invoice = $this->invoiceFromBankTransaction($bankTransaction);
 
         $transaction = Transaction::create([
             'tenant_id' => $bankTransaction->tenant_id,
@@ -306,8 +319,9 @@ class BankImportController extends Controller
             'account_to_id' => $isCredit ? $bankAccount->id : $contraAccount->id,
             'tax_area' => $contraAccount->tax_area ?: $bankAccount->tax_area ?: 'ideell',
             'receipt_number' => 'BANK-' . $bankTransaction->booking_date?->format('Ymd') . '-' . str_pad((string) $bankTransaction->id, 6, '0', STR_PAD_LEFT),
-            'receipt_kind' => 'bank_import',
+            'receipt_kind' => $invoice ? 'system_invoice' : 'bank_import',
             'receipt_file' => $bankTransaction->receipt_file,
+            'invoice_id' => $invoice?->id,
             'receipt_meta' => array_filter([
                 'source' => 'Bankumsatz-Import',
                 'bank_import_id' => $bankTransaction->bank_import_id,
@@ -316,6 +330,10 @@ class BankImportController extends Controller
                 'counterparty_iban' => $bankTransaction->counterparty_iban,
                 'bank_reference' => $bankTransaction->bank_reference,
                 'end_to_end_id' => $bankTransaction->end_to_end_id,
+                'invoice_id' => $invoice?->id,
+                'invoice_number' => $invoice?->invoice_number,
+                'linked_at' => $invoice ? now()->toIso8601String() : null,
+                'linked_by' => $invoice ? auth()->id() : null,
             ]),
             'status' => 'entwurf',
         ]);
@@ -388,6 +406,31 @@ class BankImportController extends Controller
             ];
         }
 
+        if ($receiptKind === 'system_invoice') {
+            if ($bankTransaction->receipt_file && Storage::disk('public')->exists($bankTransaction->receipt_file)) {
+                Storage::disk('public')->delete($bankTransaction->receipt_file);
+            }
+
+            $invoice = Invoice::query()
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->where('document_type', 'invoice')
+                ->whereNotIn('status', ['entwurf', 'storniert'])
+                ->whereKey($validated['invoice_id'])
+                ->firstOrFail();
+
+            return [
+                'receipt_file' => null,
+                'receipt_kind' => 'system_invoice',
+                'receipt_meta' => [
+                    'invoice_id' => $invoice->id,
+                    'invoice_number' => $invoice->invoice_number,
+                    'invoice_recipient' => $invoice->recipient_name,
+                    'linked_at' => now()->toIso8601String(),
+                    'linked_by' => auth()->id(),
+                ],
+            ];
+        }
+
         $receiptFile = $bankTransaction->receipt_file;
 
         if ($request->hasFile('receipt_file')) {
@@ -424,5 +467,35 @@ class BankImportController extends Controller
             'receipt_kind' => $receiptFile ? 'upload' : null,
             'receipt_meta' => null,
         ];
+    }
+
+    private function invoiceChoices()
+    {
+        return Invoice::query()
+            ->where('tenant_id', auth()->user()->tenant_id)
+            ->where('document_type', 'invoice')
+            ->whereNotIn('status', ['entwurf', 'storniert'])
+            ->withSum('payments as paid_amount', 'amount')
+            ->orderByDesc('invoice_date')
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get();
+    }
+
+    private function invoiceFromBankTransaction(BankTransaction $bankTransaction): ?Invoice
+    {
+        if ($bankTransaction->receipt_kind !== 'system_invoice') {
+            return null;
+        }
+
+        $invoiceId = $bankTransaction->receipt_meta['invoice_id'] ?? null;
+        if (! $invoiceId) {
+            return null;
+        }
+
+        return Invoice::query()
+            ->where('tenant_id', $bankTransaction->tenant_id)
+            ->whereKey($invoiceId)
+            ->first();
     }
 }

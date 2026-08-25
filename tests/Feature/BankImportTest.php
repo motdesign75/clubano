@@ -4,6 +4,8 @@ use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Account;
 use App\Models\BankImport;
 use App\Models\BankTransaction;
+use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
@@ -344,4 +346,97 @@ test('bank transactions can carry optional contract receipts into created bookin
     expect($transaction->receipt_file)->toBe($bankTransaction->receipt_file);
     expect($transaction->receipt_meta['contract_reference'])->toBe('Mietvertrag Vereinsheim');
     expect($transaction->receipt_meta['source'])->toBe('Bankumsatz-Import');
+});
+
+test('bank transactions can use an existing invoice as internal receipt', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('invoice-receipt');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $incomeAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4300',
+        'name' => 'Kurse',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'income_account_id' => $incomeAccount->id,
+        'recipient_name' => 'Max Muster',
+        'recipient_email' => 'max@example.test',
+        'invoice_number' => 'R-BANK-001',
+        'invoice_date' => '2026-08-20',
+        'due_date' => '2026-08-31',
+        'status' => 'open',
+        'amount' => 100,
+        'total' => 100,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Braukurs',
+        'quantity' => 1,
+        'unit_price' => 100,
+        'tax_rate' => 0,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bankAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'umsatz.xml',
+        'format' => 'CAMT.053',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bankAccount->id,
+        'booking_date' => '2026-08-24',
+        'amount' => 100,
+        'currency' => 'EUR',
+        'direction' => 'credit',
+        'counterparty_name' => 'Max Muster',
+        'purpose' => 'Rechnung R-BANK-001',
+        'fingerprint' => 'invoice-receipt-test',
+        'status' => BankTransaction::STATUS_PENDING,
+    ]);
+
+    $this->actingAs($user)->patch(route('bank-imports.transactions.update', $bankTransaction), [
+        'source_account_id' => $bankAccount->id,
+        'selected_account_id' => $incomeAccount->id,
+        'receipt_kind' => 'system_invoice',
+        'invoice_id' => $invoice->id,
+    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->find($bankTransaction->id);
+
+    expect($bankTransaction->receipt_kind)->toBe('system_invoice');
+    expect($bankTransaction->receipt_meta['invoice_id'])->toBe($invoice->id);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $bankTransaction))->assertRedirect();
+
+    $transaction = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+
+    expect($transaction->invoice_id)->toBe($invoice->id);
+    expect($transaction->receipt_kind)->toBe('system_invoice');
+    expect($transaction->receipt_meta['invoice_number'])->toBe('R-BANK-001');
 });
