@@ -10,7 +10,10 @@ test('login screen can be rendered', function () {
 });
 
 test('users can authenticate using the login screen', function () {
-    $user = User::factory()->create();
+    $user = User::factory()->create([
+        'last_login_at' => null,
+        'last_login_ip' => null,
+    ]);
 
     $response = $this->post('/login', [
         'email' => $user->email,
@@ -19,6 +22,11 @@ test('users can authenticate using the login screen', function () {
 
     $this->assertAuthenticated();
     $response->assertRedirect(route('dashboard', absolute: false));
+
+    $user->refresh();
+
+    expect($user->last_login_at)->not->toBeNull();
+    expect($user->last_login_ip)->toBe('127.0.0.1');
 });
 
 test('operator superadmin can authenticate without email verification', function () {

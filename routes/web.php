@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\OperatorAnnouncementController;
 use App\Http\Controllers\SubscriptionController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\PublicFormController;
+use App\Http\Controllers\StatisticsController;
 use App\Http\Controllers\UpdateNoticeController;
 use App\Http\Controllers\PrivacyCenterController;
 
@@ -113,6 +114,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     });
 
     // Projekte – Übersicht, Anlegen, Anzeigen, Bearbeiten, Löschen
+    Route::get('/auswertungen', [StatisticsController::class, 'index'])
+        ->middleware('tenant.role:Lesen')
+        ->name('statistics.index');
+
     $when($C.'ProjectIndexController', function($cls){
         Route::get('/projects', $cls)->name('projects.index');
     });

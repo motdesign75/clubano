@@ -106,7 +106,7 @@ class PublicFormController extends Controller
     public function submissions(PublicForm $form)
     {
         $this->authorizeForm($form);
-        $form->load('event');
+        $form->load(['event', 'fields']);
 
         $submissions = $form->submissions()
             ->with(['eventBooking.participants', 'member', 'contact'])

@@ -11,6 +11,14 @@
             'minRole' => 'Lesen',
         ],
         [
+            'label' => 'Auswertungen',
+            'hint' => 'Statistiken, Teilnahme und Entwicklung',
+            'route' => route('statistics.index'),
+            'active' => request()->routeIs('statistics.*'),
+            'icon' => 'chart-bar',
+            'minRole' => 'Lesen',
+        ],
+        [
             'label' => 'Mitglieder',
             'hint' => 'Mitgliederliste und Profile',
             'route' => route('members.index'),
@@ -354,7 +362,7 @@
         ->all();
 
     $dashboardNav = collect($primaryNav)
-        ->filter(fn ($item) => ($item['label'] ?? null) === 'Dashboard')
+        ->filter(fn ($item) => in_array($item['label'] ?? null, ['Dashboard', 'Auswertungen'], true))
         ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
         ->values()
         ->all();

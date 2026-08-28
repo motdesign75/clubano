@@ -4,8 +4,10 @@ use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Mail\ProtocolMail;
 use App\Models\Document;
 use App\Models\Event;
+use App\Models\EventAttendance;
 use App\Models\EventBooking;
 use App\Models\EventCategory;
+use App\Models\EventInvitation;
 use App\Models\Member;
 use App\Models\Protocol;
 use App\Models\PublicForm;
@@ -647,6 +649,67 @@ test('dashboard shows a calm guided cockpit', function () {
     $response->assertSee('Nächste Termine');
     $response->assertSee('Vorstandsrunde');
     $response->assertSee('Entwicklung im Verein');
+});
+
+test('statistics cockpit summarizes visible club activity', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $admin] = createTenantWithUser(User::ROLE_ADMIN, 'statistics-cockpit');
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Tara',
+        'last_name' => 'Training',
+        'email' => 'tara-statistik@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+        'required_service_hours' => 4,
+    ]);
+
+    $event = Event::create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Training Statistik',
+        'start' => now()->subWeek(),
+        'end' => now()->subWeek()->addHour(),
+        'location' => 'Sporthalle',
+        'attendance_enabled' => true,
+        'response_required' => true,
+        'is_public' => false,
+    ]);
+
+    EventAttendance::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'member_id' => $member->id,
+        'attended' => true,
+        'hours' => 1.5,
+        'counts_toward_required_hours' => true,
+    ]);
+
+    EventInvitation::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'member_id' => $member->id,
+        'status' => EventInvitation::STATUS_ACCEPTED,
+        'responded_at' => now(),
+    ]);
+
+    $response = $this->actingAs($admin)->get(route('statistics.index'));
+
+    $response->assertOk();
+    $response->assertSee('Vereinsauswertungen');
+    $response->assertSee('Aktive Mitglieder');
+    $response->assertSee('Termine');
+    $response->assertSee('Teilnahme');
+    $response->assertSee('Rückmeldungen');
+    $response->assertSee('Pflichtstunden');
+    $response->assertSee('Training Statistik');
+    $response->assertSee('Teilnahme und Rückmeldungen');
+    $response->assertSee('Terminart');
+    $response->assertSee('Mitglied');
+    $response->assertSee('Monatsentwicklung');
+    $response->assertSee('Mitglieder nach Teilnahme');
+    $response->assertSee('Terminarten nach Teilnahme');
+    $response->assertSee('Tara Training');
 });
 
 test('events index shows the calmer calendar cockpit', function () {

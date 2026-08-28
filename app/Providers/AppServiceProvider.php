@@ -4,9 +4,11 @@ namespace App\Providers;
 
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Event;
 use Livewire\Livewire;
 use App\Http\Livewire\DashboardMemberStats;
 use Laravel\Cashier\Cashier;
@@ -28,6 +30,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Event::listen(Login::class, function (Login $event) {
+            $event->user?->forceFill([
+                'last_login_at' => now(),
+                'last_login_ip' => request()?->ip(),
+            ])->save();
+        });
+
         VerifyEmail::toMailUsing(function (object $notifiable, string $url) {
             return (new MailMessage)
                 ->subject('Bitte bestätige deine E-Mail-Adresse')
