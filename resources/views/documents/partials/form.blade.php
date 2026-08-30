@@ -1,5 +1,6 @@
 @php
     $tagValue = old('tags', $document?->tags ? implode(', ', $document->tags) : '');
+    $isBookingReceipt = (bool) old('is_booking_receipt', $document?->is_booking_receipt ?? false);
 @endphp
 
 <form method="POST" action="{{ $action }}" enctype="multipart/form-data" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -45,6 +46,59 @@
             <p class="mt-2 text-xs leading-5 text-slate-500">PDF, Bilder und Office-Dateien bis 50 MB.</p>
             @error('file') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
         </aside>
+    </section>
+
+    <section class="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+        <label class="flex items-start gap-3">
+            <input type="hidden" name="is_booking_receipt" value="0">
+            <input type="checkbox"
+                   name="is_booking_receipt"
+                   value="1"
+                   @checked($isBookingReceipt)
+                   class="mt-1 rounded border-amber-300 text-amber-700 focus:ring-amber-600">
+            <span>
+                <span class="block text-sm font-semibold text-amber-950">Beleg muss gebucht werden</span>
+                <span class="mt-1 block text-xs leading-5 text-amber-800">
+                    Für Rechnungen, Quittungen und Kassenbons. Clubano legt den Beleg in den Beleg-Eingang und bereitet die Buchung erst nach deiner Prüfung vor.
+                </span>
+            </span>
+        </label>
+
+        <div class="mt-4 grid gap-4 md:grid-cols-4">
+            <div>
+                <label for="recognized_amount" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Betrag</label>
+                <input id="recognized_amount" name="recognized_amount" type="number" min="0" step="0.01"
+                       value="{{ old('recognized_amount', $document?->recognized_amount) }}"
+                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       placeholder="0,00">
+            </div>
+
+            <div>
+                <label for="recognized_date" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Belegdatum</label>
+                <input id="recognized_date" name="recognized_date" type="date"
+                       value="{{ old('recognized_date', $document?->recognized_date?->format('Y-m-d')) }}"
+                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400">
+            </div>
+
+            <div>
+                <label for="recognized_vendor" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Empfänger / Lieferant</label>
+                <input id="recognized_vendor" name="recognized_vendor" type="text"
+                       value="{{ old('recognized_vendor', $document?->recognized_vendor) }}"
+                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       placeholder="z. B. Stadtwerke">
+            </div>
+
+            <div>
+                <label for="recognized_invoice_number" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Belegnummer</label>
+                <input id="recognized_invoice_number" name="recognized_invoice_number" type="text"
+                       value="{{ old('recognized_invoice_number', $document?->recognized_invoice_number) }}"
+                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       placeholder="optional">
+            </div>
+        </div>
+
+        <input type="hidden" name="recognized_currency" value="{{ old('recognized_currency', $document?->recognized_currency ?? 'EUR') }}">
+        @error('recognized_amount') <p class="mt-2 text-sm text-rose-600">{{ $message }}</p> @enderror
     </section>
 
     <section class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

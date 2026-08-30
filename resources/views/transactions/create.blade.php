@@ -76,6 +76,12 @@
         @foreach($contextCards as $contextKey => $card)
             @php
                 $routeParams = ['context' => $contextKey === 'expert' ? null : $contextKey];
+                if (! blank($prefill['receipt_document_id'] ?? null)) {
+                    $routeParams['receipt_document_id'] = $prefill['receipt_document_id'];
+                    $routeParams['date'] = $prefill['date'] ?? null;
+                    $routeParams['description'] = $prefill['description'] ?? null;
+                    $routeParams['amount'] = $prefill['amount'] ?? null;
+                }
                 if ($selectedCashAccount && in_array($contextKey, ['bar-einnahme', 'bank-zu-kasse'], true)) {
                     $routeParams['account_to_id'] = $selectedCashAccount->id;
                 }
@@ -286,6 +292,16 @@
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                             @enderror
                         </div>
+
+                        @if(! blank($prefill['receipt_document_id'] ?? null))
+                            <div class="lg:col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                                <input type="hidden" name="receipt_document_id" value="{{ $prefill['receipt_document_id'] }}">
+                                <div class="text-sm font-semibold text-amber-950">Beleg aus der Dokumentenzentrale</div>
+                                <p class="mt-1 text-xs leading-5 text-amber-800">
+                                    Dieser Buchungsentwurf wird mit dem geprüften Beleg aus der Dokumentenablage verknüpft. Du musst die Datei nicht erneut hochladen.
+                                </p>
+                            </div>
+                        @endif
 
                         <div class="lg:col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                             <label for="invoice_id" class="mb-1 block text-sm font-semibold text-emerald-950">Zahlung zu Clubano-Rechnung</label>

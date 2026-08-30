@@ -176,9 +176,15 @@ class Transaction extends Model
         return $this->receipt_kind === 'vertrag';
     }
 
+    public function hasDocumentReceipt(): bool
+    {
+        return $this->receipt_kind === 'document'
+            && ! empty($this->receipt_meta['document_id'] ?? null);
+    }
+
     public function hasAnyReceipt(): bool
     {
-        return !empty($this->receipt_file) || $this->hasSystemReceipt() || $this->hasContractReceipt();
+        return !empty($this->receipt_file) || $this->hasSystemReceipt() || $this->hasContractReceipt() || $this->hasDocumentReceipt();
     }
 
     public function receiptEvidenceLabel(): string
@@ -189,6 +195,10 @@ class Transaction extends Model
 
         if ($this->hasContractReceipt()) {
             return 'Vertrag/Dauerbeleg';
+        }
+
+        if ($this->hasDocumentReceipt()) {
+            return 'Dokumentenbeleg';
         }
 
         if (!empty($this->receipt_file)) {
@@ -209,6 +219,10 @@ class Transaction extends Model
                 ?: ($this->receipt_meta['invoice_number'] ?? null);
 
             return $invoiceNumber ? 'Rechnung ' . $invoiceNumber : null;
+        }
+
+        if ($this->hasDocumentReceipt()) {
+            return $this->receipt_meta['document_title'] ?? $this->receipt_meta['document_name'] ?? null;
         }
 
         if (! $this->hasContractReceipt()) {

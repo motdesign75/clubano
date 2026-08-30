@@ -23,6 +23,11 @@ class Document extends Model
     public const STATUS_EXPIRED = 'expired';
     public const STATUS_ARCHIVED = 'archived';
 
+    public const RECEIPT_NOT_RELEVANT = 'not_relevant';
+    public const RECEIPT_NEEDS_REVIEW = 'needs_review';
+    public const RECEIPT_READY = 'ready';
+    public const RECEIPT_BOOKED = 'booked';
+
     protected $fillable = [
         'tenant_id',
         'uploaded_by',
@@ -44,6 +49,16 @@ class Document extends Model
         'event_id',
         'protocol_id',
         'invoice_id',
+        'is_booking_receipt',
+        'receipt_status',
+        'recognized_amount',
+        'recognized_currency',
+        'recognized_date',
+        'recognized_vendor',
+        'recognized_invoice_number',
+        'recognition_source',
+        'recognition_notes',
+        'linked_transaction_id',
     ];
 
     protected $casts = [
@@ -51,6 +66,9 @@ class Document extends Model
         'document_date' => 'date',
         'expires_at' => 'date',
         'archived_at' => 'datetime',
+        'is_booking_receipt' => 'boolean',
+        'recognized_amount' => 'decimal:2',
+        'recognized_date' => 'date',
     ];
 
     protected static function booted(): void
@@ -86,6 +104,16 @@ class Document extends Model
             self::STATUS_REVIEW => 'Prüfung nötig',
             self::STATUS_EXPIRED => 'Abgelaufen',
             self::STATUS_ARCHIVED => 'Archiviert',
+        ];
+    }
+
+    public static function receiptStatuses(): array
+    {
+        return [
+            self::RECEIPT_NOT_RELEVANT => 'Kein Beleg',
+            self::RECEIPT_NEEDS_REVIEW => 'Prüfen',
+            self::RECEIPT_READY => 'Buchbar',
+            self::RECEIPT_BOOKED => 'Gebucht',
         ];
     }
 
@@ -139,6 +167,11 @@ class Document extends Model
         return $this->belongsTo(Invoice::class);
     }
 
+    public function linkedTransaction()
+    {
+        return $this->belongsTo(Transaction::class, 'linked_transaction_id');
+    }
+
     public function getCategoryLabelAttribute(): string
     {
         return self::categories()[$this->category] ?? 'Sonstiges';
@@ -147,6 +180,11 @@ class Document extends Model
     public function getStatusLabelAttribute(): string
     {
         return self::statuses()[$this->status] ?? 'Aktiv';
+    }
+
+    public function getReceiptStatusLabelAttribute(): string
+    {
+        return self::receiptStatuses()[$this->receipt_status] ?? 'Kein Beleg';
     }
 
     public function getHumanSizeAttribute(): string

@@ -166,6 +166,8 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/dokumente/{document}/download', [$cls, 'download'])->middleware('tenant.role:Lesen')->name('documents.download');
         Route::get('/dokumente/{document}/bearbeiten', [$cls, 'edit'])->middleware('tenant.role:documents')->name('documents.edit');
         Route::put('/dokumente/{document}', [$cls, 'update'])->middleware('tenant.role:documents')->name('documents.update');
+        Route::patch('/dokumente/{document}/beleg', [$cls, 'updateReceipt'])->middleware('tenant.role:finance')->name('documents.receipt.update');
+        Route::get('/dokumente/{document}/buchung-vorbereiten', [$cls, 'prepareTransaction'])->middleware('tenant.role:finance')->name('documents.receipt.prepare-transaction');
         Route::patch('/dokumente/{document}/archivieren', [$cls, 'archive'])->middleware('tenant.role:documents')->name('documents.archive');
         Route::delete('/dokumente/{document}', [$cls, 'destroy'])->middleware('tenant.role:Admin')->name('documents.destroy');
     });

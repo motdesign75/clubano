@@ -5,6 +5,7 @@
 @section('content')
 @php
     $canManageDocuments = auth()->user()?->canManageDocuments() ?? false;
+    $canManageFinance = auth()->user()?->canManageFinance() ?? false;
     $hasActiveFilters = filled($search) || filled($category) || filled($status) || filled($due);
     $documentsCollection = $documents->getCollection();
 @endphp
@@ -58,6 +59,89 @@
             <div class="text-sm font-medium text-slate-500">Archiviert</div>
             <div class="mt-2 text-2xl font-semibold text-slate-950">{{ $archivedCount }}</div>
         </div>
+    </section>
+
+    <section class="rounded-xl border border-amber-200 bg-amber-50/70 p-5 shadow-sm sm:p-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-amber-700">Beleg-Eingang</div>
+                <h2 class="mt-2 text-xl font-semibold text-slate-950">Belege prüfen und ohne Sucherei buchen.</h2>
+                <p class="mt-1 text-sm leading-6 text-amber-900">
+                    {{ $receiptOpenCount }} Beleg(e) warten auf Prüfung oder Buchung.
+                </p>
+            </div>
+            @if($canManageDocuments)
+                <a href="{{ route('documents.create') }}" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-amber-600 px-4 text-sm font-semibold text-white hover:bg-amber-700">
+                    Beleg hochladen
+                </a>
+            @endif
+        </div>
+
+        @if($receiptInbox->isNotEmpty())
+            <div class="mt-5 overflow-x-auto rounded-xl border border-amber-200 bg-white">
+                <table class="min-w-[920px] divide-y divide-slate-100">
+                    <thead class="bg-white">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Beleg</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Vorschlag</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Prüfen</th>
+                            <th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @foreach($receiptInbox as $receipt)
+                            <tr class="align-top">
+                                <td class="px-4 py-4">
+                                    <a href="{{ route('documents.show', $receipt) }}" class="text-sm font-semibold text-slate-950 hover:text-indigo-700">{{ $receipt->title }}</a>
+                                    <div class="mt-1 text-xs text-slate-500">{{ $receipt->original_name }}</div>
+                                    <span class="mt-2 inline-flex rounded-full px-2 py-1 text-xs font-semibold {{ $receipt->receipt_status === \App\Models\Document::RECEIPT_READY ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-100 text-amber-800' }}">
+                                        {{ $receipt->receipt_status_label }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-4 text-sm text-slate-700">
+                                    <div class="font-semibold text-slate-950">
+                                        {{ filled($receipt->recognized_amount) ? number_format((float) $receipt->recognized_amount, 2, ',', '.') . ' ' . ($receipt->recognized_currency ?: 'EUR') : 'Betrag fehlt' }}
+                                    </div>
+                                    <div class="mt-1">{{ $receipt->recognized_date?->format('d.m.Y') ?? 'Datum offen' }}</div>
+                                    <div class="mt-1 text-slate-500">{{ $receipt->recognized_vendor ?: 'Empfänger offen' }}</div>
+                                </td>
+                                <td class="px-4 py-4">
+                                    @if($canManageFinance)
+                                        <form method="POST" action="{{ route('documents.receipt.update', $receipt) }}" class="grid gap-2 sm:grid-cols-2">
+                                            @csrf
+                                            @method('PATCH')
+                                            <input name="recognized_amount" type="number" min="0" step="0.01" value="{{ old('recognized_amount', $receipt->recognized_amount) }}" class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300" placeholder="Betrag">
+                                            <input name="recognized_date" type="date" value="{{ old('recognized_date', $receipt->recognized_date?->format('Y-m-d')) }}" class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                                            <input name="recognized_vendor" type="text" value="{{ old('recognized_vendor', $receipt->recognized_vendor) }}" class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300" placeholder="Empfänger">
+                                            <input name="recognized_invoice_number" type="text" value="{{ old('recognized_invoice_number', $receipt->recognized_invoice_number) }}" class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300" placeholder="Belegnummer">
+                                            <input type="hidden" name="recognized_currency" value="{{ $receipt->recognized_currency ?: 'EUR' }}">
+                                            <button type="submit" class="sm:col-span-2 inline-flex min-h-10 items-center justify-center rounded-lg border border-amber-300 px-3 text-sm font-semibold text-amber-900 hover:bg-amber-50">
+                                                Prüfen speichern
+                                            </button>
+                                        </form>
+                                    @else
+                                        <div class="text-sm leading-6 text-slate-500">Finanzrechte nötig.</div>
+                                    @endif
+                                </td>
+                                <td class="px-4 py-4 text-right">
+                                    @if($canManageFinance)
+                                        <a href="{{ route('documents.receipt.prepare-transaction', $receipt) }}" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800">
+                                            Buchung vorbereiten
+                                        </a>
+                                    @else
+                                        <span class="text-sm text-slate-400">Nur Kasse/Admin</span>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @else
+            <div class="mt-5 rounded-xl border border-dashed border-amber-300 bg-white/70 px-4 py-5 text-sm text-amber-900">
+                Kein offener Beleg im Eingang. Neue Quittungen oder Rechnungen kannst du beim Ablegen als „Beleg muss gebucht werden“ markieren.
+            </div>
+        @endif
     </section>
 
     <section class="rounded-xl border border-slate-200 bg-white px-5 py-4 sm:px-6">

@@ -1068,6 +1068,7 @@ class TransactionController extends Controller
 
         $prefill = [
             'context' => $request->input('context'),
+            'receipt_document_id' => $request->input('receipt_document_id'),
             'date' => $request->input('date', now()->format('Y-m-d')),
             'description' => $request->input('description'),
             'amount' => $request->input('amount'),
@@ -1107,6 +1108,12 @@ class TransactionController extends Controller
             'tax_area' => ['required', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
             'receipt_kind' => ['nullable', Rule::in(['none', 'vertrag'])],
+            'receipt_document_id' => [
+                'nullable',
+                Rule::exists('documents', 'id')->where(fn ($query) => $query
+                    ->where('tenant_id', $tenantId)
+                    ->where('is_booking_receipt', true)),
+            ],
             'contract_document_id' => ['nullable', Rule::exists('documents', 'id')->where('tenant_id', $tenantId)->where('category', Document::CATEGORY_CONTRACTS)],
             'contract_reference' => [Rule::requiredIf(fn () => ($request->input('receipt_kind') === 'vertrag') && blank($request->input('contract_document_id'))), 'nullable', 'string', 'max:255'],
             'contract_location' => ['nullable', 'string', 'max:255'],
@@ -1140,6 +1147,21 @@ class TransactionController extends Controller
             );
             $transaction->receipt_kind = 'upload';
             $transaction->receipt_meta = null;
+        } elseif (! blank($validated['receipt_document_id'] ?? null)) {
+            $document = Document::query()
+                ->where('tenant_id', $tenantId)
+                ->where('is_booking_receipt', true)
+                ->whereKey($validated['receipt_document_id'])
+                ->firstOrFail();
+
+            $transaction->receipt_kind = 'document';
+            $transaction->receipt_meta = [
+                'document_id' => $document->id,
+                'document_title' => $document->title,
+                'document_name' => $document->original_name,
+                'linked_at' => now()->toIso8601String(),
+                'linked_by' => auth()->id(),
+            ];
         } elseif (($validated['receipt_kind'] ?? 'none') === 'vertrag') {
             $transaction->receipt_kind = 'vertrag';
             $transaction->receipt_meta = $this->contractReceiptMeta($validated);
@@ -1157,6 +1179,17 @@ class TransactionController extends Controller
         }
 
         $transaction->save();
+
+        if (! blank($validated['receipt_document_id'] ?? null)) {
+            Document::query()
+                ->where('tenant_id', $tenantId)
+                ->whereKey($validated['receipt_document_id'])
+                ->update([
+                    'receipt_status' => Document::RECEIPT_BOOKED,
+                    'linked_transaction_id' => $transaction->id,
+                    'updated_at' => now(),
+                ]);
+        }
 
         if ($transaction->isFinalized()) {
             $this->syncInvoicePaymentForTransaction($transaction);

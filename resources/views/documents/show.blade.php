@@ -5,6 +5,7 @@
 @section('content')
 @php
     $canManageDocuments = auth()->user()?->canManageDocuments() ?? false;
+    $canManageFinance = auth()->user()?->canManageFinance() ?? false;
     $canDeleteDocuments = auth()->user()?->isAdmin() ?? false;
     $contextLinks = [
         ['label' => 'Mitglied', 'value' => $document->member?->full_name, 'route' => $document->member ? route('members.show', $document->member) : null],
@@ -80,6 +81,36 @@
                 <div class="mt-6 border-t border-slate-100 pt-5">
                     <h2 class="text-lg font-semibold text-slate-950">Notiz</h2>
                     <p class="mt-3 whitespace-pre-line text-sm leading-6 text-slate-600">{{ $document->description }}</p>
+                </div>
+            @endif
+
+            @if($document->is_booking_receipt)
+                <div class="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Beleg-Eingang</div>
+                    <h2 class="mt-2 text-lg font-semibold text-slate-950">Belegdaten</h2>
+                    <dl class="mt-4 grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Status</dt>
+                            <dd class="mt-1 text-sm font-semibold text-slate-950">{{ $document->receipt_status_label }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Betrag</dt>
+                            <dd class="mt-1 text-sm font-semibold text-slate-950">{{ filled($document->recognized_amount) ? number_format((float) $document->recognized_amount, 2, ',', '.') . ' ' . ($document->recognized_currency ?: 'EUR') : 'Noch offen' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Datum</dt>
+                            <dd class="mt-1 text-sm text-slate-700">{{ $document->recognized_date?->format('d.m.Y') ?? 'Noch offen' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Empfänger</dt>
+                            <dd class="mt-1 text-sm text-slate-700">{{ $document->recognized_vendor ?: 'Noch offen' }}</dd>
+                        </div>
+                    </dl>
+                    @if($canManageFinance && $document->receipt_status !== \App\Models\Document::RECEIPT_BOOKED)
+                        <a href="{{ route('documents.receipt.prepare-transaction', $document) }}" class="mt-5 inline-flex min-h-11 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+                            Buchung vorbereiten
+                        </a>
+                    @endif
                 </div>
             @endif
 
