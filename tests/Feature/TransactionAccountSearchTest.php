@@ -264,6 +264,51 @@ test('saving a draft transaction updates visible account balances', function () 
         ->and((float) $income->refresh()->balance_current)->toBe(-42.5);
 });
 
+test('saving a draft cash expense updates visible cash account balance', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $cash = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1000',
+        'name' => 'Kasse',
+        'type' => 'kasse',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+        'balance_start' => 200,
+        'balance_current' => 200,
+    ]);
+
+    $expense = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4930',
+        'name' => 'Bürobedarf',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+        'balance_start' => 0,
+        'balance_current' => 0,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'date' => now()->toDateString(),
+            'description' => 'Briefmarken bar bezahlt',
+            'amount' => 12.50,
+            'account_from_id' => $cash->id,
+            'account_to_id' => $expense->id,
+            'status' => 'entwurf',
+            'tax_area' => 'ideell',
+        ])
+        ->assertRedirect(route('transactions.index'));
+
+    expect((float) $cash->refresh()->balance_current)->toBe(187.5)
+        ->and((float) $expense->refresh()->balance_current)->toBe(12.5);
+});
+
 test('account balances can be recalculated from finalized transactions', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

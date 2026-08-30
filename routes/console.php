@@ -104,4 +104,4 @@ Artisan::command('clubano:recalculate-account-balances {tenantId?}', function (?
     $this->components->info("Fertig. {$totalAccounts} Konten wurden neu berechnet.");
 
     return 0;
-})->purpose('Berechnet die aktuellen Salden aller Konten aus abgeschlossenen Buchungen neu');
+})->purpose('Berechnet die aktuellen Salden aller Konten aus Buchungen und Entwürfen neu');
