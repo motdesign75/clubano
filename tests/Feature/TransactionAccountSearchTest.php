@@ -80,6 +80,61 @@ test('treasurers can search from and to accounts while editing a transaction', f
         ->assertSee('SKR-Test');
 });
 
+test('treasurers can open and download the printable booking journal', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $cash = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1000',
+        'name' => 'Kasse',
+        'type' => 'kasse',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $expense = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4930',
+        'name' => 'Bürobedarf',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-08-24',
+        'description' => 'Briefmarken für Vereinsversand',
+        'amount' => 12.50,
+        'account_from_id' => $cash->id,
+        'account_to_id' => $expense->id,
+        'tax_area' => 'ideell',
+        'receipt_number' => 'TRX-JOURNAL-1',
+        'status' => 'abgeschlossen',
+        'finalized_at' => now(),
+        'finalized_by' => $user->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('transactions.journal', ['year' => 2026, 'month' => 8]))
+        ->assertOk()
+        ->assertSee('Buchungsjournal')
+        ->assertSee('DIN A4 im Querformat')
+        ->assertSee('Briefmarken für Vereinsversand');
+
+    $response = $this->actingAs($user)
+        ->get(route('transactions.journal.pdf', ['year' => 2026, 'month' => 8]));
+
+    $response->assertOk();
+    expect($response->headers->get('content-type'))->toContain('application/pdf');
+});
+
 test('editing a transaction recalculates old and new account balances', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

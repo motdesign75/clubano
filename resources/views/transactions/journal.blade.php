@@ -7,14 +7,15 @@
 <style>
 @page {
     size: A4 landscape;
-    margin: 12mm 12mm 14mm;
+    margin: 8mm 8mm 10mm;
 }
 
 body {
     font-family: DejaVu Sans, sans-serif;
-    font-size: 9pt;
+    font-size: 7.7pt;
     color: #0f172a;
     margin: 0;
+    line-height: 1.25;
 }
 
 .toolbar {
@@ -43,15 +44,15 @@ body {
 
 .hero {
     border: 1px solid #cbd5e1;
-    border-radius: 18px;
+    border-radius: 8px;
     overflow: hidden;
-    margin-bottom: 14px;
+    margin-bottom: 8px;
 }
 
 .hero-top {
     background: #0f172a;
     color: #fff;
-    padding: 16px 18px;
+    padding: 9px 11px;
 }
 
 .hero-grid {
@@ -64,74 +65,80 @@ body {
 }
 
 .hero-title {
-    font-size: 18pt;
+    font-size: 14pt;
     font-weight: bold;
-    letter-spacing: -0.02em;
 }
 
 .hero-subtitle {
-    margin-top: 6px;
-    font-size: 9pt;
+    margin-top: 3px;
+    font-size: 7.5pt;
     color: #cbd5e1;
-    line-height: 1.45;
+    line-height: 1.25;
 }
 
 .hero-right {
     text-align: right;
-    font-size: 8.5pt;
+    font-size: 7.5pt;
     color: #e2e8f0;
 }
 
 .summary {
     background: #f8fafc;
     border-top: 1px solid #cbd5e1;
-    padding: 12px 18px;
+    padding: 7px 11px;
 }
 
 .summary-table {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 10px 0;
-    margin: 0 -10px;
+    border-collapse: collapse;
+    margin: 0;
 }
 
 .summary-table td {
     width: 25%;
-    border: 1px solid #cbd5e1;
-    background: #fff;
-    border-radius: 14px;
-    padding: 10px 12px;
+    border-right: 1px solid #e2e8f0;
+    background: transparent;
+    padding: 2px 10px 2px 0;
+}
+
+.summary-table td + td {
+    padding-left: 10px;
+}
+
+.summary-table td:last-child {
+    border-right: none;
 }
 
 .summary-label {
-    font-size: 7.5pt;
+    font-size: 6.5pt;
     text-transform: uppercase;
     letter-spacing: 0.12em;
     color: #64748b;
 }
 
 .summary-value {
-    margin-top: 6px;
-    font-size: 13pt;
+    margin-top: 2px;
+    font-size: 10pt;
     font-weight: bold;
     color: #0f172a;
 }
 
 .summary-note {
-    margin-top: 4px;
-    font-size: 8pt;
+    margin-top: 1px;
+    font-size: 6.8pt;
     color: #64748b;
 }
 
 .table-wrap {
     border: 1px solid #cbd5e1;
-    border-radius: 18px;
+    border-radius: 8px;
     overflow: hidden;
 }
 
 table.entries {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
 }
 
 table.entries thead {
@@ -145,15 +152,16 @@ table.entries tfoot {
 table.entries th,
 table.entries td {
     border-bottom: 1px solid #e2e8f0;
-    padding: 8px 9px;
+    padding: 4px 5px;
     vertical-align: top;
+    overflow-wrap: anywhere;
 }
 
 table.entries th {
     background: #f8fafc;
-    font-size: 7.5pt;
+    font-size: 6.2pt;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     color: #64748b;
     text-align: left;
 }
@@ -195,9 +203,9 @@ table.entries tbody tr:last-child td {
 
 .status {
     display: inline-block;
-    padding: 2px 8px;
+    padding: 1px 5px;
     border-radius: 999px;
-    font-size: 7.5pt;
+    font-size: 6.5pt;
     font-weight: bold;
     border: 1px solid #cbd5e1;
     color: #334155;
@@ -229,7 +237,7 @@ table.entries tbody tr:last-child td {
 }
 
 .check-cell {
-    width: 18px;
+    width: 22px;
 }
 
 .check-stack {
@@ -241,16 +249,16 @@ table.entries tbody tr:last-child td {
 
 .check-box {
     display: inline-block;
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border: 1px solid #94a3b8;
     border-radius: 3px;
     background: #fff;
 }
 
 .check-toggle {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     margin: 0;
     accent-color: #0f172a;
     cursor: pointer;
@@ -262,8 +270,8 @@ table.entries tbody tr:last-child td {
 }
 
 .check-meta {
-    max-width: 84px;
-    font-size: 6.8pt;
+    max-width: 70px;
+    font-size: 5.8pt;
     line-height: 1.35;
     color: #64748b;
     text-align: center;
@@ -272,12 +280,12 @@ table.entries tbody tr:last-child td {
 .desc {
     font-weight: bold;
     color: #0f172a;
-    line-height: 1.4;
+    line-height: 1.25;
 }
 
 .desc-meta {
-    margin-top: 3px;
-    font-size: 7.8pt;
+    margin-top: 2px;
+    font-size: 6.5pt;
     color: #64748b;
 }
 
@@ -296,41 +304,90 @@ table.entries tbody tr:last-child td {
 }
 
 .audit-footer {
-    margin-top: 14px;
+    margin-top: 8px;
     border: 1px solid #cbd5e1;
-    border-radius: 18px;
-    padding: 14px 16px;
+    border-radius: 8px;
+    padding: 8px 10px;
+    page-break-inside: avoid;
 }
 
 .audit-table {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 18px 0;
-    margin: 0 -18px;
+    border-collapse: collapse;
+    margin: 0;
 }
 
 .audit-label {
-    font-size: 7.5pt;
+    font-size: 6.3pt;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     color: #64748b;
 }
 
 .audit-line {
-    margin-top: 22px;
+    margin-top: 14px;
     border-top: 1px solid #94a3b8;
     height: 1px;
 }
 
 .audit-note {
-    margin-top: 8px;
-    font-size: 8pt;
+    margin-top: 5px;
+    font-size: 7pt;
     color: #64748b;
+}
+
+.col-check {
+    width: 5%;
+}
+
+.col-number {
+    width: 4%;
+}
+
+.col-date {
+    width: 8%;
+}
+
+.col-receipt {
+    width: 10%;
+}
+
+.col-description {
+    width: 24%;
+}
+
+.col-account {
+    width: 14%;
+}
+
+.col-status {
+    width: 9%;
+}
+
+.col-amount {
+    width: 9%;
+}
+
+.col-receipt-check {
+    width: 8%;
 }
 
 @media print {
     .toolbar {
         display: none;
+    }
+
+    body {
+        font-size: 7.3pt;
+    }
+
+    .hero {
+        margin-bottom: 6px;
+    }
+
+    table.entries th,
+    table.entries td {
+        padding: 3px 4px;
     }
 }
 </style>
@@ -408,16 +465,16 @@ table.entries tbody tr:last-child td {
     <table class="entries">
         <thead>
             <tr>
-                <th class="text-center check-cell">Buchung geprüft</th>
-                <th class="text-center" style="width: 4%;">Nr.</th>
-                <th style="width: 9%;">Datum</th>
-                <th style="width: 10%;">Beleg</th>
-                <th style="width: 24%;">Beschreibung</th>
-                <th style="width: 13%;">Geld kommt von</th>
-                <th style="width: 13%;">Geld geht nach</th>
-                <th style="width: 10%;">Status</th>
-                <th class="text-right" style="width: 10%;">Betrag (€)</th>
-                <th class="text-right" style="width: 7%;">Beleg geprüft</th>
+                <th class="text-center col-check">Geprüft</th>
+                <th class="text-center col-number">Nr.</th>
+                <th class="col-date">Datum</th>
+                <th class="col-receipt">Beleg</th>
+                <th class="col-description">Beschreibung</th>
+                <th class="col-account">Von</th>
+                <th class="col-account">Nach</th>
+                <th class="col-status">Status</th>
+                <th class="text-right col-amount">Betrag</th>
+                <th class="text-center col-receipt-check">Beleg</th>
             </tr>
         </thead>
 
@@ -442,7 +499,7 @@ table.entries tbody tr:last-child td {
                 $amountPrefix = $isExpense ? '-' : '';
             @endphp
             <tr class="{{ $missingReceipt ? 'row-missing' : '' }}">
-                <td class="text-center check-cell">
+                <td class="text-center col-check">
                     @if($isPdf)
                         <span class="check-stack">
                             <span class="check-box"></span>
@@ -472,25 +529,25 @@ table.entries tbody tr:last-child td {
                         </span>
                     @endif
                 </td>
-                <td class="text-center">{{ $i++ }}</td>
-                <td>{{ \Carbon\Carbon::parse($t->date)->format('d.m.Y') }}</td>
-                <td>{{ $receiptLabel }}</td>
-                <td>
+                <td class="text-center col-number">{{ $i++ }}</td>
+                <td class="col-date">{{ \Carbon\Carbon::parse($t->date)->format('d.m.Y') }}</td>
+                <td class="col-receipt">{{ $receiptLabel }}</td>
+                <td class="col-description">
                     <div class="desc">{{ $t->description }}</div>
                     <div class="desc-meta">
                         {{ $t->tax_area ?: 'ohne Bereich' }}
                     </div>
                 </td>
-                <td>{{ $t->account_from->name ?? '-' }}</td>
-                <td>{{ $t->account_to->name ?? '-' }}</td>
-                <td>
+                <td class="col-account">{{ $t->account_from?->number }} {{ $t->account_from->name ?? '-' }}</td>
+                <td class="col-account">{{ $t->account_to?->number }} {{ $t->account_to->name ?? '-' }}</td>
+                <td class="col-status">
                     <span class="status {{ $statusClass }}">{{ $statusLabel }}</span>
                     @if($missingReceipt)
                         <span class="status missing">Beleg fehlt</span>
                     @endif
                 </td>
-                <td class="text-right {{ $amountClass }}">{{ $amountPrefix }}{{ number_format($t->amount, 2, ',', '.') }}</td>
-                <td class="text-right">
+                <td class="text-right col-amount {{ $amountClass }}">{{ $amountPrefix }}{{ number_format($t->amount, 2, ',', '.') }}</td>
+                <td class="text-center col-receipt-check">
                     @if($isPdf)
                         <span class="check-stack">
                             <span class="check-box"></span>
@@ -618,7 +675,7 @@ table.entries tbody tr:last-child td {
                     })
                     .finally(() => {
                         input.disabled = false;
-                    }
+                    });
             });
         });
     });
