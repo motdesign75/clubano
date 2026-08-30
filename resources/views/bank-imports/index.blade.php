@@ -196,67 +196,88 @@
             </div>
         </div>
 
-        <div class="overflow-x-auto">
-            <table class="min-w-[1100px] divide-y divide-slate-200">
-                <thead class="bg-slate-50">
-                    <tr>
-                        <th class="w-12 px-5 py-3 text-left"></th>
-                        <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Umsatz</th>
-                        <th class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Betrag</th>
-                        <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Bankkonto</th>
-                        <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Gegenkonto</th>
-                        <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Status</th>
-                        <th class="px-5 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Aktion</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100 bg-white">
-                    @forelse($bankTransactions as $bankTransaction)
-                        @php
-                            $transactionTitle = $bankTransaction->counterparty_name
-                                ?: $bankTransaction->purpose
-                                ?: $bankTransaction->counterparty_iban
-                                ?: 'Bankumsatz ohne Beschreibung';
-                            $showPurpose = filled($bankTransaction->purpose) && $bankTransaction->purpose !== $transactionTitle;
-                            $selectedInvoiceId = old('invoice_id', $bankTransaction->receipt_meta['invoice_id'] ?? null);
-                        @endphp
-                        <tr id="bank-transaction-{{ $bankTransaction->id }}" class="scroll-mt-24 align-top target:bg-blue-50/60">
-                            <td class="px-5 py-4">
-                                @if($bankTransaction->status === \App\Models\BankTransaction::STATUS_READY)
-                                    <input type="checkbox" form="bulk-book-form" name="bank_transaction_ids[]" value="{{ $bankTransaction->id }}" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
-                                @endif
-                            </td>
-                            <td class="max-w-md px-5 py-4">
-                                <div class="text-sm font-semibold text-slate-950">{{ $bankTransaction->booking_date?->format('d.m.Y') }}</div>
-                                <div class="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-800">{{ $transactionTitle }}</div>
-                                @if(blank($bankTransaction->counterparty_name))
-                                    <div class="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
-                                        Name im Export nicht enthalten
+        <div class="divide-y divide-slate-100">
+            @forelse($bankTransactions as $bankTransaction)
+                @php
+                    $transactionTitle = $bankTransaction->counterparty_name
+                        ?: $bankTransaction->purpose
+                        ?: $bankTransaction->counterparty_iban
+                        ?: 'Bankumsatz ohne Beschreibung';
+                    $showPurpose = filled($bankTransaction->purpose) && $bankTransaction->purpose !== $transactionTitle;
+                    $selectedInvoiceId = old('invoice_id', $bankTransaction->receipt_meta['invoice_id'] ?? null);
+                @endphp
+                <article id="bank-transaction-{{ $bankTransaction->id }}" class="scroll-mt-24 p-5 target:bg-blue-50/70">
+                    <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,430px)]">
+                        <div class="min-w-0">
+                            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="text-sm font-semibold text-slate-950">{{ $bankTransaction->booking_date?->format('d.m.Y') }}</span>
+                                        <span class="inline-flex rounded-full border px-3 py-1 text-xs font-semibold {{ $statusClass[$bankTransaction->status] ?? 'border-slate-200 bg-slate-100 text-slate-700' }}">
+                                            {{ $bankTransaction->statusLabel() }}
+                                        </span>
+                                        @if($bankTransaction->status === \App\Models\BankTransaction::STATUS_READY)
+                                            <label class="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
+                                                <input type="checkbox" form="bulk-book-form" name="bank_transaction_ids[]" value="{{ $bankTransaction->id }}" class="rounded border-blue-300 text-blue-600 focus:ring-blue-500">
+                                                auswählen
+                                            </label>
+                                        @endif
                                     </div>
-                                @endif
-                                @if($showPurpose)
-                                    <div class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ $bankTransaction->purpose }}</div>
-                                @endif
-                                @if($bankTransaction->counterparty_iban)
-                                    <div class="mt-1 text-xs text-slate-400">IBAN {{ $bankTransaction->counterparty_iban }}</div>
-                                @endif
-                            </td>
-                            <td class="px-5 py-4 text-right">
-                                <div class="text-sm font-semibold {{ $bankTransaction->amount >= 0 ? 'text-emerald-700' : 'text-rose-700' }}">
-                                    {{ number_format((float) $bankTransaction->amount, 2, ',', '.') }} {{ $bankTransaction->currency }}
+                                    <h3 class="mt-2 break-words text-lg font-semibold leading-6 text-slate-950">{{ $transactionTitle }}</h3>
+                                    @if(blank($bankTransaction->counterparty_name))
+                                        <div class="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+                                            Name im Export nicht enthalten
+                                        </div>
+                                    @endif
+                                    @if($showPurpose)
+                                        <p class="mt-2 max-w-3xl break-words text-sm leading-6 text-slate-500">{{ $bankTransaction->purpose }}</p>
+                                    @endif
                                 </div>
-                                <div class="mt-1 text-xs text-slate-500">{{ $bankTransaction->amount >= 0 ? 'Eingang' : 'Ausgang' }}</div>
-                            </td>
-                            <td class="px-5 py-4 text-sm text-slate-700">
-                                <div class="font-semibold text-slate-900">{{ $bankTransaction->account?->number }}</div>
-                                <div>{{ $bankTransaction->account?->name }}</div>
-                            </td>
-                            <td class="w-80 px-5 py-4">
-                                @if($bankTransaction->status !== \App\Models\BankTransaction::STATUS_BOOKED)
-                                    <form method="POST" action="{{ route('bank-imports.transactions.update', $bankTransaction) }}" enctype="multipart/form-data" class="space-y-3">
-                                        @csrf
-                                        @method('PATCH')
-                                        <input type="hidden" name="source_account_id" value="{{ $bankTransaction->account_id }}">
-                                        <select name="selected_account_id" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+
+                                <div class="shrink-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left sm:text-right">
+                                    <div class="text-xl font-semibold {{ $bankTransaction->amount >= 0 ? 'text-emerald-700' : 'text-rose-700' }}">
+                                        {{ number_format((float) $bankTransaction->amount, 2, ',', '.') }} {{ $bankTransaction->currency }}
+                                    </div>
+                                    <div class="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{{ $bankTransaction->amount >= 0 ? 'Eingang' : 'Ausgang' }}</div>
+                                </div>
+                            </div>
+
+                            <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Bankkonto</div>
+                                    <div class="mt-1 text-sm font-semibold text-slate-950">{{ $bankTransaction->account?->number }} · {{ $bankTransaction->account?->name }}</div>
+                                </div>
+                                <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">IBAN</div>
+                                    <div class="mt-1 break-all text-sm text-slate-700">{{ $bankTransaction->counterparty_iban ?: 'Nicht enthalten' }}</div>
+                                </div>
+                                <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Beleg</div>
+                                    <div class="mt-1 text-sm font-semibold text-slate-950">
+                                        @if($bankTransaction->receipt_kind === 'vertrag')
+                                            Vertrag/Dauerbeleg
+                                        @elseif($bankTransaction->receipt_kind === 'system_invoice')
+                                            Clubano-Rechnung
+                                        @elseif($bankTransaction->receipt_file)
+                                            Datei vorbereitet
+                                        @else
+                                            Offen
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            @if($bankTransaction->status !== \App\Models\BankTransaction::STATUS_BOOKED)
+                                <form method="POST" action="{{ route('bank-imports.transactions.update', $bankTransaction) }}" enctype="multipart/form-data" class="space-y-4">
+                                    @csrf
+                                    @method('PATCH')
+                                    <input type="hidden" name="source_account_id" value="{{ $bankTransaction->account_id }}">
+
+                                    <div>
+                                        <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Gegenkonto</label>
+                                        <select name="selected_account_id" class="w-full rounded-xl border-slate-300 bg-white text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                                             <option value="">Gegenkonto wählen</option>
                                             @foreach($accountGroups as $type => $accounts)
                                                 <optgroup label="{{ $accountTypeLabels[$type] ?? ucfirst((string) $type) }}">
@@ -269,17 +290,19 @@
                                                 </optgroup>
                                             @endforeach
                                         </select>
+                                    </div>
 
-                                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Beleg optional</label>
-                                            <select name="receipt_kind" class="w-full rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                    <details class="rounded-2xl border border-slate-200 bg-white p-3">
+                                        <summary class="cursor-pointer text-sm font-semibold text-slate-800">Beleg, Rechnung oder Vertrag</summary>
+                                        <div class="mt-3 space-y-3">
+                                            <select name="receipt_kind" class="w-full rounded-xl border-slate-300 bg-white text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                                                 <option value="none" @selected(blank($bankTransaction->receipt_kind))>Kein Beleg hinterlegen</option>
                                                 <option value="system_invoice" @selected($bankTransaction->receipt_kind === 'system_invoice')>Clubano-Rechnung als Beleg</option>
                                                 <option value="upload" @selected($bankTransaction->receipt_kind === 'upload')>Einzelbeleg hochladen</option>
                                                 <option value="vertrag" @selected($bankTransaction->receipt_kind === 'vertrag')>Vertrag / Dauerbeleg</option>
                                             </select>
 
-                                            <div class="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                                            <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                                                 <label class="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Rechnung auswählen</label>
                                                 <select name="invoice_id" class="w-full rounded-xl border-emerald-200 bg-white text-xs shadow-sm focus:border-emerald-600 focus:ring-emerald-600">
                                                     <option value="">Keine Rechnung verknüpfen</option>
@@ -294,87 +317,60 @@
                                                         </option>
                                                     @endforeach
                                                 </select>
-                                                <p class="mt-2 text-[11px] leading-5 text-emerald-800">
-                                                    Wenn dieser Zahlungseingang zu einer Clubano-Rechnung gehört, gilt die Rechnung als interner Beleg.
-                                                </p>
                                             </div>
 
-                                            <input name="receipt_file" type="file" accept=".pdf,.jpg,.jpeg,.png" class="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700">
+                                            <input name="receipt_file" type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700">
 
-                                            @if($bankTransaction->receipt_file)
-                                                <div class="mt-2 text-xs font-semibold text-emerald-700">Beleg ist vorbereitet.</div>
-                                            @endif
-
-                                            <div class="mt-2 grid gap-2">
-                                                <input name="contract_reference" value="{{ old('contract_reference', $bankTransaction->receipt_meta['contract_reference'] ?? '') }}" placeholder="Vertrag / Grundlage, z. B. Mietvertrag Vereinsheim" class="rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                            <div class="grid gap-2">
+                                                <input name="contract_reference" value="{{ old('contract_reference', $bankTransaction->receipt_meta['contract_reference'] ?? '') }}" placeholder="Vertrag / Grundlage" class="rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
                                                 <div class="grid gap-2 sm:grid-cols-2">
                                                     <input name="contract_location" value="{{ old('contract_location', $bankTransaction->receipt_meta['contract_location'] ?? '') }}" placeholder="Ablageort" class="rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
                                                     <input name="contract_date" type="date" value="{{ old('contract_date', $bankTransaction->receipt_meta['contract_date'] ?? '') }}" class="rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
                                                 </div>
                                             </div>
                                         </div>
+                                    </details>
 
-                                        <button type="submit" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                                            Zuordnung speichern
+                                    <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                        Zuordnung speichern
+                                    </button>
+                                </form>
+
+                                @if($bankTransaction->status === \App\Models\BankTransaction::STATUS_READY)
+                                    <form method="POST" action="{{ route('bank-imports.transactions.book', $bankTransaction) }}" class="mt-2">
+                                        @csrf
+                                        <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
+                                            Buchen
                                         </button>
                                     </form>
-                                @else
-                                    <div class="text-sm font-semibold text-slate-900">{{ $bankTransaction->selectedAccount?->number }} · {{ $bankTransaction->selectedAccount?->name }}</div>
-                                    <div class="mt-2 text-xs text-slate-500">
-                                        @if($bankTransaction->receipt_kind === 'vertrag')
-                                            Vertrag/Dauerbeleg übernommen
-                                        @elseif($bankTransaction->receipt_kind === 'system_invoice')
-                                            Rechnung {{ $bankTransaction->receipt_meta['invoice_number'] ?? '' }} übernommen
-                                        @elseif($bankTransaction->receipt_file)
-                                            Beleg übernommen
-                                        @else
-                                            Ohne Beleg übernommen
-                                        @endif
-                                    </div>
                                 @endif
-                            </td>
-                            <td class="px-5 py-4">
-                                <span class="inline-flex rounded-full border px-3 py-1 text-xs font-semibold {{ $statusClass[$bankTransaction->status] ?? 'border-slate-200 bg-slate-100 text-slate-700' }}">
-                                    {{ $bankTransaction->statusLabel() }}
-                                </span>
+
+                                @if(! in_array($bankTransaction->status, [\App\Models\BankTransaction::STATUS_BOOKED, \App\Models\BankTransaction::STATUS_IGNORED], true))
+                                    <form method="POST" action="{{ route('bank-imports.transactions.ignore', $bankTransaction) }}" class="mt-2">
+                                        @csrf
+                                        <button type="submit" class="inline-flex min-h-10 w-full items-center justify-center rounded-xl px-3 text-sm font-semibold text-slate-500 hover:bg-slate-100">
+                                            Ignorieren
+                                        </button>
+                                    </form>
+                                @endif
+                            @else
+                                <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Gebuchte Zuordnung</div>
+                                <div class="mt-2 text-sm font-semibold text-slate-950">{{ $bankTransaction->selectedAccount?->number }} · {{ $bankTransaction->selectedAccount?->name }}</div>
                                 @if($bankTransaction->transaction)
-                                    <a href="{{ route('transactions.edit', $bankTransaction->transaction) }}" class="mt-2 block text-xs font-semibold text-blue-700 hover:text-blue-900">
+                                    <a href="{{ route('transactions.edit', $bankTransaction->transaction) }}" class="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800">
                                         Buchung öffnen
                                     </a>
                                 @endif
-                            </td>
-                            <td class="px-5 py-4 text-right">
-                                <div class="flex flex-col items-end gap-2">
-                                    @if($bankTransaction->status === \App\Models\BankTransaction::STATUS_READY)
-                                        <form method="POST" action="{{ route('bank-imports.transactions.book', $bankTransaction) }}">
-                                            @csrf
-                                            <button type="submit" class="inline-flex min-h-9 items-center justify-center rounded-xl bg-slate-950 px-3 text-xs font-semibold text-white hover:bg-slate-800">
-                                                Buchen
-                                            </button>
-                                        </form>
-                                    @endif
-
-                                    @if(! in_array($bankTransaction->status, [\App\Models\BankTransaction::STATUS_BOOKED, \App\Models\BankTransaction::STATUS_IGNORED], true))
-                                        <form method="POST" action="{{ route('bank-imports.transactions.ignore', $bankTransaction) }}">
-                                            @csrf
-                                            <button type="submit" class="inline-flex min-h-9 items-center justify-center rounded-xl px-3 text-xs font-semibold text-slate-500 hover:bg-slate-100">
-                                                Ignorieren
-                                            </button>
-                                        </form>
-                                    @endif
-                                </div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="7" class="px-5 py-12 text-center">
-                                <div class="text-sm font-semibold text-slate-900">Keine Bankumsätze in dieser Ansicht.</div>
-                                <div class="mt-1 text-sm text-slate-500">Importiere eine CAMT.053- oder CSV-Datei oder ändere den Filter.</div>
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
+                            @endif
+                        </aside>
+                    </div>
+                </article>
+            @empty
+                <div class="px-5 py-12 text-center">
+                    <div class="text-sm font-semibold text-slate-900">Keine Bankumsätze in dieser Ansicht.</div>
+                    <div class="mt-1 text-sm text-slate-500">Importiere eine CAMT.053- oder CSV-Datei oder ändere den Filter.</div>
+                </div>
+            @endforelse
         </div>
 
         @if($bankTransactions->hasPages())
