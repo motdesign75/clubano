@@ -135,6 +135,63 @@ test('treasurers can open and download the printable booking journal', function 
     expect($response->headers->get('content-type'))->toContain('application/pdf');
 });
 
+test('treasurers can open and download the cashbook print layout', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $cash = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1000',
+        'name' => 'Vereinskasse',
+        'type' => 'kasse',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+        'balance_start' => 100,
+        'balance_current' => 100,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8003',
+        'name' => 'Erlöse Sommerfest',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-08-25',
+        'description' => 'Barverkauf Sommerfest',
+        'amount' => 79,
+        'account_from_id' => $income->id,
+        'account_to_id' => $cash->id,
+        'tax_area' => 'zweckbetrieb',
+        'receipt_number' => 'KB-001',
+        'status' => 'abgeschlossen',
+        'finalized_at' => now(),
+        'finalized_by' => $user->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('transactions.cashbook.print', ['account' => $cash->id, 'year' => 2026, 'month' => 8]))
+        ->assertOk()
+        ->assertSee('Kassenbuch')
+        ->assertSee('Vereinskasse')
+        ->assertSee('Barverkauf Sommerfest');
+
+    $response = $this->actingAs($user)
+        ->get(route('transactions.cashbook.pdf', ['account' => $cash->id, 'year' => 2026, 'month' => 8]));
+
+    $response->assertOk();
+    expect($response->headers->get('content-type'))->toContain('application/pdf');
+});
+
 test('editing a transaction recalculates old and new account balances', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

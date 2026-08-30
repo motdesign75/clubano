@@ -221,8 +221,8 @@
                 </div>
             @endif
 
-            <div class="hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:block">
-                <div class="grid grid-cols-[72px_130px_minmax(0,1.55fr)_minmax(220px,1.05fr)_minmax(200px,0.9fr)_150px] gap-5 border-b border-slate-200 px-5 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <div class="hidden rounded-2xl border border-slate-200 bg-white shadow-sm 2xl:block">
+                <div class="grid grid-cols-[64px_112px_minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,0.95fr)_140px] gap-4 border-b border-slate-200 px-5 py-4 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     <div>Mark.</div>
                     <div>Datum</div>
                     <div>Vorgang</div>
@@ -239,7 +239,7 @@
                                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                                 : 'border-rose-200 bg-rose-50 text-rose-700';
                         @endphp
-                        <article class="grid grid-cols-[72px_130px_minmax(0,1.55fr)_minmax(220px,1.05fr)_minmax(200px,0.9fr)_150px] gap-5 px-5 py-5 transition hover:bg-slate-50/80">
+                        <article class="grid grid-cols-[64px_112px_minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,0.95fr)_140px] gap-4 px-5 py-5 transition hover:bg-slate-50/80">
                             <div class="pt-1">
                                 @if($transaction->status === 'entwurf' && !$transaction->isCancelled())
                                     <input type="checkbox" name="transaction_ids[]" value="{{ $transaction->id }}" class="rounded border-slate-300 text-slate-900 focus:ring-slate-800">
@@ -290,7 +290,7 @@
                                 </div>
                             </div>
 
-                            <div class="space-y-3">
+                            <div class="min-w-0 space-y-3">
                                 <div>
                                     @if($transaction->isCancelled())
                                         <span class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">Storno</span>
@@ -317,7 +317,7 @@
                                 <dl class="space-y-2 text-sm">
                                     <div>
                                         <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Beleg-Nr.</dt>
-                                        <dd class="mt-1 text-slate-700">
+                                        <dd class="mt-1 break-words text-slate-700">
                                             @if($transaction->hasOwnReceipt())
                                                 Eigenbeleg
                                             @elseif($transaction->hasContractReceipt())
@@ -333,7 +333,7 @@
                                     </div>
                                     <div>
                                         <dt class="text-xs font-semibold uppercase tracking-wide text-slate-400">Erfasst von</dt>
-                                        <dd class="mt-1 text-slate-700">
+                                        <dd class="mt-1 break-words text-slate-700">
                                             <div class="font-medium text-slate-800">{{ $transaction->creator?->name ?? 'Unbekannt' }}</div>
                                             <div class="mt-1 text-xs text-slate-500">
                                                 {{ optional($transaction->created_at)->format('d.m.Y H:i') ?: '—' }}
@@ -372,8 +372,8 @@
                                 </div>
                             </div>
 
-                            <div>
-                                <div class="font-semibold text-slate-900">{{ $transaction->counter_account->name ?? '—' }}</div>
+                            <div class="min-w-0">
+                                <div class="break-words font-semibold text-slate-900">{{ $transaction->counter_account->name ?? '—' }}</div>
                                 <div class="mt-1 text-sm text-slate-500">Gegenkonto der Kassenbewegung</div>
                             </div>
 
@@ -400,22 +400,22 @@
                 </div>
             </div>
 
-        <div class="space-y-4 xl:hidden">
+        <div class="space-y-4 2xl:hidden">
             @forelse($transactions as $transaction)
                 @php $isIncome = $transaction->cash_delta > 0; @endphp
                 <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div class="flex items-start justify-between gap-3">
-                        <div>
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div class="min-w-0">
                             <div class="text-sm font-medium text-slate-900">{{ $transaction->date->format('d.m.Y') }}</div>
-                            <div class="mt-1 text-xs text-slate-500">{{ $transaction->cash_label }}</div>
+                            <div class="mt-1 break-words text-xs text-slate-500">{{ $transaction->cash_label }}</div>
                         </div>
-                        <span class="rounded-full px-2.5 py-1 text-xs font-medium {{ $isIncome ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700' }}">
+                        <span class="inline-flex w-fit rounded-full px-2.5 py-1 text-xs font-medium {{ $isIncome ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700' }}">
                             {{ $isIncome ? 'Einnahme' : 'Ausgabe' }}
                         </span>
                     </div>
 
-                    <div class="mt-3 text-base font-semibold text-slate-900">{{ $transaction->description }}</div>
-                    <div class="mt-1 text-sm text-slate-500">Gegenkonto: {{ $transaction->counter_account->name ?? '—' }}</div>
+                    <div class="mt-3 break-words text-base font-semibold text-slate-900">{{ $transaction->description }}</div>
+                    <div class="mt-1 break-words text-sm text-slate-500">Gegenkonto: {{ $transaction->counter_account->name ?? '—' }}</div>
                     <div class="mt-2 flex flex-wrap gap-2">
                         @if($transaction->hasOwnReceipt())
                             <span class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
@@ -440,8 +440,8 @@
                         @endif
                     </div>
 
-                    <div class="mt-3 flex items-center justify-between gap-3">
-                        <div>
+                    <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="min-w-0">
                             @if($transaction->isCancelled())
                                 <span class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">Storno</span>
                             @elseif($transaction->status === 'abgeschlossen')
@@ -462,9 +462,9 @@
                     </div>
 
                     <div class="mt-4 grid grid-cols-1 gap-3 rounded-2xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
-                        <div>
+                        <div class="min-w-0">
                             <div class="text-slate-500">Beleg-Nr.</div>
-                            <div class="mt-1 font-medium text-slate-900">
+                            <div class="mt-1 break-words font-medium text-slate-900">
                             @if($transaction->hasOwnReceipt())
                                 Eigenbeleg
                             @elseif($transaction->hasContractReceipt())
@@ -478,19 +478,19 @@
                                 @endif
                             </div>
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <div class="text-slate-500">Bestand danach</div>
-                            <div class="mt-1 font-semibold text-slate-900">{{ number_format((float) $transaction->cash_balance, 2, ',', '.') }} €</div>
+                            <div class="mt-1 break-words font-semibold text-slate-900">{{ number_format((float) $transaction->cash_balance, 2, ',', '.') }} €</div>
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <div class="text-slate-500">{{ $isIncome ? 'Einnahme' : 'Ausgabe' }}</div>
-                            <div class="mt-1 font-semibold {{ $isIncome ? 'text-emerald-700' : 'text-rose-700' }}">
+                            <div class="mt-1 break-words font-semibold {{ $isIncome ? 'text-emerald-700' : 'text-rose-700' }}">
                                 {{ number_format(abs((float) $transaction->cash_delta), 2, ',', '.') }} €
                             </div>
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <div class="text-slate-500">Erfasst von</div>
-                            <div class="mt-1 font-medium text-slate-900">{{ $transaction->creator?->name ?? 'Unbekannt' }}</div>
+                            <div class="mt-1 break-words font-medium text-slate-900">{{ $transaction->creator?->name ?? 'Unbekannt' }}</div>
                             <div class="text-xs text-slate-500">{{ optional($transaction->created_at)->format('d.m.Y H:i') ?: '—' }}</div>
                         </div>
                     </div>

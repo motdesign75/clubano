@@ -6,13 +6,16 @@
 
 <style>
 @page {
-    margin: 12mm;
+    size: A4 landscape;
+    margin: 8mm 8mm 10mm;
 }
 
 body {
     font-family: DejaVu Sans, sans-serif;
-    font-size: 9pt;
+    font-size: 7.5pt;
     color: #111827;
+    line-height: 1.25;
+    margin: 0;
 }
 
 .toolbar {
@@ -40,20 +43,36 @@ body {
 
 .header {
     width: 100%;
-    margin-bottom: 14px;
+    margin-bottom: 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
 }
 
 .header td {
     vertical-align: top;
+    padding: 8px 10px;
+    background: #0f172a;
+    color: #fff;
 }
 
 .header .right {
     text-align: right;
-    font-size: 8.5pt;
+    font-size: 7.2pt;
+    color: #e2e8f0;
+}
+
+.header .muted {
+    color: #cbd5e1;
 }
 
 .summary {
-    margin: 10px 0 14px;
+    margin: 0 0 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    overflow: hidden;
 }
 
 .summary table {
@@ -62,37 +81,46 @@ body {
 }
 
 .summary td {
-    border: 1px solid #cbd5e1;
-    padding: 8px;
+    border-right: 1px solid #e2e8f0;
+    padding: 5px 8px;
+}
+
+.summary td:last-child {
+    border-right: none;
 }
 
 .summary .label {
-    font-size: 8pt;
+    font-size: 6.2pt;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: #475569;
 }
 
 .summary .value {
-    font-size: 12pt;
+    margin-top: 2px;
+    font-size: 9.5pt;
     font-weight: bold;
 }
 
 table.entries {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
 }
 
 table.entries th,
 table.entries td {
     border: 1px solid #cbd5e1;
-    padding: 5px 6px;
+    padding: 3px 4px;
     vertical-align: top;
+    overflow-wrap: anywhere;
 }
 
 table.entries th {
     background: #f8fafc;
-    font-size: 8pt;
+    font-size: 5.8pt;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
 }
 
 .text-right {
@@ -105,7 +133,7 @@ table.entries th {
 
 .muted {
     color: #64748b;
-    font-size: 8pt;
+    font-size: 6.5pt;
 }
 
 .positive {
@@ -114,6 +142,46 @@ table.entries th {
 
 .negative {
     color: #b91c1c;
+}
+
+.col-number {
+    width: 3%;
+}
+
+.col-date {
+    width: 7%;
+}
+
+.col-type {
+    width: 10%;
+}
+
+.col-status {
+    width: 8%;
+}
+
+.col-description {
+    width: 22%;
+}
+
+.col-account {
+    width: 12%;
+}
+
+.col-receipt {
+    width: 9%;
+}
+
+.col-money {
+    width: 7%;
+}
+
+.col-balance {
+    width: 8%;
+}
+
+.col-user {
+    width: 7%;
 }
 
 @media print {
@@ -188,27 +256,27 @@ table.entries th {
 <table class="entries">
     <thead>
         <tr>
-            <th class="text-center">Nr.</th>
-            <th>Datum</th>
-            <th>Vorgang</th>
-            <th>Status</th>
-            <th>Beschreibung</th>
-            <th>Gegenkonto</th>
-            <th>Beleg-Nr.</th>
-            <th class="text-right">Einnahme</th>
-            <th class="text-right">Ausgabe</th>
-            <th class="text-right">Bestand</th>
-            <th>Erfasst von</th>
+            <th class="text-center col-number">Nr.</th>
+            <th class="col-date">Datum</th>
+            <th class="col-type">Vorgang</th>
+            <th class="col-status">Status</th>
+            <th class="col-description">Beschreibung</th>
+            <th class="col-account">Gegenkonto</th>
+            <th class="col-receipt">Beleg-Nr.</th>
+            <th class="text-right col-money">Einnahme</th>
+            <th class="text-right col-money">Ausgabe</th>
+            <th class="text-right col-balance">Bestand</th>
+            <th class="col-user">Erfasst von</th>
         </tr>
     </thead>
     <tbody>
         @forelse($transactions as $index => $transaction)
             @php $isIncome = $transaction->cash_delta > 0; @endphp
             <tr>
-                <td class="text-center">{{ $index + 1 }}</td>
-                <td>{{ $transaction->date->format('d.m.Y') }}</td>
-                <td>{{ $transaction->cash_label }}</td>
-                <td>
+                <td class="text-center col-number">{{ $index + 1 }}</td>
+                <td class="col-date">{{ $transaction->date->format('d.m.Y') }}</td>
+                <td class="col-type">{{ $transaction->cash_label }}</td>
+                <td class="col-status">
                     @if($transaction->isCancelled())
                         Storno
                     @elseif($transaction->status === 'abgeschlossen')
@@ -217,9 +285,9 @@ table.entries th {
                         Offen
                     @endif
                 </td>
-                <td>{{ $transaction->description }}</td>
-                <td>{{ $transaction->counter_account->name ?? '—' }}</td>
-                <td>
+                <td class="col-description">{{ $transaction->description }}</td>
+                <td class="col-account">{{ $transaction->counter_account?->number }} {{ $transaction->counter_account->name ?? '—' }}</td>
+                <td class="col-receipt">
                     @if($transaction->receipt_number)
                         {{ $transaction->receipt_number }}
                     @elseif($transaction->hasSystemReceipt())
@@ -228,10 +296,10 @@ table.entries th {
                         Fehlt
                     @endif
                 </td>
-                <td class="text-right">{{ $isIncome ? number_format(abs((float) $transaction->cash_delta), 2, ',', '.') . ' €' : '—' }}</td>
-                <td class="text-right">{{ !$isIncome ? number_format(abs((float) $transaction->cash_delta), 2, ',', '.') . ' €' : '—' }}</td>
-                <td class="text-right">{{ number_format((float) $transaction->cash_balance, 2, ',', '.') }} €</td>
-                <td>
+                <td class="text-right col-money">{{ $isIncome ? number_format(abs((float) $transaction->cash_delta), 2, ',', '.') . ' €' : '—' }}</td>
+                <td class="text-right col-money">{{ !$isIncome ? number_format(abs((float) $transaction->cash_delta), 2, ',', '.') . ' €' : '—' }}</td>
+                <td class="text-right col-balance">{{ number_format((float) $transaction->cash_balance, 2, ',', '.') }} €</td>
+                <td class="col-user">
                     {{ $transaction->creator?->name ?? 'Unbekannt' }}<br>
                     <span class="muted">{{ optional($transaction->created_at)->format('d.m.Y H:i') ?: '—' }}</span>
                 </td>
