@@ -348,6 +348,71 @@ test('bank transactions can carry optional contract receipts into created bookin
     expect($transaction->receipt_meta['source'])->toBe('Bankumsatz-Import');
 });
 
+test('saved bank transaction assignments can receive a receipt upload later', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake('public');
+
+    [$tenant, $user] = createFinanceTenant('later-receipt');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $expenseAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4930',
+        'name' => 'Bürobedarf',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bankAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'umsatz.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bankAccount->id,
+        'selected_account_id' => $expenseAccount->id,
+        'booking_date' => '2026-08-24',
+        'amount' => -18.5,
+        'currency' => 'EUR',
+        'direction' => 'debit',
+        'counterparty_name' => 'Papierladen',
+        'purpose' => 'Briefumschläge',
+        'fingerprint' => 'later-receipt-test',
+        'status' => BankTransaction::STATUS_READY,
+    ]);
+
+    $this->actingAs($user)->patch(route('bank-imports.transactions.update', $bankTransaction), [
+        'source_account_id' => $bankAccount->id,
+        'selected_account_id' => $expenseAccount->id,
+        'receipt_kind' => 'none',
+        'receipt_file' => UploadedFile::fake()->create('beleg.pdf', 100, 'application/pdf'),
+    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->find($bankTransaction->id);
+
+    expect($bankTransaction->receipt_kind)->toBe('upload');
+    Storage::disk('public')->assertExists($bankTransaction->receipt_file);
+});
+
 test('bank transactions can use an existing invoice as internal receipt', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

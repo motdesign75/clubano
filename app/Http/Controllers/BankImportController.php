@@ -192,7 +192,7 @@ class BankImportController extends Controller
                     ->where('is_postable', true)),
             ],
             'source_account_id' => ['required', 'integer', Rule::in([(int) $bankTransaction->account_id])],
-            'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
+            'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:12288'],
             'receipt_kind' => ['nullable', Rule::in(['none', 'upload', 'vertrag', 'system_invoice'])],
             'invoice_id' => [
                 Rule::requiredIf(fn () => $request->input('receipt_kind') === 'system_invoice'),
@@ -390,6 +390,10 @@ class BankImportController extends Controller
     private function receiptData(Request $request, array $validated, BankTransaction $bankTransaction): array
     {
         $receiptKind = $validated['receipt_kind'] ?? 'none';
+
+        if ($request->hasFile('receipt_file') && $receiptKind === 'none') {
+            $receiptKind = 'upload';
+        }
         $data = [
             'receipt_kind' => null,
             'receipt_meta' => null,
