@@ -1,6 +1,8 @@
 <?php
 
 use App\Services\HtmlSanitizer;
+use App\Models\Template;
+use App\Models\Tenant;
 
 test('html sanitizer keeps safe formatting and removes executable html', function () {
     $html = <<<'HTML'
@@ -35,4 +37,34 @@ test('html sanitizer turns plain text into safe line break html', function () {
 
     expect($clean)
         ->toBe('Hallo &lt;Club&gt;<br>' . PHP_EOL . 'Neue Zeile');
+});
+
+test('stored html sanitizer command supports dry run and apply mode', function () {
+    $tenant = Tenant::create([
+        'name' => 'HTML Verein',
+        'slug' => 'html-verein',
+        'email' => 'html@example.test',
+    ]);
+
+    $template = Template::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Unsichere Vorlage',
+        'subject' => 'Update',
+        'body' => '<p onclick="alert(1)">Hallo</p><script>alert(2)</script><a href="https://clubano.de">Clubano</a>',
+        'type' => Template::TYPE_MAIL,
+    ]);
+
+    $this->artisan('clubano:sanitize-stored-html')
+        ->assertSuccessful();
+
+    expect($template->refresh()->body)->toContain('<script>');
+
+    $this->artisan('clubano:sanitize-stored-html --apply')
+        ->assertSuccessful();
+
+    expect($template->refresh()->body)
+        ->toContain('<p>Hallo</p>')
+        ->toContain('href="https://clubano.de"')
+        ->not->toContain('<script')
+        ->not->toContain('onclick');
 });

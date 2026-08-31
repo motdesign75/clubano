@@ -8,6 +8,7 @@ use App\Models\BankTransaction;
 use App\Models\Invoice;
 use App\Models\Transaction;
 use App\Services\BankStatementImportService;
+use App\Services\ReceiptStorage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -400,9 +401,7 @@ class BankImportController extends Controller
         ];
 
         if ($receiptKind === 'none') {
-            if ($bankTransaction->receipt_file && Storage::disk('public')->exists($bankTransaction->receipt_file)) {
-                Storage::disk('public')->delete($bankTransaction->receipt_file);
-            }
+            app(ReceiptStorage::class)->delete($bankTransaction->receipt_file);
 
             return [
                 ...$data,
@@ -411,9 +410,7 @@ class BankImportController extends Controller
         }
 
         if ($receiptKind === 'system_invoice') {
-            if ($bankTransaction->receipt_file && Storage::disk('public')->exists($bankTransaction->receipt_file)) {
-                Storage::disk('public')->delete($bankTransaction->receipt_file);
-            }
+            app(ReceiptStorage::class)->delete($bankTransaction->receipt_file);
 
             $invoice = Invoice::query()
                 ->where('tenant_id', auth()->user()->tenant_id)
@@ -438,14 +435,9 @@ class BankImportController extends Controller
         $receiptFile = $bankTransaction->receipt_file;
 
         if ($request->hasFile('receipt_file')) {
-            if ($receiptFile && Storage::disk('public')->exists($receiptFile)) {
-                Storage::disk('public')->delete($receiptFile);
-            }
+            app(ReceiptStorage::class)->delete($receiptFile);
 
-            $receiptFile = $request->file('receipt_file')->store(
-                'receipts/' . auth()->user()->tenant_id . '/bank-imports',
-                'public'
-            );
+            $receiptFile = app(ReceiptStorage::class)->storeUploaded($request->file('receipt_file'), auth()->user()->tenant_id, 'bank-imports');
         }
 
         if ($receiptKind === 'vertrag') {

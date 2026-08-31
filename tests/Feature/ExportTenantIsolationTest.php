@@ -8,6 +8,7 @@ use App\Models\PublicForm;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
+use Illuminate\Support\Facades\Storage;
 
 test('member datenauskunft cannot be exported across tenants', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
@@ -167,4 +168,64 @@ test('receipt files require finance role and cannot be accessed across tenants',
     $this->actingAs($adminA)
         ->get(route('receipts.show', ['path' => 'receipts/tenant-b/beleg.pdf']))
         ->assertNotFound();
+});
+
+test('private receipt files are served only to the owning finance tenant', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake('local');
+
+    $tenantA = Tenant::create([
+        'name' => 'Verein A Privatbeleg',
+        'slug' => 'verein-a-private-receipt',
+        'email' => 'a-private-receipt@example.test',
+    ]);
+
+    $tenantB = Tenant::create([
+        'name' => 'Verein B Privatbeleg',
+        'slug' => 'verein-b-private-receipt',
+        'email' => 'b-private-receipt@example.test',
+    ]);
+
+    $adminA = User::factory()->create([
+        'tenant_id' => $tenantA->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $adminB = User::factory()->create([
+        'tenant_id' => $tenantB->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $sourceAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenantB->id,
+        'name' => 'Private Kasse',
+        'type' => 'kasse',
+    ]);
+
+    $targetAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenantB->id,
+        'name' => 'Privater Aufwand',
+        'type' => 'ausgabe',
+    ]);
+
+    $path = 'receipts/' . $tenantB->id . '/beleg.pdf';
+    Storage::disk('local')->put($path, 'PDF');
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenantB->id,
+        'date' => now()->toDateString(),
+        'description' => 'Privater Beleg',
+        'amount' => 12.34,
+        'account_from_id' => $sourceAccount->id,
+        'account_to_id' => $targetAccount->id,
+        'receipt_file' => 'private:' . $path,
+    ]);
+
+    $this->actingAs($adminA)
+        ->get(route('receipts.show', ['path' => 'private:' . $path]))
+        ->assertNotFound();
+
+    $this->actingAs($adminB)
+        ->get(route('receipts.show', ['path' => 'private:' . $path]))
+        ->assertOk();
 });

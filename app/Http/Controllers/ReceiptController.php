@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Transaction;
+use App\Services\ReceiptStorage;
 use Illuminate\Http\Request;
 
 class ReceiptController extends Controller
@@ -13,7 +14,7 @@ class ReceiptController extends Controller
      * @param string $path
      * @return \Symfony\Component\HttpFoundation\BinaryFileResponse
      */
-    public function show(string $path)
+    public function show(string $path, ReceiptStorage $receiptStorage)
     {
         if (str_contains($path, '..')) {
             abort(403, 'Ungültiger Pfad.');
@@ -28,9 +29,9 @@ class ReceiptController extends Controller
             abort(404, 'Beleg nicht gefunden.');
         }
 
-        $storagePath = storage_path('app/public/' . $transaction->receipt_file);
+        $storagePath = $receiptStorage->absolutePath($transaction->receipt_file);
 
-        if (!file_exists($storagePath)) {
+        if (! $storagePath || ! file_exists($storagePath)) {
             abort(404, 'Beleg nicht gefunden.');
         }
 

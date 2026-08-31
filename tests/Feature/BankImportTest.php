@@ -274,7 +274,7 @@ test('assigned bank transactions create draft bookings and update account balanc
 
 test('bank transactions can carry optional contract receipts into created bookings', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
-    Storage::fake('public');
+    Storage::fake('local');
 
     [$tenant, $user] = createFinanceTenant('receipt');
 
@@ -336,7 +336,8 @@ test('bank transactions can carry optional contract receipts into created bookin
     $bankTransaction = BankTransaction::withoutGlobalScopes()->find($bankTransaction->id);
 
     expect($bankTransaction->receipt_kind)->toBe('vertrag');
-    Storage::disk('public')->assertExists($bankTransaction->receipt_file);
+    expect($bankTransaction->receipt_file)->toStartWith('private:');
+    Storage::disk('local')->assertExists(substr($bankTransaction->receipt_file, strlen('private:')));
 
     $this->actingAs($user)->post(route('bank-imports.transactions.book', $bankTransaction))->assertRedirect();
 
@@ -350,7 +351,7 @@ test('bank transactions can carry optional contract receipts into created bookin
 
 test('saved bank transaction assignments can receive a receipt upload later', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
-    Storage::fake('public');
+    Storage::fake('local');
 
     [$tenant, $user] = createFinanceTenant('later-receipt');
 
@@ -410,7 +411,8 @@ test('saved bank transaction assignments can receive a receipt upload later', fu
     $bankTransaction = BankTransaction::withoutGlobalScopes()->find($bankTransaction->id);
 
     expect($bankTransaction->receipt_kind)->toBe('upload');
-    Storage::disk('public')->assertExists($bankTransaction->receipt_file);
+    expect($bankTransaction->receipt_file)->toStartWith('private:');
+    Storage::disk('local')->assertExists(substr($bankTransaction->receipt_file, strlen('private:')));
 });
 
 test('bank transactions can use an existing invoice as internal receipt', function () {

@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Transaction;
 use App\Models\Tenant;
+use App\Services\ReceiptStorage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -104,8 +105,9 @@ class TransactionController extends Controller
             ->paginate(20)
             ->withQueryString()
             ->through(function ($transaction) {
+                $receiptStorage = app(ReceiptStorage::class);
                 $exists = $transaction->receipt_file
-                    ? Storage::disk('public')->exists($transaction->receipt_file)
+                    ? $receiptStorage->exists($transaction->receipt_file)
                     : false;
 
                 $transaction->receipt_exists = $exists;
@@ -470,16 +472,14 @@ class TransactionController extends Controller
             'receiptDocumentNumber' => 'EB-' . now()->format('Y') . '-' . str_pad((string) $transaction->id, 5, '0', STR_PAD_LEFT),
         ])->setPaper('a4');
 
-        if ($transaction->receipt_file && Storage::disk('public')->exists($transaction->receipt_file)) {
-            Storage::disk('public')->delete($transaction->receipt_file);
-        }
+        app(ReceiptStorage::class)->delete($transaction->receipt_file);
 
         $relativePath = 'receipts/' . auth()->user()->tenant_id . '/eigenbelege/eigenbeleg-' . $transaction->id . '-' . now()->format('YmdHis') . '.pdf';
 
-        Storage::disk('public')->put($relativePath, $pdf->output());
+        $receiptFile = app(ReceiptStorage::class)->putPdf($relativePath, $pdf->output());
 
         $transaction->forceFill([
-            'receipt_file' => $relativePath,
+            'receipt_file' => $receiptFile,
             'receipt_kind' => 'eigenbeleg',
             'receipt_meta' => $receiptMeta,
             'updated_by' => auth()->id(),
@@ -542,22 +542,15 @@ class TransactionController extends Controller
         if ($request->hasFile('receipt_file')) {
 
             // alten Beleg löschen (wenn vorhanden)
-            if ($transaction->receipt_file && Storage::disk('public')->exists($transaction->receipt_file)) {
-                Storage::disk('public')->delete($transaction->receipt_file);
-            }
+            app(ReceiptStorage::class)->delete($transaction->receipt_file);
 
             $transaction->update([
-                'receipt_file' => $request->file('receipt_file')->store(
-                    'receipts/' . auth()->user()->tenant_id,
-                    'public'
-                ),
+                'receipt_file' => app(ReceiptStorage::class)->storeUploaded($request->file('receipt_file'), auth()->user()->tenant_id),
                 'receipt_kind' => 'upload',
                 'receipt_meta' => null,
             ]);
         } elseif (($validated['receipt_kind'] ?? 'none') === 'vertrag') {
-            if ($transaction->receipt_file && Storage::disk('public')->exists($transaction->receipt_file)) {
-                Storage::disk('public')->delete($transaction->receipt_file);
-            }
+            app(ReceiptStorage::class)->delete($transaction->receipt_file);
 
             $transaction->update([
                 'receipt_file' => null,
@@ -1141,10 +1134,7 @@ class TransactionController extends Controller
         $transaction->receipt_number = $receiptNumber;
 
         if ($request->hasFile('receipt_file')) {
-            $transaction->receipt_file = $request->file('receipt_file')->store(
-                'receipts/' . auth()->user()->tenant_id,
-                'public'
-            );
+            $transaction->receipt_file = app(ReceiptStorage::class)->storeUploaded($request->file('receipt_file'), auth()->user()->tenant_id);
             $transaction->receipt_kind = 'upload';
             $transaction->receipt_meta = null;
         } elseif (! blank($validated['receipt_document_id'] ?? null)) {

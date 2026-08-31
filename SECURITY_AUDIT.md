@@ -37,13 +37,16 @@ Folgende Massnahmen wurden aus diesem Audit direkt lokal umgesetzt:
 - Zentrale Security-Header fuer normale Web-Seiten ergaenzt: `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, HSTS bei HTTPS sowie Frame-Schutz ausserhalb bewusst oeffentlicher Embeds.
 - Oeffentliche Schreib- und Tracking-Endpunkte gedrosselt: Formularantworten, Formular-Embeds, Einladungsantworten, Mailtracking und Gutscheinpruefung.
 - Zentraler HTML-Sanitizer fuer Editor-Inhalte ergaenzt und an Vorlagen, Eventbeschreibungen, Protokolltext, Formularbestaetigungen, Betreiber-Mitteilungen, Gutscheinmails, Austrittsmails und Spendenmails angebunden.
+- Bestehende gespeicherte Editor-HTML-Inhalte koennen kontrolliert per `php artisan clubano:sanitize-stored-html` geprueft und mit `--apply` bereinigt werden.
+- Neue Buchungs- und Bankimport-Belege werden kuenftig im privaten Laravel-Speicher abgelegt und nur noch ueber tenant- und rollengepruefte Controller ausgeliefert.
+- Bestehende oeffentliche Dokumente und Belege koennen kontrolliert per `php artisan clubano:migrate-private-files --dry-run` geprueft und anschliessend migriert werden.
 
 Noch offen und bewusst nicht in diesem ersten Paket geloest:
 
 - Composer-/NPM-Dependency-Updates.
 - Vollstaendige CSP-Strategie inklusive erlaubter Embed-Domains je Verein.
-- Private Migration bereits vorhandener Belegdateien aus Public Storage.
-- Bestehende HTML-Inhalte in der Datenbank nachtraeglich bereinigen.
+- Ausfuehrung der privaten Dateimigration auf dem Produktivsystem nach Backup und Trockenlauf.
+- Ausfuehrung der HTML-Altbestandsbereinigung auf dem Produktivsystem nach Sichtpruefung.
 - Vollstaendiges Admin-Auditlog.
 
 ## Positiv Geprüft
@@ -191,9 +194,14 @@ Empfehlung:
 
 ### 9. HTML-Inhalte werden an mehreren Stellen roh oder nur regex-basiert verarbeitet
 
-Schweregrad: **Hoch/Mittel**
+Schweregrad: **Hoch/Mittel, lokal technisch vorbereitet**
 
 E-Mails und Inhalte nutzen an mehreren Stellen HTML-Editoren. Das Layout `resources/views/mail/layout.blade.php` rendert den Body roh. Betreiber-Mitteilungen nutzen einen eigenen regex-basierten Sanitizer. Event- und Protokollinhalte werden ebenfalls an mehreren Stellen als HTML ausgegeben.
+
+Lokaler Umsetzungsstand:
+
+- Neue Editor-Inhalte werden zentral über `App\Services\HtmlSanitizer` bereinigt.
+- Bestehende gespeicherte Inhalte können per `php artisan clubano:sanitize-stored-html` zuerst gezählt und mit `php artisan clubano:sanitize-stored-html --apply` bereinigt werden.
 
 Empfehlung:
 
@@ -217,15 +225,22 @@ Empfehlung:
 
 ### 11. Belege liegen teilweise auf dem Public Disk
 
-Schweregrad: **Mittel**
+Schweregrad: **Mittel, lokal technisch vorbereitet**
 
-Belegdateien werden teilweise über den Public Disk abgelegt und über tenantgeprüfte Controller ausgeliefert. Der Controllercheck ist gut, aber der Public Disk birgt ein Restrisiko, wenn Dateien direkt über `/storage/...` erreichbar sind.
+Belegdateien wurden teilweise über den Public Disk abgelegt und über tenantgeprüfte Controller ausgeliefert. Der Controllercheck ist gut, aber der Public Disk birgt ein Restrisiko, wenn Dateien direkt über `/storage/...` erreichbar sind.
+
+Lokaler Umsetzungsstand:
+
+- Neue Beleg-Uploads aus Buchungen und Bankimporten werden als private Dateien gespeichert.
+- Die Beleganzeige unterstützt alte öffentliche Pfade und neue private Pfade, jeweils mit Tenant- und Rollenprüfung.
+- Ein Laravel-Befehl für Altbestände ist vorhanden: `php artisan clubano:migrate-private-files --dry-run`.
 
 Empfehlung:
 
-- Belege, Verträge, Rechnungsgrundlagen und sensible Anhänge auf private Disks verschieben.
-- Downloads nur über Controller oder signierte URLs.
-- Bestehende Dateien migrieren.
+- Auf dem Produktivsystem zuerst Backup erstellen.
+- Dann `php artisan clubano:migrate-private-files --dry-run` ausführen und Ergebnis prüfen.
+- Danach die Migration mit `php artisan clubano:migrate-private-files --delete-public` ausführen.
+- Downloads weiterhin nur über Controller oder signierte URLs.
 
 ### 12. Sensitive Felder sind mass-assignable
 
