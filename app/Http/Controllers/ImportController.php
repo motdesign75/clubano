@@ -220,7 +220,7 @@ class ImportController extends Controller
     private function confirmTypedImport(Request $request, string $type)
     {
         $request->validate([
-            'path' => 'required|string',
+            'path' => 'required|string|max:255',
             'mapping' => 'required|array',
             'source_profile' => 'nullable|string|max:60',
             'original_filename' => 'nullable|string|max:255',
@@ -230,10 +230,11 @@ class ImportController extends Controller
             'custom_field_strategy' => 'nullable|in:ignore,create_from_unmapped',
         ]);
 
-        $parsed = $this->readTabularFileFromStorage($request->input('path'), $request->input('original_filename'));
+        $tenantId = auth()->user()->tenant_id;
+        $path = $this->validatedImportTempPath((string) $request->input('path'), $tenantId);
+        $parsed = $this->readTabularFileFromStorage($path, $request->input('original_filename'));
         $rows = $parsed['rows'];
         $mapping = $request->input('mapping');
-        $tenantId = auth()->user()->tenant_id;
         $importedCount = 0;
         $skippedRows = [];
         $createdMembershipIds = [];
@@ -247,25 +248,25 @@ class ImportController extends Controller
         $mappingBlocker = $this->mappingBlockerMessage($mapping, $type);
 
         if ($mappingBlocker) {
-            Storage::delete((string) $request->input('path'));
+            Storage::delete($path);
 
             return $this->redirectToImport($type)->with('error', $mappingBlocker);
         }
 
         if ($type === 'members' && $limitMessage = $this->memberImportLimitMessage($rows, $mapping, $tenantId, $duplicateStrategy)) {
-            Storage::delete((string) $request->input('path'));
+            Storage::delete($path);
 
             return redirect()
                 ->route('import.mitglieder')
                 ->with('error', $limitMessage);
         }
 
-        DB::transaction(function () use ($type, $request, $rows, $mapping, $tenantId, $parsed, $sourceProfile, $duplicateStrategy, $membershipStrategy, $customFieldStrategy, $duplicateAnalysisBeforeImport, &$importRun, &$importedCount, &$skippedRows, &$createdMembershipIds, &$createdCustomFieldIds) {
+        DB::transaction(function () use ($type, $request, $path, $rows, $mapping, $tenantId, $parsed, $sourceProfile, $duplicateStrategy, $membershipStrategy, $customFieldStrategy, $duplicateAnalysisBeforeImport, &$importRun, &$importedCount, &$skippedRows, &$createdMembershipIds, &$createdCustomFieldIds) {
             $importRun = ImportRun::create([
                 'tenant_id' => $tenantId,
                 'import_type' => $type,
                 'created_by' => auth()->id(),
-                'filename' => $request->input('original_filename') ?: basename((string) $request->input('path')),
+                'filename' => $request->input('original_filename') ?: basename($path),
                 'status' => 'completed',
                 'row_count' => count($rows),
                 'imported_count' => 0,
@@ -344,7 +345,7 @@ class ImportController extends Controller
             $message .= ' ' . count($skippedRows) . ' Zeile(n) wurden wegen Fehlern oder Dubletten uebersprungen.';
         }
 
-        Storage::delete((string) $request->input('path'));
+        Storage::delete($path);
 
         return redirect()->route('import.report', $importRun)->with('success', $message);
     }
@@ -416,6 +417,25 @@ class ImportController extends Controller
         }
 
         return $this->readCsvFromStorage($path);
+    }
+
+    private function validatedImportTempPath(string $path, int|string $tenantId): string
+    {
+        $tenantPrefix = 'temp/imports/' . $tenantId . '/';
+        $isLegacyTempFile = Str::startsWith($path, 'temp/')
+            && substr_count($path, '/') === 1
+            && basename($path) === Str::after($path, 'temp/');
+
+        abort_if(
+            blank($path)
+            || str_contains($path, '..')
+            || (! Str::startsWith($path, $tenantPrefix) && ! $isLegacyTempFile)
+            || ! Storage::exists($path),
+            403,
+            'Importdatei ist nicht mehr gueltig.'
+        );
+
+        return $path;
     }
 
     private function readCsvFromStorage(string $path): array

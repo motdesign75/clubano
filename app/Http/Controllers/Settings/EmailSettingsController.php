@@ -29,16 +29,21 @@ class EmailSettingsController extends Controller
             'mail_from_name' => 'nullable|string',
         ]);
 
-        $tenant->update([
+        $data = [
             'mail_mailer' => $request->mail_mailer,
             'mail_host' => $request->mail_host,
             'mail_port' => $request->mail_port,
             'mail_username' => $request->mail_username,
-            'mail_password' => $request->mail_password,
             'mail_encryption' => $request->mail_encryption,
             'mail_from_address' => $request->mail_from_address,
             'mail_from_name' => $request->mail_from_name,
-        ]);
+        ];
+
+        if ($request->filled('mail_password')) {
+            $data['mail_password'] = $request->mail_password;
+        }
+
+        $tenant->update($data);
 
         return redirect()->route('settings.email.edit')->with('success', 'SMTP-Einstellungen gespeichert.');
     }

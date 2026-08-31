@@ -4,6 +4,8 @@
 *.log
 *.bak
 *.sqlite
+*.sql
+*.zip
 
 # Umgebungskonfig
 .env
@@ -36,6 +38,25 @@ auth.json
 
 # Verlinkter Storage-Ordner im öffentlichen Verzeichnis (Symlink)
 /public/storage
+
+# Keine Laravel-Quellcodekopien im Webroot
+/public/app
+/public/bootstrap
+/public/config
+/public/database
+/public/resources
+/public/routes
+/public/tests
+/public/vendor
+/public/public
+/public/artisan
+/public/composer.json
+/public/composer.lock
+/public/package.json
+/public/package-lock.json
+/public/phpunit.xml
+/public/tailwind.config.js
+/public/vite.config.js
 
 # Build-Dateien von Vite
 /public/hot

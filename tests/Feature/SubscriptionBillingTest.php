@@ -56,8 +56,10 @@ test('checkout rejects unknown stripe price ids before contacting stripe', funct
 
 test('stripe checkout webhook stores the selected yearly price id', function () {
     [$tenant] = createBillingTenantWithAdmin();
+    config(['services.stripe.webhook_secret' => 'whsec_test_secret']);
 
-    $this->post(route('stripe.webhook'), [
+    $payload = json_encode([
+        'id' => 'evt_yearly_test',
         'type' => 'checkout.session.completed',
         'data' => [
             'object' => [
@@ -69,6 +71,13 @@ test('stripe checkout webhook stores the selected yearly price id', function () 
                 ],
             ],
         ],
+    ], JSON_THROW_ON_ERROR);
+
+    $timestamp = time();
+    $signature = 't=' . $timestamp . ',v1=' . hash_hmac('sha256', $timestamp . '.' . $payload, 'whsec_test_secret');
+
+    $this->postJson(route('stripe.webhook'), json_decode($payload, true, 512, JSON_THROW_ON_ERROR), [
+        'Stripe-Signature' => $signature,
     ])->assertOk();
 
     $subscription = DB::table('subscriptions')

@@ -5,32 +5,54 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Tenant;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Stripe\Exception\SignatureVerificationException;
+use Stripe\Webhook;
+use UnexpectedValueException;
 
 class StripeWebhookController extends Controller
 {
     public function handle(Request $request)
     {
-        $event = $request->all();
+        $payload = $request->getContent();
+        $signature = $request->header('Stripe-Signature');
+        $webhookSecret = config('services.stripe.webhook_secret');
 
-        if ($event['type'] === 'checkout.session.completed') {
+        if (blank($webhookSecret)) {
+            Log::critical('Stripe webhook secret is not configured.');
 
-            $session = $event['data']['object'];
+            return response()->json(['message' => 'Webhook not configured.'], 500);
+        }
 
-            $tenantId = $session['metadata']['tenant_id'] ?? null;
+        try {
+            $event = Webhook::constructEvent($payload, $signature, $webhookSecret);
+        } catch (UnexpectedValueException|SignatureVerificationException $exception) {
+            Log::warning('Stripe webhook rejected.', [
+                'reason' => $exception->getMessage(),
+            ]);
+
+            return response()->json(['message' => 'Invalid webhook signature.'], 400);
+        }
+
+        if ($event->type === 'checkout.session.completed') {
+
+            $session = $event->data->object;
+
+            $tenantId = $session->metadata->tenant_id ?? null;
 
             if ($tenantId) {
 
                 $tenant = Tenant::find($tenantId);
 
                 if ($tenant) {
-                    $subscriptionId = $session['subscription'] ?? null;
+                    $subscriptionId = $session->subscription ?? null;
 
                     if (! $subscriptionId) {
                         return response()->json(['status' => 'ignored']);
                     }
 
-                    $priceId = $session['metadata']['price_id'] ?? null;
-                    $billingPlan = $session['metadata']['billing_plan'] ?? null;
+                    $priceId = $session->metadata->price_id ?? null;
+                    $billingPlan = $session->metadata->billing_plan ?? null;
 
                     if (! $priceId && $billingPlan) {
                         $priceId = config("clubano.billing.plans.{$billingPlan}.stripe_price_id");

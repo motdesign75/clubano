@@ -16,7 +16,6 @@ return Application::configure(basePath: dirname(__DIR__))
         // ✅ Stripe Webhooks dürfen nicht durch CSRF laufen (sonst 419)
         $middleware->validateCsrfTokens(except: [
             'stripe/webhook',
-            'stripe/*',
         ]);
 
         // ✅ Middleware-Aliases

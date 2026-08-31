@@ -549,9 +549,6 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             ->name('pdf.test');
     });
 
-    // Debug
-    Route::get('/envcheck', fn () => dd(config('app.env'), config('app.debug')));
-
     // --- Kontakte (eigenes Modul, getrennt von Mitgliedern) ---
     $when($C.'ContactController', function($cls){
         Route::get('/contacts', [$cls, 'index'])->name('contacts.index');

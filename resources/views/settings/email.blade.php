@@ -39,7 +39,7 @@
 
         <div class="mb-4">
             <label class="block text-sm font-medium mb-1">SMTP Passwort</label>
-            <input type="password" name="mail_password" value="{{ old('mail_password', $tenant->mail_password) }}" class="w-full border p-2 rounded">
+            <input type="password" name="mail_password" value="" placeholder="{{ $tenant->mail_password ? 'Passwort ist gespeichert - leer lassen, um es beizubehalten' : '' }}" class="w-full border p-2 rounded">
         </div>
 
         <div class="mb-4">

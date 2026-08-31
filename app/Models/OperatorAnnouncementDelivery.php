@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 class OperatorAnnouncementDelivery extends Model
 {
+    use BelongsToTenant;
+
     protected $fillable = [
         'operator_announcement_id',
         'tenant_id',

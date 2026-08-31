@@ -101,6 +101,7 @@ class Tenant extends Model
         'donation_certificates_send_enabled' => 'boolean',
         'donation_notice_date' => 'date',
         'donation_notice_valid_until' => 'date',
+        'mail_password' => 'encrypted',
         'voucher_show_qr' => 'boolean',
         'voucher_template_width' => 'integer',
         'voucher_template_height' => 'integer',
