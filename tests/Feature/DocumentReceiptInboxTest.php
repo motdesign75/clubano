@@ -111,6 +111,23 @@ test('receipt recognition prefers the payable total over tax and change amounts'
         ->and($service->fromUpload($cashReceipt)['recognized_amount'])->toBe(42.50);
 });
 
+test('receipt recognition endpoint returns suggestions for the upload form', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [, $user] = createDocumentReceiptTenant();
+
+    $file = UploadedFile::fake()->create('Baumarkt Gesamt 89,95 EUR 31.08.2026.pdf', 12, 'application/pdf');
+
+    $this->actingAs($user)
+        ->postJson(route('documents.receipt.recognize'), [
+            'file' => $file,
+        ])
+        ->assertOk()
+        ->assertJsonPath('recognized_amount', '89.95')
+        ->assertJsonPath('recognized_date', '2026-08-31')
+        ->assertJsonPath('has_suggestion', true);
+});
+
 test('a receipt document can be linked to a new transaction without reuploading the file', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

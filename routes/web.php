@@ -163,6 +163,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/dokumente', [$cls, 'index'])->middleware('tenant.role:Lesen')->name('documents.index');
         Route::get('/dokumente/neu', [$cls, 'create'])->middleware('tenant.role:documents')->name('documents.create');
         Route::post('/dokumente', [$cls, 'store'])->middleware('tenant.role:documents')->name('documents.store');
+        Route::post('/dokumente/beleg-erkennen', [$cls, 'recognizeReceipt'])->middleware('tenant.role:documents')->name('documents.receipt.recognize');
         Route::get('/dokumente/{document}', [$cls, 'show'])->middleware('tenant.role:Lesen')->name('documents.show');
         Route::get('/dokumente/{document}/download', [$cls, 'download'])->middleware('tenant.role:Lesen')->name('documents.download');
         Route::get('/dokumente/{document}/bearbeiten', [$cls, 'edit'])->middleware('tenant.role:documents')->name('documents.edit');

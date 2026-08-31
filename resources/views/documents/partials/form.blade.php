@@ -5,7 +5,9 @@
     $defaultTitle = $receiptMode ? 'Beleg vom ' . now()->format('d.m.Y') : null;
 @endphp
 
-<form method="POST" action="{{ $action }}" enctype="multipart/form-data" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+<form method="POST" action="{{ $action }}" enctype="multipart/form-data" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+      data-receipt-form
+      data-receipt-recognition-url="{{ route('documents.receipt.recognize') }}">
     @csrf
     @if($method !== 'POST')
         @method($method)
@@ -50,6 +52,7 @@
             <p class="mt-2 text-xs leading-5 text-slate-500">
                 {{ $receiptMode ? 'Auf dem Handy öffnet sich direkt die Kamera. Alternativ kannst du PDF oder Bild auswählen.' : 'PDF, Bilder und Office-Dateien bis 50 MB.' }}
             </p>
+            <div data-receipt-recognition-status class="mt-3 hidden rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-600"></div>
             @error('file') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
         </aside>
     </section>
@@ -208,3 +211,97 @@
         </button>
     </div>
 </form>
+
+@once
+    @push('scripts')
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                document.querySelectorAll('[data-receipt-form]').forEach(function (form) {
+                    const fileInput = form.querySelector('input[name="file"]');
+                    const receiptCheckbox = form.querySelector('input[name="is_booking_receipt"][value="1"]');
+                    const statusBox = form.querySelector('[data-receipt-recognition-status]');
+                    const recognitionUrl = form.dataset.receiptRecognitionUrl;
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+                    if (!fileInput || !receiptCheckbox || !statusBox || !recognitionUrl) {
+                        return;
+                    }
+
+                    const showStatus = function (message, tone = 'neutral') {
+                        statusBox.classList.remove('hidden', 'border-slate-200', 'border-amber-200', 'border-emerald-200', 'border-rose-200', 'bg-white', 'bg-amber-50', 'bg-emerald-50', 'bg-rose-50', 'text-slate-600', 'text-amber-800', 'text-emerald-800', 'text-rose-800');
+                        statusBox.textContent = message;
+
+                        const classes = {
+                            neutral: ['border-slate-200', 'bg-white', 'text-slate-600'],
+                            loading: ['border-amber-200', 'bg-amber-50', 'text-amber-800'],
+                            success: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-800'],
+                            error: ['border-rose-200', 'bg-rose-50', 'text-rose-800'],
+                        }[tone] || ['border-slate-200', 'bg-white', 'text-slate-600'];
+
+                        statusBox.classList.add(...classes);
+                    };
+
+                    const fillField = function (name, value) {
+                        if (value === null || value === undefined || value === '') {
+                            return false;
+                        }
+
+                        const field = form.querySelector(`[name="${name}"]`);
+                        if (!field || field.value) {
+                            return false;
+                        }
+
+                        field.value = value;
+                        field.dispatchEvent(new Event('change', { bubbles: true }));
+
+                        return true;
+                    };
+
+                    fileInput.addEventListener('change', async function () {
+                        const file = fileInput.files?.[0];
+
+                        if (!file || !receiptCheckbox.checked) {
+                            return;
+                        }
+
+                        showStatus('Clubano liest den Beleg und sucht Betrag, Datum und Händler.', 'loading');
+
+                        const formData = new FormData();
+                        formData.append('file', file);
+
+                        try {
+                            const response = await fetch(recognitionUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': csrfToken,
+                                    'Accept': 'application/json',
+                                },
+                                body: formData,
+                            });
+
+                            if (!response.ok) {
+                                throw new Error('Beleg konnte nicht gelesen werden.');
+                            }
+
+                            const data = await response.json();
+                            let filledCount = 0;
+
+                            filledCount += fillField('recognized_amount', data.recognized_amount) ? 1 : 0;
+                            filledCount += fillField('recognized_date', data.recognized_date) ? 1 : 0;
+                            filledCount += fillField('recognized_vendor', data.recognized_vendor) ? 1 : 0;
+                            filledCount += fillField('recognized_invoice_number', data.recognized_invoice_number) ? 1 : 0;
+
+                            if (filledCount > 0) {
+                                showStatus('Vorschlag erkannt. Bitte kurz prüfen und dann speichern.', 'success');
+                            } else {
+                                showStatus('Kein sicherer Vorschlag erkannt. Du kannst die Werte manuell ergänzen.', 'neutral');
+                            }
+                        } catch (error) {
+                            showStatus('Beleg konnte nicht automatisch gelesen werden. Du kannst die Werte manuell eintragen.', 'error');
+                        }
+                    });
+                });
+            });
+        </script>
+    @endpush
+@endonce

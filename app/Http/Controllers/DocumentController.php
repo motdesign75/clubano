@@ -102,6 +102,31 @@ class DocumentController extends Controller
             : 'Dokument wurde abgelegt.');
     }
 
+    public function recognizeReceipt(Request $request, ReceiptRecognitionService $recognitionService)
+    {
+        $validated = $request->validate([
+            'file' => ['required', 'file', 'max:51200'],
+        ]);
+
+        $suggestions = $recognitionService->fromUpload($validated['file']);
+
+        return response()->json([
+            'recognized_amount' => filled($suggestions['recognized_amount'] ?? null)
+                ? number_format((float) $suggestions['recognized_amount'], 2, '.', '')
+                : null,
+            'recognized_currency' => $suggestions['recognized_currency'] ?? 'EUR',
+            'recognized_date' => $suggestions['recognized_date'] ?? null,
+            'recognized_vendor' => $suggestions['recognized_vendor'] ?? null,
+            'recognized_invoice_number' => $suggestions['recognized_invoice_number'] ?? null,
+            'recognition_source' => $suggestions['recognition_source'] ?? null,
+            'recognition_notes' => $suggestions['recognition_notes'] ?? null,
+            'has_suggestion' => collect($suggestions)
+                ->only(['recognized_amount', 'recognized_date', 'recognized_vendor', 'recognized_invoice_number'])
+                ->filter(fn ($value) => filled($value))
+                ->isNotEmpty(),
+        ]);
+    }
+
     public function show(Request $request, Document $document)
     {
         $this->authorizeTenant($request, $document);
