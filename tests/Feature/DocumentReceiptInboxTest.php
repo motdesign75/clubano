@@ -101,6 +101,16 @@ test('receipt upload mode guides mobile users into the receipt inbox', function 
         ->assertSee('Beleg fotografieren');
 });
 
+test('receipt recognition prefers the payable total over tax and change amounts', function () {
+    $service = app(\App\Services\ReceiptRecognitionService::class);
+
+    $invoice = UploadedFile::fake()->create('Stadtwerke Netto 100,00 MwSt 19,00 Gesamt 119,00 EUR.pdf', 12, 'application/pdf');
+    $cashReceipt = UploadedFile::fake()->image('Getränkemarkt Summe 42,50 Rückgeld 7,50.jpg');
+
+    expect($service->fromUpload($invoice)['recognized_amount'])->toBe(119.00)
+        ->and($service->fromUpload($cashReceipt)['recognized_amount'])->toBe(42.50);
+});
+
 test('a receipt document can be linked to a new transaction without reuploading the file', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

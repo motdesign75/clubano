@@ -31,7 +31,7 @@ class ReceiptRecognitionService
             'recognized_amount' => $this->amount($searchableText),
             'recognized_currency' => 'EUR',
             'recognized_date' => $this->date($searchableText),
-            'recognized_vendor' => $this->vendor($readableName),
+            'recognized_vendor' => $this->vendor($readableName, $text),
             'recognized_invoice_number' => $this->invoiceNumber($searchableText),
             'recognition_source' => $source,
             'recognition_notes' => $source === 'OCR/Text'
@@ -89,18 +89,40 @@ class ReceiptRecognitionService
 
     private function amount(string $value): ?float
     {
-        $value = preg_replace('/(?<!\d)(\d{4})[-_. ](\d{1,2})[-_. ](\d{1,2})(?!\d)/', ' ', $value) ?? $value;
-        $value = preg_replace('/(?<!\d)(\d{1,2})[-_. ](\d{1,2})[-_. ](\d{4})(?!\d)/', ' ', $value) ?? $value;
+        $value = $this->normalizeOcrText($value);
+        $value = $this->removeNonAmountNoise($value);
 
-        if (! preg_match_all('/(?<!\d)(\d{1,3}(?:[.\s]\d{3})*|\d+)[,.](\d{2})(?:\s?(eur|euro|€))?(?!\d)/i', $value, $matches, PREG_SET_ORDER)) {
+        if (blank($value)) {
             return null;
         }
 
-        $match = collect($matches)->first(fn (array $candidate) => filled($candidate[3] ?? null)) ?? end($matches);
+        $candidates = collect();
+        $lines = preg_split('/\R+/', $value) ?: [$value];
 
-        $number = str_replace(['.', ' '], '', $match[1]) . '.' . $match[2];
+        foreach ($lines as $index => $line) {
+            $context = trim(($lines[$index - 1] ?? '') . ' ' . $line . ' ' . ($lines[$index + 1] ?? ''));
 
-        return round((float) $number, 2);
+            foreach ($this->amountCandidates($line) as $candidate) {
+                $candidates->push($candidate + [
+                    'score' => $this->amountScore($context, $candidate),
+                    'position' => $index,
+                ]);
+            }
+        }
+
+        if ($candidates->isEmpty()) {
+            return null;
+        }
+
+        $best = $candidates
+            ->sortBy([
+                ['score', 'desc'],
+                ['amount', 'desc'],
+                ['position', 'desc'],
+            ])
+            ->first();
+
+        return $best ? round((float) $best['amount'], 2) : null;
     }
 
     private function date(string $value): ?string
@@ -127,8 +149,18 @@ class ReceiptRecognitionService
         return null;
     }
 
-    private function vendor(string $value): ?string
+    private function vendor(string $value, string $text = ''): ?string
     {
+        $textVendor = collect(preg_split('/\R+/', $text) ?: [])
+            ->map(fn (string $line) => trim($line))
+            ->filter(fn (string $line) => strlen($line) >= 3 && strlen($line) <= 80)
+            ->reject(fn (string $line) => preg_match('/\d{2,}|iban|bic|ust|steuer|summe|gesamt|betrag|datum|rechnung/i', $line))
+            ->first();
+
+        if (filled($textVendor)) {
+            return Str::limit((string) $textVendor, 120, '');
+        }
+
         $cleaned = Str::of($value)
             ->replaceMatches('/(?<!\d)(\d{4})[-_. ](\d{1,2})[-_. ](\d{1,2})(?!\d)/', ' ')
             ->replaceMatches('/(?<!\d)(\d{1,2})[-_. ](\d{1,2})[-_. ](\d{4})(?!\d)/', ' ')
@@ -139,6 +171,81 @@ class ReceiptRecognitionService
             ->toString();
 
         return $cleaned !== '' ? Str::limit($cleaned, 120, '') : null;
+    }
+
+    private function normalizeOcrText(string $value): string
+    {
+        return Str::of($value)
+            ->replace(["\t", "\u{00a0}"], ' ')
+            ->replaceMatches('/(?<=\d)[oO](?=\d|\s?(?:eur|euro|€))/i', '0')
+            ->replaceMatches('/(?<=\d)[lI](?=\d)/', '1')
+            ->replaceMatches('/[^\S\r\n]+/', ' ')
+            ->replaceMatches('/[^\S\r\n]*(\R)[^\S\r\n]*/', '$1')
+            ->toString();
+    }
+
+    private function removeNonAmountNoise(string $value): string
+    {
+        $value = preg_replace('/(?<!\d)(\d{4})[-_. ](\d{1,2})[-_. ](\d{1,2})(?!\d)/', ' ', $value) ?? $value;
+        $value = preg_replace('/(?<!\d)(\d{1,2})[-_. ](\d{1,2})[-_. ](\d{4})(?!\d)/', ' ', $value) ?? $value;
+        $value = preg_replace('/\b[A-Z]{2}\d{2}(?:\s?\d{4}){2,7}\b/i', ' ', $value) ?? $value;
+
+        return $value;
+    }
+
+    /**
+     * @return array<int, array{amount: float, has_currency: bool, raw: string}>
+     */
+    private function amountCandidates(string $line): array
+    {
+        if (! preg_match_all('/(?<![\d\/])(\d{1,3}(?:[.\s]\d{3})*|\d+)[,.](\d{2})(?:\s?(eur|euro|€))?(?!\d)/i', $line, $matches, PREG_SET_ORDER)) {
+            return [];
+        }
+
+        return collect($matches)
+            ->map(function (array $match) {
+                $number = str_replace(['.', ' '], '', $match[1]) . '.' . $match[2];
+
+                return [
+                    'amount' => (float) $number,
+                    'has_currency' => filled($match[3] ?? null),
+                    'raw' => $match[0],
+                ];
+            })
+            ->filter(fn (array $candidate) => $candidate['amount'] > 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array{amount: float, has_currency: bool, raw: string} $candidate
+     */
+    private function amountScore(string $context, array $candidate): int
+    {
+        $score = 10;
+        $context = Str::lower($context);
+
+        if ($candidate['has_currency']) {
+            $score += 25;
+        }
+
+        if (preg_match('/\b(summe|gesamt|total|endbetrag|zu zahlen|rechnungsbetrag|betrag fällig|zahlbetrag|brutto)\b/u', $context)) {
+            $score += 90;
+        }
+
+        if (preg_match('/\b(netto|mwst|ust|steuer|pfand|rabatt|skonto|gegeben|rückgeld|wechselgeld|anzahl|stück|stueck)\b/u', $context)) {
+            $score -= 55;
+        }
+
+        if (preg_match('/\b(kartenzahlung|ec-karte|visa|mastercard|barzahlung|bezahlt)\b/u', $context)) {
+            $score += 20;
+        }
+
+        if ($candidate['amount'] >= 100000) {
+            $score -= 80;
+        }
+
+        return $score;
     }
 
     private function invoiceNumber(string $value): ?string
