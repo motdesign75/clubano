@@ -23,6 +23,10 @@
 
             <div class="flex flex-col gap-3 sm:flex-row lg:justify-end">
                 @if($canManageDocuments)
+                    <a href="{{ route('documents.create', ['type' => 'receipt']) }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-300 px-4 text-sm font-semibold text-slate-950 shadow-sm hover:bg-amber-200">
+                        <x-heroicon-o-camera class="h-5 w-5" />
+                        Beleg fotografieren
+                    </a>
                     <a href="{{ route('documents.create') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-slate-950 hover:bg-slate-100">
                         <x-heroicon-o-document-plus class="h-5 w-5" />
                         Dokument ablegen
@@ -71,8 +75,9 @@
                 </p>
             </div>
             @if($canManageDocuments)
-                <a href="{{ route('documents.create') }}" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-amber-600 px-4 text-sm font-semibold text-white hover:bg-amber-700">
-                    Beleg hochladen
+                <a href="{{ route('documents.create', ['type' => 'receipt']) }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-amber-600 px-4 text-sm font-semibold text-white hover:bg-amber-700">
+                    <x-heroicon-o-camera class="h-5 w-5" />
+                    Beleg fotografieren
                 </a>
             @endif
         </div>

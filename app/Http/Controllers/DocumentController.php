@@ -212,8 +212,10 @@ class DocumentController extends Controller
     protected function formData(Request $request): array
     {
         $tenantId = $request->user()->tenant_id;
+        $receiptMode = $request->query('type') === 'receipt' || $request->boolean('receipt');
 
         return [
+            'receiptMode' => $receiptMode,
             'categories' => Document::categories(),
             'statuses' => collect(Document::statuses())->except(Document::STATUS_ARCHIVED)->all(),
             'members' => Member::where('tenant_id', $tenantId)->whereNull('archived_at')->orderBy('last_name')->orderBy('first_name')->get(),

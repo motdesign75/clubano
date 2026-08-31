@@ -1,6 +1,8 @@
 @php
     $tagValue = old('tags', $document?->tags ? implode(', ', $document->tags) : '');
-    $isBookingReceipt = (bool) old('is_booking_receipt', $document?->is_booking_receipt ?? false);
+    $receiptMode = (bool) ($receiptMode ?? false);
+    $isBookingReceipt = (bool) old('is_booking_receipt', $document?->is_booking_receipt ?? $receiptMode);
+    $defaultTitle = $receiptMode ? 'Beleg vom ' . now()->format('d.m.Y') : null;
 @endphp
 
 <form method="POST" action="{{ $action }}" enctype="multipart/form-data" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -19,9 +21,9 @@
         <div class="space-y-4">
             <div>
                 <label for="title" class="text-sm font-semibold text-slate-900">Titel *</label>
-                <input id="title" name="title" type="text" value="{{ old('title', $document?->title) }}" required
+                <input id="title" name="title" type="text" value="{{ old('title', $document?->title ?? $defaultTitle) }}" required
                        class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300"
-                       placeholder="z. B. Versicherungspolice 2026">
+                       placeholder="{{ $receiptMode ? 'z. B. Kassenbon Getränkemarkt' : 'z. B. Versicherungspolice 2026' }}">
                 @error('title') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
             </div>
 
@@ -35,15 +37,19 @@
         </div>
 
         <aside class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div class="text-sm font-semibold text-slate-900">Datei</div>
+            <div class="text-sm font-semibold text-slate-900">{{ $receiptMode ? 'Foto oder Datei' : 'Datei' }}</div>
             @if($document)
                 <p class="mt-2 text-sm leading-6 text-slate-600">
                     Aktuell: {{ $document->original_name }} · {{ $document->human_size }}
                 </p>
             @endif
             <input id="file" name="file" type="file" @required(! $document)
+                   accept="{{ $receiptMode ? 'image/*,application/pdf' : '.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.csv,image/*,application/pdf' }}"
+                   @if($receiptMode && ! $document) capture="environment" @endif
                    class="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white">
-            <p class="mt-2 text-xs leading-5 text-slate-500">PDF, Bilder und Office-Dateien bis 50 MB.</p>
+            <p class="mt-2 text-xs leading-5 text-slate-500">
+                {{ $receiptMode ? 'Auf dem Handy öffnet sich direkt die Kamera. Alternativ kannst du PDF oder Bild auswählen.' : 'PDF, Bilder und Office-Dateien bis 50 MB.' }}
+            </p>
             @error('file') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
         </aside>
     </section>
@@ -106,7 +112,7 @@
             <label for="category" class="text-sm font-semibold text-slate-900">Kategorie *</label>
             <select id="category" name="category" required class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
                 @foreach($categories as $value => $label)
-                    <option value="{{ $value }}" @selected(old('category', $document?->category ?? 'verein') === $value)>{{ $label }}</option>
+                    <option value="{{ $value }}" @selected(old('category', $document?->category ?? ($receiptMode ? \App\Models\Document::CATEGORY_FINANCE : 'verein')) === $value)>{{ $label }}</option>
                 @endforeach
             </select>
         </div>

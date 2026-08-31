@@ -111,8 +111,8 @@ class Document extends Model
     {
         return [
             self::RECEIPT_NOT_RELEVANT => 'Kein Beleg',
-            self::RECEIPT_NEEDS_REVIEW => 'Prüfen',
-            self::RECEIPT_READY => 'Buchbar',
+            self::RECEIPT_NEEDS_REVIEW => 'Neu / prüfen',
+            self::RECEIPT_READY => 'Noch nicht gebucht',
             self::RECEIPT_BOOKED => 'Gebucht',
         ];
     }

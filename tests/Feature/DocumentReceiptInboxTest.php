@@ -62,6 +62,45 @@ test('documents can be marked as receipts and appear in the receipt inbox', func
         ->assertSee('Buchung vorbereiten');
 });
 
+test('receipt upload mode guides mobile users into the receipt inbox', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake('local');
+
+    [, $user] = createDocumentReceiptTenant();
+
+    $this->actingAs($user)
+        ->get(route('documents.create', ['type' => 'receipt']))
+        ->assertOk()
+        ->assertSee('Beleg fotografieren')
+        ->assertSee('Beleg muss gebucht werden')
+        ->assertSee('capture="environment"', false)
+        ->assertSee('value="' . Document::CATEGORY_FINANCE . '" selected', false);
+
+    $file = UploadedFile::fake()->image('Kassenbon Getränkemarkt 31.08.2026 24,90 EUR.jpg');
+
+    $this->actingAs($user)
+        ->post(route('documents.store'), [
+            'title' => 'Kassenbon Getränkemarkt',
+            'category' => Document::CATEGORY_FINANCE,
+            'status' => Document::STATUS_ACTIVE,
+            'is_booking_receipt' => '1',
+            'file' => $file,
+        ])
+        ->assertRedirect(route('documents.index'));
+
+    $document = Document::withoutGlobalScopes()->firstOrFail();
+
+    expect($document->is_booking_receipt)->toBeTrue()
+        ->and($document->receipt_status)->toBe(Document::RECEIPT_READY)
+        ->and($document->category)->toBe(Document::CATEGORY_FINANCE);
+
+    $this->actingAs($user)
+        ->get(route('documents.index'))
+        ->assertOk()
+        ->assertSee('Noch nicht gebucht')
+        ->assertSee('Beleg fotografieren');
+});
+
 test('a receipt document can be linked to a new transaction without reuploading the file', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
