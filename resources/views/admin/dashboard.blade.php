@@ -330,7 +330,7 @@
         @endif
     </section>
 
-    <section class="mt-8 grid gap-6 lg:grid-cols-2">
+    <section class="mt-8 grid gap-6 xl:grid-cols-3">
         <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 class="text-lg font-semibold text-slate-950">Neueste Registrierungen</h2>
             <div class="mt-5 space-y-4">
@@ -360,6 +360,24 @@
                     </div>
                 @empty
                     <div class="text-sm text-slate-500">Noch keine Benutzer vorhanden.</div>
+                @endforelse
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="text-lg font-semibold text-slate-950">Betreiberprotokoll</h2>
+            <p class="mt-1 text-sm text-slate-500">Letzte Änderungen im Admin-Cockpit.</p>
+            <div class="mt-5 space-y-4">
+                @forelse($latestAuditLogs as $log)
+                    <div class="rounded-xl bg-slate-50 px-4 py-3">
+                        <div class="font-semibold text-slate-900">{{ $log->label ?: $log->action }}</div>
+                        <div class="mt-1 text-sm text-slate-500">
+                            {{ $log->target_tenant_name ?: 'Betreiber' }} · {{ $log->actor_name ?: $log->actor_email ?: 'System' }}
+                        </div>
+                        <div class="mt-1 text-xs text-slate-400">{{ optional($log->created_at)->format('d.m.Y H:i') }}</div>
+                    </div>
+                @empty
+                    <div class="text-sm text-slate-500">Noch keine Betreiberaktionen protokolliert.</div>
                 @endforelse
             </div>
         </div>

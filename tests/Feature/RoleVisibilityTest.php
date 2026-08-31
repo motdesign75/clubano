@@ -9,6 +9,7 @@ use App\Models\EventBooking;
 use App\Models\EventCategory;
 use App\Models\EventInvitation;
 use App\Models\Member;
+use App\Models\OperatorAuditLog;
 use App\Models\Protocol;
 use App\Models\PublicForm;
 use App\Models\PublicFormSubmission;
@@ -982,6 +983,51 @@ test('superadmin can use the platform cockpit without opening a club dashboard',
         ->assertRedirect(route('admin.tenants.show', $clubTenant));
 
     expect($clubTenant->fresh()->verification_status)->toBe('verified');
+    expect(OperatorAuditLog::where('action', 'tenant.verification.updated')->where('target_tenant_id', $clubTenant->id)->exists())->toBeTrue();
+});
+
+test('operator cockpit logs sensitive admin actions without exposing secrets', function () {
+    $operator = User::factory()->create([
+        'tenant_id' => null,
+        'role' => User::ROLE_SUPERADMIN,
+        'email_verified_at' => now(),
+    ]);
+
+    $tenant = Tenant::create([
+        'name' => 'Audit Verein',
+        'slug' => 'audit-verein',
+        'email' => 'audit@example.test',
+        'license_mode' => 'standard',
+    ]);
+
+    $this->actingAs($operator)
+        ->patch(route('admin.tenants.license', $tenant), [
+            'license_mode' => 'gifted',
+            'license_expires_at' => now()->addYear()->toDateString(),
+        ])
+        ->assertRedirect(route('admin.dashboard'));
+
+    $log = OperatorAuditLog::where('action', 'tenant.license.updated')->first();
+
+    expect($log)->not->toBeNull();
+    expect($log->actor_user_id)->toBe($operator->id);
+    expect($log->target_tenant_id)->toBe($tenant->id);
+    expect($log->target_tenant_name)->toBe('Audit Verein');
+    expect($log->metadata['after']['license_mode'])->toBe('gifted');
+
+    app(\App\Services\OperatorAuditLogger::class)->log(request(), 'operator.secret.checked', 'Geheimnis geprüft', $tenant, [
+        'mail_password' => 'super-geheim',
+        'nested' => [
+            'iban' => 'DE0012345678',
+            'note' => 'sichtbar',
+        ],
+    ]);
+
+    $secretLog = OperatorAuditLog::where('action', 'operator.secret.checked')->first();
+
+    expect($secretLog->metadata['mail_password'])->toBe('[geschützt]');
+    expect($secretLog->metadata['nested']['iban'])->toBe('[geschützt]');
+    expect($secretLog->metadata['nested']['note'])->toBe('sichtbar');
 });
 
 test('operator superadmin is not tied to a club account', function () {

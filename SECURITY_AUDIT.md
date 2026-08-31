@@ -40,6 +40,8 @@ Folgende Massnahmen wurden aus diesem Audit direkt lokal umgesetzt:
 - Bestehende gespeicherte Editor-HTML-Inhalte koennen kontrolliert per `php artisan clubano:sanitize-stored-html` geprueft und mit `--apply` bereinigt werden.
 - Neue Buchungs- und Bankimport-Belege werden kuenftig im privaten Laravel-Speicher abgelegt und nur noch ueber tenant- und rollengepruefte Controller ausgeliefert.
 - Bestehende oeffentliche Dokumente und Belege koennen kontrolliert per `php artisan clubano:migrate-private-files --dry-run` geprueft und anschliessend migriert werden.
+- Betreiber-Auditlog ergaenzt: Aenderungen an Vereinspruefung, Lizenzen, Betreiberkonto, Vereinsloeschung und Betreiber-Mitteilungen werden intern protokolliert.
+- Das Betreiber-Auditlog speichert bewusst nur Metadaten und schwärzt sensible Felder wie Passwoerter, Tokens, Keys, IBAN/BIC und Stripe-Bezug.
 
 Noch offen und bewusst nicht in diesem ersten Paket geloest:
 
@@ -47,7 +49,7 @@ Noch offen und bewusst nicht in diesem ersten Paket geloest:
 - Vollstaendige CSP-Strategie inklusive erlaubter Embed-Domains je Verein.
 - Ausfuehrung der privaten Dateimigration auf dem Produktivsystem nach Backup und Trockenlauf.
 - Ausfuehrung der HTML-Altbestandsbereinigung auf dem Produktivsystem nach Sichtpruefung.
-- Vollstaendiges Admin-Auditlog.
+- Erweiterte Filter- und Exportansicht fuer das Betreiber-Auditlog.
 
 ## Positiv Geprüft
 

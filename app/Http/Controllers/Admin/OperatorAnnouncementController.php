@@ -8,6 +8,7 @@ use App\Models\OperatorAnnouncementDelivery;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\HtmlSanitizer;
+use App\Services\OperatorAuditLogger;
 use DOMDocument;
 use DOMElement;
 use Illuminate\Http\RedirectResponse;
@@ -154,6 +155,18 @@ class OperatorAnnouncementController extends Controller
                     ->with('error', 'Die Testmail konnte nicht versendet werden. Bitte prüfe die Mail-Einstellungen oder den Inhalt der Nachricht.');
             }
 
+            app(OperatorAuditLogger::class)->log(
+                $request,
+                'operator.announcement.test_sent',
+                'Testmail versendet',
+                null,
+                [
+                    'subject' => $announcement->subject,
+                    'category' => $announcement->category,
+                    'test_email' => $testEmail,
+                ]
+            );
+
             return redirect()
                 ->route('admin.announcements.index')
                 ->with('success', 'Testmail wurde an dein Betreiberkonto gesendet.');
@@ -195,6 +208,23 @@ class OperatorAnnouncementController extends Controller
                 'excluded_by_opt_out' => $excludedByOptOut,
             ]),
         ]);
+
+        app(OperatorAuditLogger::class)->log(
+            $request,
+            'operator.announcement.sent',
+            'Betreiber-Mitteilung versendet',
+            null,
+            [
+                'subject' => $announcement->subject,
+                'category' => $announcement->category,
+                'recipient_filter' => $announcement->recipient_filter,
+                'sent' => $sent,
+                'failed' => $failed,
+                'excluded_by_opt_out' => $excludedByOptOut,
+                'tenant_ids' => $validated['tenant_ids'] ?? [],
+                'recipient_user_ids' => $validated['recipient_user_ids'] ?? [],
+            ]
+        );
 
         return redirect()
             ->route('admin.announcements.index')

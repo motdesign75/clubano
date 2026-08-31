@@ -376,6 +376,23 @@
                 </div>
             </section>
 
+            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 class="text-lg font-semibold text-slate-950">Betreiberprotokoll</h2>
+                <p class="mt-1 text-sm text-slate-500">Admin-Aktionen zu diesem Verein.</p>
+                <div class="mt-4 space-y-3">
+                    @forelse($tenantAuditLogs as $log)
+                        <div class="rounded-xl bg-slate-50 px-4 py-3">
+                            <div class="text-sm font-semibold text-slate-950">{{ $log->label ?: $log->action }}</div>
+                            <div class="mt-1 text-xs text-slate-500">
+                                {{ $log->actor_name ?: $log->actor_email ?: 'System' }} · {{ optional($log->created_at)->format('d.m.Y H:i') }}
+                            </div>
+                        </div>
+                    @empty
+                        <div class="text-sm text-slate-500">Noch keine Admin-Aktionen für diesen Verein.</div>
+                    @endforelse
+                </div>
+            </section>
+
             <section class="rounded-2xl border border-rose-200 bg-rose-50 p-5">
                 <h2 class="text-lg font-semibold text-rose-950">Gefahrenzone</h2>
                 <p class="mt-2 text-sm leading-6 text-rose-800">

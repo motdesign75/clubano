@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\OperatorAuditLog;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\OperatorAuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -181,6 +183,11 @@ class AdminDashboardController extends Controller
             ->take(8)
             ->get();
 
+        $latestAuditLogs = OperatorAuditLog::query()
+            ->latest('created_at')
+            ->take(8)
+            ->get();
+
         return view('admin.dashboard', compact(
             'totalTenants',
             'totalUsers',
@@ -193,7 +200,8 @@ class AdminDashboardController extends Controller
             'tenantStatus',
             'attentionTenants',
             'latestTenants',
-            'latestUsers'
+            'latestUsers',
+            'latestAuditLogs'
         ));
     }
 
@@ -226,11 +234,24 @@ class AdminDashboardController extends Controller
             ],
         ]);
 
+        $before = $user->only(['name', 'email']);
+
         $user->forceFill([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'email_verified_at' => now(),
         ])->save();
+
+        app(OperatorAuditLogger::class)->log(
+            $request,
+            'operator.account.updated',
+            'Betreiberkonto aktualisiert',
+            null,
+            [
+                'before' => $before,
+                'after' => $user->fresh()->only(['name', 'email']),
+            ]
+        );
 
         return redirect()
             ->route('admin.account')
@@ -267,6 +288,11 @@ class AdminDashboardController extends Controller
         $recentDocuments = $this->tenantRows('documents', $tenant, ['id', 'title', 'category', 'created_at'], 'created_at', 6);
         $recentForms = $this->tenantRows('public_forms', $tenant, ['id', 'title', 'status', 'created_at'], 'created_at', 6);
         $recentImports = $this->tenantRows('import_runs', $tenant, ['id', 'import_type', 'filename', 'imported_count', 'skipped_count', 'created_at'], 'created_at', 6);
+        $tenantAuditLogs = OperatorAuditLog::query()
+            ->where('target_tenant_id', $tenant->id)
+            ->latest('created_at')
+            ->take(8)
+            ->get();
         $tenantProfile = $this->tenantProfile($tenant);
         $featureState = $this->tenantFeatureStateFromStats($tenant, $stats);
         $registrationReview = $this->tenantRegistrationReview($tenant, $stats);
@@ -281,6 +307,7 @@ class AdminDashboardController extends Controller
             'recentDocuments',
             'recentForms',
             'recentImports',
+            'tenantAuditLogs',
             'tenantProfile',
             'featureState',
             'registrationReview',
@@ -297,12 +324,25 @@ class AdminDashboardController extends Controller
             'verification_notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
+        $before = $tenant->only(['verification_status', 'verification_notes', 'verified_at', 'verified_by_user_id']);
+
         $tenant->update([
             'verification_status' => $validated['verification_status'],
             'verification_notes' => $validated['verification_notes'] ?? null,
             'verified_at' => $validated['verification_status'] === 'verified' ? now() : null,
             'verified_by_user_id' => $validated['verification_status'] === 'verified' ? $request->user()->id : null,
         ]);
+
+        app(OperatorAuditLogger::class)->log(
+            $request,
+            'tenant.verification.updated',
+            'Vereinsprüfung gespeichert',
+            $tenant,
+            [
+                'before' => $before,
+                'after' => $tenant->fresh()->only(['verification_status', 'verification_notes', 'verified_at', 'verified_by_user_id']),
+            ]
+        );
 
         return redirect()
             ->route('admin.tenants.show', $tenant)
@@ -316,12 +356,25 @@ class AdminDashboardController extends Controller
             'license_expires_at' => ['nullable', 'date'],
         ]);
 
+        $before = $tenant->only(['license_mode', 'license_expires_at', 'trial_ends_at']);
+
         $tenant->update([
             'license_mode' => $validated['license_mode'],
             'license_expires_at' => in_array($validated['license_mode'], ['beta', 'gifted'], true)
                 ? ($validated['license_expires_at'] ?? null)
                 : null,
         ]);
+
+        app(OperatorAuditLogger::class)->log(
+            $request,
+            'tenant.license.updated',
+            'Lizenz gespeichert',
+            $tenant,
+            [
+                'before' => $before,
+                'after' => $tenant->fresh()->only(['license_mode', 'license_expires_at', 'trial_ends_at']),
+            ]
+        );
 
         return redirect()
             ->route('admin.dashboard')
@@ -341,6 +394,7 @@ class AdminDashboardController extends Controller
         ]);
 
         $tenantName = $tenant->name;
+        $tenantSnapshot = $tenant->only(['id', 'name', 'email', 'city', 'license_mode', 'verification_status', 'created_at']);
         $userIds = $tenant->users()->pluck('id')->all();
         $userEmails = $tenant->users()->pluck('email')->filter()->all();
         $accountIds = DB::table('accounts')->where('tenant_id', $tenant->getKey())->pluck('id')->all();
@@ -396,6 +450,17 @@ class AdminDashboardController extends Controller
         foreach ($storagePaths as $path) {
             Storage::disk('public')->delete($path);
         }
+
+        app(OperatorAuditLogger::class)->log(
+            $request,
+            'tenant.deleted',
+            'Verein gelöscht',
+            $tenant,
+            [
+                'tenant' => $tenantSnapshot,
+                'deleted_users' => count($userIds),
+            ]
+        );
 
         return redirect()
             ->route('admin.dashboard')
