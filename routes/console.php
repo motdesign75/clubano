@@ -129,6 +129,52 @@ Artisan::command('clubano:security-check {--json : Gibt das Ergebnis als JSON au
     $storageLinked = File::exists(public_path('storage')) && is_link(public_path('storage'));
     $add($storageLinked ? 'ok' : 'warning', 'Storage-Link', $storageLinked ? 'Der öffentliche Storage-Link ist vorhanden.' : 'Der öffentliche Storage-Link fehlt oder ist kein Symlink.');
 
+    try {
+        $migrator = app(\Illuminate\Database\Migrations\Migrator::class);
+        $repository = $migrator->getRepository();
+        $pendingMigrationRisks = [];
+
+        if ($repository->repositoryExists()) {
+            $ranMigrations = collect($repository->getRan())->flip();
+            $migrationFiles = $migrator->getMigrationFiles(database_path('migrations'));
+
+            $destructivePatterns = [
+                '/Schema::drop(?:IfExists)?\s*\(/i' => 'löscht eine Tabelle',
+                '/->drop(?:Column|Columns|ConstrainedForeignId|Foreign|Index|Unique|Primary|Morphs|RememberToken|SoftDeletes|Timestamps)\s*\(/i' => 'löscht Tabellenstruktur',
+                '/\btruncate\s*\(/i' => 'leert Datensätze',
+                '/->delete\s*\(/i' => 'löscht Datensätze',
+                '/DB::(?:statement|unprepared)\s*\([^;]*(?:drop|truncate|delete)\b/is' => 'führt riskantes SQL aus',
+            ];
+
+            foreach ($migrationFiles as $migrationName => $path) {
+                if ($ranMigrations->has($migrationName)) {
+                    continue;
+                }
+
+                $contents = File::get($path);
+                $upPosition = strpos($contents, 'function up');
+                $downPosition = $upPosition === false ? false : strpos($contents, 'function down', $upPosition);
+                $upSection = $upPosition === false
+                    ? $contents
+                    : substr($contents, $upPosition, $downPosition === false ? null : $downPosition - $upPosition);
+
+                foreach ($destructivePatterns as $pattern => $description) {
+                    if (preg_match($pattern, $upSection) === 1) {
+                        $pendingMigrationRisks[] = basename($path) . ': ' . $description;
+                    }
+                }
+            }
+        }
+
+        if ($pendingMigrationRisks !== []) {
+            $add('critical', 'Riskante ausstehende Migrationen', 'Vor dem Deployment bitte prüfen: Mindestens eine noch nicht ausgeführte Migration könnte Daten entfernen.', array_values(array_unique($pendingMigrationRisks)));
+        } else {
+            $add('ok', 'Ausstehende Migrationen geprüft', 'Keine riskanten Datenoperationen in noch nicht ausgeführten Migrationen gefunden.');
+        }
+    } catch (\Throwable $exception) {
+        $add('warning', 'Migrationen nicht prüfbar', 'Die Migrationsprüfung konnte nicht vollständig ausgeführt werden: ' . $exception->getMessage());
+    }
+
     $criticalCount = collect($checks)->where('level', 'critical')->count();
     $warningCount = collect($checks)->where('level', 'warning')->count();
 
