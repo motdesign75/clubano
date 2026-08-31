@@ -125,7 +125,25 @@ test('receipt recognition endpoint returns suggestions for the upload form', fun
         ->assertOk()
         ->assertJsonPath('recognized_amount', '89.95')
         ->assertJsonPath('recognized_date', '2026-08-31')
+        ->assertJsonPath('has_amount', true)
         ->assertJsonPath('has_suggestion', true);
+});
+
+test('receipt recognition does not treat generic photo names as successful amount recognition', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [, $user] = createDocumentReceiptTenant();
+
+    $file = UploadedFile::fake()->image('image.jpg');
+
+    $this->actingAs($user)
+        ->postJson(route('documents.receipt.recognize'), [
+            'file' => $file,
+        ])
+        ->assertOk()
+        ->assertJsonPath('recognized_amount', null)
+        ->assertJsonPath('recognized_vendor', null)
+        ->assertJsonPath('has_amount', false);
 });
 
 test('a receipt document can be linked to a new transaction without reuploading the file', function () {

@@ -120,6 +120,7 @@ class DocumentController extends Controller
             'recognized_invoice_number' => $suggestions['recognized_invoice_number'] ?? null,
             'recognition_source' => $suggestions['recognition_source'] ?? null,
             'recognition_notes' => $suggestions['recognition_notes'] ?? null,
+            'has_amount' => filled($suggestions['recognized_amount'] ?? null),
             'has_suggestion' => collect($suggestions)
                 ->only(['recognized_amount', 'recognized_date', 'recognized_vendor', 'recognized_invoice_number'])
                 ->filter(fn ($value) => filled($value))

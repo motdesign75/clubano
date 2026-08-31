@@ -26,17 +26,19 @@ class ReceiptRecognitionService
         $text = trim($this->textFromFile($file));
         $source = $text !== '' ? 'OCR/Text' : 'Dateiname';
         $searchableText = trim($readableName . ' ' . $text);
+        $amount = $this->amount($searchableText);
+        $date = $this->date($searchableText);
+        $vendor = $this->vendor($readableName, $text);
+        $invoiceNumber = $this->invoiceNumber($searchableText);
 
         return [
-            'recognized_amount' => $this->amount($searchableText),
+            'recognized_amount' => $amount,
             'recognized_currency' => 'EUR',
-            'recognized_date' => $this->date($searchableText),
-            'recognized_vendor' => $this->vendor($readableName, $text),
-            'recognized_invoice_number' => $this->invoiceNumber($searchableText),
+            'recognized_date' => $date,
+            'recognized_vendor' => $vendor,
+            'recognized_invoice_number' => $invoiceNumber,
             'recognition_source' => $source,
-            'recognition_notes' => $source === 'OCR/Text'
-                ? 'Automatischer Vorschlag aus dem Belegtext. Bitte vor dem Buchen prüfen.'
-                : 'Automatischer Vorschlag aus dem Dateinamen. Für Foto-Erkennung muss OCR auf dem Server installiert sein.',
+            'recognition_notes' => $this->recognitionNotes($source, $amount, $text),
         ];
     }
 
@@ -56,7 +58,11 @@ class ReceiptRecognitionService
                 return '';
             }
 
-            return $this->runProcess([$tesseract, $path, 'stdout', '-l', 'deu+eng', '--psm', '6']);
+            return collect([6, 4, 11, 12])
+                ->map(fn (int $psm) => $this->runProcess([$tesseract, $path, 'stdout', '-l', 'deu+eng', '--psm', (string) $psm]))
+                ->filter()
+                ->unique()
+                ->implode("\n");
         }
 
         if ($mime === 'application/pdf') {
@@ -170,6 +176,10 @@ class ReceiptRecognitionService
             ->trim(' -_.')
             ->toString();
 
+        if (preg_match('/^(image|img|foto|photo|bild|scan|beleg|rechnung)(\s?\d+)?$/i', $cleaned)) {
+            return null;
+        }
+
         return $cleaned !== '' ? Str::limit($cleaned, 120, '') : null;
     }
 
@@ -255,5 +265,18 @@ class ReceiptRecognitionService
         }
 
         return null;
+    }
+
+    private function recognitionNotes(string $source, ?float $amount, string $text): string
+    {
+        if ($source === 'OCR/Text' && filled($amount)) {
+            return 'Automatischer Vorschlag aus dem Belegtext. Bitte vor dem Buchen prüfen.';
+        }
+
+        if ($source === 'OCR/Text') {
+            return 'Belegtext wurde gelesen, aber kein sicherer Betrag erkannt. Bitte Betrag manuell eintragen.';
+        }
+
+        return 'Kein lesbarer Belegtext erkannt. Bitte Foto gerade, hell und vollständig aufnehmen oder Betrag manuell eintragen.';
     }
 }

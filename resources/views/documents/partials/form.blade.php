@@ -291,8 +291,10 @@
                             filledCount += fillField('recognized_vendor', data.recognized_vendor) ? 1 : 0;
                             filledCount += fillField('recognized_invoice_number', data.recognized_invoice_number) ? 1 : 0;
 
-                            if (filledCount > 0) {
-                                showStatus('Vorschlag erkannt. Bitte kurz prüfen und dann speichern.', 'success');
+                            if (data.has_amount) {
+                                showStatus('Betrag erkannt. Bitte kurz prüfen und dann speichern.', 'success');
+                            } else if (filledCount > 0) {
+                                showStatus('Beleg gelesen, aber kein sicherer Betrag erkannt. Bitte Betrag manuell eintragen.', 'neutral');
                             } else {
                                 showStatus('Kein sicherer Vorschlag erkannt. Du kannst die Werte manuell ergänzen.', 'neutral');
                             }
