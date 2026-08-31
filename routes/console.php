@@ -17,6 +17,7 @@ use Database\Seeders\DemoVereinSeeder;
 use App\Services\TenantDemoDataGenerator;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -70,6 +71,106 @@ Artisan::command('clubano:make-superadmin {email} {--name=Clubano Admin} {--pass
         $this->line($password);
     }
 })->purpose('Erzeugt oder aktualisiert ein Clubano-Betreiberkonto ohne Vereinszuordnung');
+
+Artisan::command('clubano:security-check {--json : Gibt das Ergebnis als JSON aus}', function () {
+    $checks = [];
+
+    $add = function (string $level, string $title, string $message, array $items = []) use (&$checks): void {
+        $checks[] = compact('level', 'title', 'message', 'items');
+    };
+
+    $forbiddenPublicPaths = [
+        '.env',
+        'app',
+        'artisan',
+        'bootstrap',
+        'composer.json',
+        'composer.lock',
+        'config',
+        'database',
+        'package.json',
+        'package-lock.json',
+        'resources',
+        'routes',
+        'tests',
+        'vendor',
+    ];
+
+    $publicFindings = collect($forbiddenPublicPaths)
+        ->filter(fn (string $path) => File::exists(public_path($path)))
+        ->map(fn (string $path) => 'public/' . $path)
+        ->values()
+        ->all();
+
+    if ($publicFindings !== []) {
+        $add('critical', 'Webroot enthält interne Dateien', 'Im öffentlichen Ordner liegen Dateien oder Verzeichnisse, die dort nicht hingehören.', $publicFindings);
+    } else {
+        $add('ok', 'Webroot sauber', 'Keine typischen Laravel-Codekopien oder Konfigurationsdateien im öffentlichen Ordner gefunden.');
+    }
+
+    $rootArtifacts = collect([
+        ...File::glob(base_path('*.sql')) ?: [],
+        ...File::glob(base_path('*.zip')) ?: [],
+        ...File::glob(base_path('*.tar')) ?: [],
+        ...File::glob(base_path('*.tgz')) ?: [],
+        ...File::glob(base_path('*.tar.gz')) ?: [],
+    ])
+        ->map(fn (string $path) => basename($path))
+        ->unique()
+        ->values()
+        ->all();
+
+    if ($rootArtifacts !== []) {
+        $add('critical', 'Daten- oder Backup-Artefakte im Projektstamm', 'SQL-Dumps und Archivdateien dürfen nicht im Projektstamm liegen.', $rootArtifacts);
+    } else {
+        $add('ok', 'Keine Dumps im Projektstamm', 'Keine SQL-Dumps oder Archivdateien im Projektstamm gefunden.');
+    }
+
+    $storageLinked = File::exists(public_path('storage')) && is_link(public_path('storage'));
+    $add($storageLinked ? 'ok' : 'warning', 'Storage-Link', $storageLinked ? 'Der öffentliche Storage-Link ist vorhanden.' : 'Der öffentliche Storage-Link fehlt oder ist kein Symlink.');
+
+    $criticalCount = collect($checks)->where('level', 'critical')->count();
+    $warningCount = collect($checks)->where('level', 'warning')->count();
+
+    if ($this->option('json')) {
+        $this->line(json_encode([
+            'status' => $criticalCount > 0 ? 'failed' : ($warningCount > 0 ? 'warning' : 'ok'),
+            'critical' => $criticalCount,
+            'warning' => $warningCount,
+            'checks' => $checks,
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
+        return $criticalCount > 0 ? 1 : 0;
+    }
+
+    $this->components->info('Clubano Sicherheitscheck');
+
+    foreach ($checks as $check) {
+        $line = "{$check['title']}: {$check['message']}";
+
+        match ($check['level']) {
+            'critical' => $this->components->error($line),
+            'warning' => $this->components->warn($line),
+            default => $this->components->info($line),
+        };
+
+        foreach ($check['items'] as $item) {
+            $this->line('  - ' . $item);
+        }
+    }
+
+    $this->newLine();
+
+    if ($criticalCount > 0) {
+        $this->components->error("Nicht releasebereit: {$criticalCount} kritische Auffälligkeit(en), {$warningCount} Warnung(en).");
+
+        return 1;
+    }
+
+    $this->components->info("Releasecheck bestanden: 0 kritische Auffälligkeiten, {$warningCount} Warnung(en).");
+
+    return 0;
+})->purpose('Prüft vor Releases auf versehentliche Webroot-Leaks, Dumps und Storage-Auffälligkeiten');
 
 Artisan::command('clubano:demo-reset', function () {
     $this->components->info('Setze den öffentlichen Clubano-Demozugang zurück ...');

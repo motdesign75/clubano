@@ -42,6 +42,7 @@ Folgende Massnahmen wurden aus diesem Audit direkt lokal umgesetzt:
 - Bestehende oeffentliche Dokumente und Belege koennen kontrolliert per `php artisan clubano:migrate-private-files --dry-run` geprueft und anschliessend migriert werden.
 - Betreiber-Auditlog ergaenzt: Aenderungen an Vereinspruefung, Lizenzen, Betreiberkonto, Vereinsloeschung und Betreiber-Mitteilungen werden intern protokolliert.
 - Das Betreiber-Auditlog speichert bewusst nur Metadaten und schwärzt sensible Felder wie Passwoerter, Tokens, Keys, IBAN/BIC und Stripe-Bezug.
+- Release-Sicherheitscheck ergaenzt: `php artisan clubano:security-check` prueft vor Deployments auf Webroot-Leaks, SQL-Dumps, Archivdateien und Storage-Auffaelligkeiten.
 
 Noch offen und bewusst nicht in diesem ersten Paket geloest:
 
@@ -50,6 +51,7 @@ Noch offen und bewusst nicht in diesem ersten Paket geloest:
 - Ausfuehrung der privaten Dateimigration auf dem Produktivsystem nach Backup und Trockenlauf.
 - Ausfuehrung der HTML-Altbestandsbereinigung auf dem Produktivsystem nach Sichtpruefung.
 - Erweiterte Filter- und Exportansicht fuer das Betreiber-Auditlog.
+- Erweiterung des Release-Sicherheitschecks um Dependency-Audits und optionale CI-Ausfuehrung.
 
 ## Positiv Geprüft
 
