@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\InvitationCode;
+use App\Services\HtmlSanitizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -25,7 +26,7 @@ class TenantController extends Controller
         return view('tenant.edit', compact('tenant'));
     }
 
-    public function update(Request $request): RedirectResponse
+    public function update(Request $request, HtmlSanitizer $htmlSanitizer): RedirectResponse
     {
         $tenant = Auth::user()->tenant;
 
@@ -89,6 +90,8 @@ class TenantController extends Controller
             if ($validated['member_exit_mail_body'] === '') {
                 $validated['member_exit_mail_body'] = '<p>{anrede},</p><p>wir bestaetigen dir hiermit deinen Austritt aus <strong>{verein}</strong> zum <strong>{austrittsdatum}</strong>.</p><p>Danke fuer die gemeinsame Zeit und alles, was du eingebracht hast.</p><p>Wenn noch etwas offen ist, melde dich einfach direkt bei uns.</p><p>Herzliche Gruesse<br>{verein}</p>';
             }
+
+            $validated['member_exit_mail_body'] = $htmlSanitizer->sanitize($validated['member_exit_mail_body']);
         }
 
         // Update durchführen

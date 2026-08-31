@@ -7,6 +7,7 @@ use App\Models\OperatorAnnouncement;
 use App\Models\OperatorAnnouncementDelivery;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\HtmlSanitizer;
 use DOMDocument;
 use DOMElement;
 use Illuminate\Http\RedirectResponse;
@@ -296,13 +297,7 @@ class OperatorAnnouncementController extends Controller
 
     private function sanitizeBody(string $body): string
     {
-        $html = preg_replace('#<(script|style|iframe|object|embed|form|meta|link)\b[^>]*>.*?</\1>#is', '', $body) ?? '';
-        $html = preg_replace('#<(script|style|iframe|object|embed|form|meta|link)\b[^>]*\/?>#is', '', $html) ?? '';
-        $html = preg_replace('/\s+on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $html) ?? '';
-        $html = preg_replace('/(href|src)\s*=\s*([\'"])\s*javascript:[^\'"]*\2/i', '$1="#"', $html) ?? '';
-        $html = preg_replace('/(href|src)\s*=\s*([\'"])\s*data:(?!image\/(?:png|jpeg|jpg|gif|webp);base64,)[^\'"]*\2/i', '$1="#"', $html) ?? '';
-
-        return strip_tags($html, '<p><br><strong><b><em><i><u><ul><ol><li><a><h2><h3><blockquote><table><thead><tbody><tr><th><td><img><figure><figcaption><span>');
+        return app(HtmlSanitizer::class)->sanitize($body) ?? '';
     }
 
     private function sendMail(string $email, ?string $name, ?Tenant $tenant, ?User $recipient, OperatorAnnouncement $announcement, ?OperatorAnnouncementDelivery $delivery): void

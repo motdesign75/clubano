@@ -72,6 +72,7 @@ Route::get('/vereine/{tenantSlug}/veranstaltungen/embed', [EventController::clas
 Route::get('/einladungen/{token}', [EventController::class, 'invitationResponse'])
     ->name('events.invitations.public.show');
 Route::post('/einladungen/{token}', [EventController::class, 'storeInvitationResponse'])
+    ->middleware('throttle:public-invitation-response')
     ->name('events.invitations.public.store');
 Route::get('/dokumentation', [DocumentationController::class, 'index'])->name('docs.index');
 Route::get('/dokumentation/assets/{filename}', [DocumentationController::class, 'asset'])->name('docs.asset');
@@ -195,7 +196,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             Route::get('/gutscheine', [$cls, 'index'])->name('vouchers.index');
             Route::get('/gutscheine/einstellungen', [$cls, 'settings'])->name('vouchers.settings');
             Route::put('/gutscheine/einstellungen', [$cls, 'updateSettings'])->name('vouchers.settings.update');
-            Route::get('/gutscheine/pruefen', [$cls, 'check'])->name('vouchers.check');
+            Route::get('/gutscheine/pruefen', [$cls, 'check'])->middleware('throttle:voucher-check')->name('vouchers.check');
             Route::get('/gutscheine/neu', [$cls, 'create'])->name('vouchers.create');
             Route::post('/gutscheine', [$cls, 'store'])->name('vouchers.store');
             Route::get('/gutscheine/{voucher}/pdf', [$cls, 'download'])->name('vouchers.download');
@@ -581,13 +582,25 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
 });
 
 Route::get('/f/{slug}', [PublicFormController::class, 'publicShow'])->name('forms.public.show');
-Route::post('/f/{slug}', [PublicFormController::class, 'publicSubmit'])->name('forms.public.submit');
+Route::post('/f/{slug}', [PublicFormController::class, 'publicSubmit'])
+    ->middleware('throttle:public-form-submit')
+    ->name('forms.public.submit');
 Route::get('/f/{slug}/embed', [PublicFormController::class, 'publicEmbed'])->name('forms.public.embed');
-Route::post('/f/{slug}/embed', [PublicFormController::class, 'publicEmbedSubmit'])->name('forms.public.embed.submit');
-Route::get('/mail/tracking/open/{token}', [MailTrackingController::class, 'open'])->name('mail.tracking.open');
-Route::get('/mail/tracking/click/{dispatchLog}', [MailTrackingController::class, 'click'])->name('mail.tracking.click');
-Route::get('/betreiber-mitteilungen/tracking/open/{token}', [MailTrackingController::class, 'operatorOpen'])->name('operator-announcements.tracking.open');
-Route::get('/betreiber-mitteilungen/tracking/click/{delivery}', [MailTrackingController::class, 'operatorClick'])->name('operator-announcements.tracking.click');
+Route::post('/f/{slug}/embed', [PublicFormController::class, 'publicEmbedSubmit'])
+    ->middleware('throttle:public-form-submit')
+    ->name('forms.public.embed.submit');
+Route::get('/mail/tracking/open/{token}', [MailTrackingController::class, 'open'])
+    ->middleware('throttle:public-mail-tracking')
+    ->name('mail.tracking.open');
+Route::get('/mail/tracking/click/{dispatchLog}', [MailTrackingController::class, 'click'])
+    ->middleware('throttle:public-mail-tracking')
+    ->name('mail.tracking.click');
+Route::get('/betreiber-mitteilungen/tracking/open/{token}', [MailTrackingController::class, 'operatorOpen'])
+    ->middleware('throttle:public-mail-tracking')
+    ->name('operator-announcements.tracking.open');
+Route::get('/betreiber-mitteilungen/tracking/click/{delivery}', [MailTrackingController::class, 'operatorClick'])
+    ->middleware('throttle:public-mail-tracking')
+    ->name('operator-announcements.tracking.click');
 Route::get('/betreiber-mitteilungen/abmelden/{delivery}', [MailTrackingController::class, 'operatorUnsubscribe'])->name('operator-announcements.unsubscribe');
 
 // Template

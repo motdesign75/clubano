@@ -29,6 +29,7 @@ use App\Models\TemplateDispatchLog;
 use App\Models\User;
 use App\Services\MailTrackingService;
 use App\Services\InvoiceCancellationService;
+use App\Services\HtmlSanitizer;
 use App\Services\OnboardingService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
@@ -566,7 +567,7 @@ class EventController extends Controller
     {
         return [
             'title'       => $validated['title'],
-            'description' => $validated['description'] ?? null,
+            'description' => app(HtmlSanitizer::class)->sanitize($validated['description'] ?? null),
             'location'    => $validated['location'] ?? null,
             'category_id' => $validated['category_id'] ?? null,
             'responsible_user_id' => $validated['responsible_user_id'] ?? null,
@@ -2284,13 +2285,7 @@ class EventController extends Controller
 
     private function sanitizeParticipantMailBody(string $body): string
     {
-        $html = preg_replace('#<(script|style|iframe|object|embed|form|meta|link)\b[^>]*>.*?</\1>#is', '', $body) ?? '';
-        $html = preg_replace('#<(script|style|iframe|object|embed|form|meta|link)\b[^>]*\/?>#is', '', $html) ?? '';
-        $html = preg_replace('/\s+on[a-z]+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)/i', '', $html) ?? '';
-        $html = preg_replace('/(href|src)\s*=\s*([\'"])\s*javascript:[^\'"]*\2/i', '$1="#"', $html) ?? '';
-        $html = preg_replace('/(href|src)\s*=\s*([\'"])\s*data:(?!image\/(?:png|jpeg|jpg|gif|webp);base64,)[^\'"]*\2/i', '$1="#"', $html) ?? '';
-
-        return strip_tags($html, '<p><br><strong><b><em><i><u><ul><ol><li><a><h2><h3><blockquote><table><thead><tbody><tr><th><td><img><figure><figcaption><span>');
+        return app(HtmlSanitizer::class)->sanitize($body) ?? '';
     }
 
     private function publicListData(string $tenantSlug, Request $request): array

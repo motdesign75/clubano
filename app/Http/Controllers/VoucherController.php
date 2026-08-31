@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Voucher;
+use App\Services\HtmlSanitizer;
 use App\Services\TenantMailConfigurator;
 use App\Services\VoucherPdfService;
 use Illuminate\Http\Request;
@@ -151,7 +152,7 @@ class VoucherController extends Controller
         ]);
     }
 
-    public function updateSettings(Request $request)
+    public function updateSettings(Request $request, HtmlSanitizer $htmlSanitizer)
     {
         $tenant = auth()->user()->tenant;
 
@@ -185,6 +186,7 @@ class VoucherController extends Controller
 
         unset($validated['voucher_template'], $validated['remove_template']);
         $validated['voucher_show_qr'] = $request->boolean('voucher_show_qr');
+        $validated['voucher_mail_body'] = $htmlSanitizer->sanitize($validated['voucher_mail_body'] ?? null);
 
         $tenant->update($validated);
 

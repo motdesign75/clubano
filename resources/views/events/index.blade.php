@@ -107,7 +107,7 @@
                 @if($canManageEvents)
                     <a href="{{ route('events.create') }}" class="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800 sm:w-auto">
                         <x-heroicon-o-plus class="h-5 w-5" />
-                        Termin planen
+                        Termin oder Serie planen
                     </a>
                 @endif
             </div>
@@ -153,7 +153,7 @@
     <details class="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm" {{ $hasActiveFilters ? 'open' : '' }}>
         <summary class="flex cursor-pointer list-none items-center justify-between gap-4">
             <div>
-                <h2 class="text-base font-semibold text-slate-950">Filter & Werkzeuge</h2>
+                <h2 class="text-base font-semibold text-slate-950">Kalenderwerkzeuge</h2>
                 <p class="mt-1 text-sm text-slate-500">Nur öffnen, wenn du genauer eingrenzen oder Listen vorbereiten möchtest.</p>
             </div>
             <span class="rounded-md bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700 group-open:bg-slate-950 group-open:text-white">
@@ -165,7 +165,7 @@
             <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <a href="{{ route('events.create') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                     <x-heroicon-o-arrow-path class="h-5 w-5" />
-                    Termin oder Serie
+                    Serientermin planen
                 </a>
                 <a href="{{ route('event-categories.index') }}" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                     <x-heroicon-o-swatch class="h-5 w-5" />
@@ -297,7 +297,7 @@
                                     @if($canManageEvents)
                                         <a href="{{ route('events.create', ['date' => $day['date']->format('Y-m-d')]) }}"
                                            class="block rounded-md border border-emerald-200 bg-white/80 px-2 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-white">
-                                            Termin planen
+                                            Termin oder Serie planen
                                         </a>
                                     @else
                                         <div class="rounded-md border border-emerald-200 bg-white/70 px-2 py-1.5 text-xs font-semibold text-emerald-800">
@@ -316,13 +316,13 @@
                     <div class="border-b border-slate-200 px-4 py-4">
                         <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Monatsinfo</div>
                         <h2 class="mt-1 text-lg font-semibold text-slate-950">{{ $monthContext }}</h2>
-                        <p class="mt-1 text-sm text-slate-500">{{ $availableDayCount }} freie Tage · {{ $events->count() }} Termine</p>
+                        <p class="mt-1 text-sm text-slate-500">Freie Termine sofort erkennen · {{ $availableDayCount }} freie Tage · {{ $events->count() }} Termine</p>
                     </div>
 
                     <div class="space-y-5 p-4">
                         <section>
                             <div class="flex items-center justify-between gap-3">
-                                <h3 class="text-sm font-semibold text-slate-950">Freie Tage</h3>
+                                <h3 class="text-sm font-semibold text-slate-950">Freie Tage im {{ $monthContext }}</h3>
                                 @if($availableDayCount > 8)
                                     <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">+{{ $availableDayCount - 8 }}</span>
                                 @endif

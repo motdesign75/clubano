@@ -6,6 +6,7 @@ use App\Models\Contact;
 use App\Models\Member;
 use App\Models\Template;
 use App\Models\TemplateDispatchLog;
+use App\Services\HtmlSanitizer;
 use App\Services\TemplateParser;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -67,7 +68,7 @@ class TemplateController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, HtmlSanitizer $htmlSanitizer)
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -76,6 +77,7 @@ class TemplateController extends Controller
             'type' => ['required', Rule::in(array_keys(Template::typeOptions()))],
         ]);
 
+        $data['body'] = $htmlSanitizer->sanitize($data['body']) ?? '';
         $data['tenant_id'] = auth()->user()->tenant_id;
 
         Template::create($data);
@@ -95,7 +97,7 @@ class TemplateController extends Controller
         ]);
     }
 
-    public function update(Request $request, Template $template)
+    public function update(Request $request, Template $template, HtmlSanitizer $htmlSanitizer)
     {
         $this->checkTenant($template);
 
@@ -105,6 +107,8 @@ class TemplateController extends Controller
             'body' => ['required', 'string'],
             'type' => ['required', Rule::in(array_keys(Template::typeOptions()))],
         ]);
+
+        $data['body'] = $htmlSanitizer->sanitize($data['body']) ?? '';
 
         $template->update($data);
 

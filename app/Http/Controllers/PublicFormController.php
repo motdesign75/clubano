@@ -14,6 +14,7 @@ use App\Models\TemplateDispatchLog;
 use App\Models\Voucher;
 use App\Models\VoucherRedemption;
 use App\Services\EventBookingBillingService;
+use App\Services\HtmlSanitizer;
 use App\Services\InvoiceCancellationService;
 use App\Services\TenantMailConfigurator;
 use App\Services\TemplateParser;
@@ -1212,6 +1213,8 @@ class PublicFormController extends Controller
         if ($validated['confirmation_mail_body'] === '') {
             $validated['confirmation_mail_body'] = '<p>{anrede},</p><p>vielen Dank für deine Nachricht über das Formular <strong>{formular}</strong>.</p><p>Wir melden uns so schnell wie möglich zurück.</p><p>Viele Grüße<br>{verein}</p>';
         }
+
+        $validated['confirmation_mail_body'] = app(HtmlSanitizer::class)->sanitize($validated['confirmation_mail_body']);
 
         return $validated;
     }

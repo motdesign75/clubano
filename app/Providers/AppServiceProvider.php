@@ -5,10 +5,13 @@ namespace App\Providers;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Livewire;
 use App\Http\Livewire\DashboardMemberStats;
 use Laravel\Cashier\Cashier;
@@ -30,6 +33,22 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimiter::for('public-form-submit', function (Request $request) {
+            return Limit::perMinute(10)->by($request->ip().'|'.(string) $request->route('slug'));
+        });
+
+        RateLimiter::for('public-invitation-response', function (Request $request) {
+            return Limit::perMinute(20)->by($request->ip().'|'.(string) $request->route('token'));
+        });
+
+        RateLimiter::for('public-mail-tracking', function (Request $request) {
+            return Limit::perMinute(120)->by($request->ip());
+        });
+
+        RateLimiter::for('voucher-check', function (Request $request) {
+            return Limit::perMinute(30)->by($request->user()?->id ?: $request->ip());
+        });
+
         Event::listen(Login::class, function (Login $event) {
             $event->user?->forceFill([
                 'last_login_at' => now(),

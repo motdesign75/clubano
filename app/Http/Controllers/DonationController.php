@@ -7,6 +7,7 @@ use App\Models\Document;
 use App\Models\Donation;
 use App\Models\Member;
 use App\Models\Transaction;
+use App\Services\HtmlSanitizer;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -207,7 +208,7 @@ class DonationController extends Controller
         ]);
     }
 
-    public function updateSettings(Request $request)
+    public function updateSettings(Request $request, HtmlSanitizer $htmlSanitizer)
     {
         $validated = $request->validate([
             'donation_certificates_enabled' => ['nullable', 'boolean'],
@@ -224,6 +225,7 @@ class DonationController extends Controller
 
         $tenant = auth()->user()->tenant;
         unset($validated['freistellung_document']);
+        $validated['donation_email_body'] = $htmlSanitizer->sanitize($validated['donation_email_body'] ?? null);
 
         if ($request->hasFile('freistellung_document')) {
             $file = $request->file('freistellung_document');

@@ -9,6 +9,7 @@ use App\Models\Protocol;
 use App\Models\ProtocolEntry;
 use App\Models\Task;
 use App\Models\TemplateDispatchLog;
+use App\Services\HtmlSanitizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
@@ -477,7 +478,7 @@ class ProtocolController extends Controller
         return view('protocols.create', compact('members'));
     }
 
-    public function store(Request $request)
+    public function store(Request $request, HtmlSanitizer $htmlSanitizer)
     {
         $tenantId = auth()->user()->tenant_id;
 
@@ -551,7 +552,7 @@ class ProtocolController extends Controller
             'end_time'      => $validated['end_time'] ?? null,
             'raw_agenda'    => $rawAgenda !== '' ? $rawAgenda : null,
             'raw_notes'     => $rawNotes !== '' ? $rawNotes : null,
-            'content'       => $content,
+            'content'       => $htmlSanitizer->sanitize($content) ?? '',
             'resolutions'   => $validated['resolutions'] ?? null,
             'next_meeting'  => $validated['next_meeting'] ?? null,
         ];
@@ -625,7 +626,7 @@ class ProtocolController extends Controller
         return view('protocols.edit', compact('protocol', 'members', 'selected'));
     }
 
-    public function update(Request $request, Protocol $protocol)
+    public function update(Request $request, Protocol $protocol, HtmlSanitizer $htmlSanitizer)
     {
         if ($protocol->tenant_id !== auth()->user()->tenant_id) {
             abort(403);
@@ -701,7 +702,7 @@ class ProtocolController extends Controller
             'end_time'      => $validated['end_time'] ?? null,
             'raw_agenda'    => $rawAgenda !== '' ? $rawAgenda : null,
             'raw_notes'     => $rawNotes !== '' ? $rawNotes : null,
-            'content'       => $content,
+            'content'       => $htmlSanitizer->sanitize($content) ?? '',
             'resolutions'   => $validated['resolutions'] ?? null,
             'next_meeting'  => $validated['next_meeting'] ?? null,
         ];

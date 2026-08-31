@@ -34,13 +34,16 @@ Folgende Massnahmen wurden aus diesem Audit direkt lokal umgesetzt:
 - Import-Zwischendateien gegen manipulierte Storage-Pfade abgesichert.
 - SMTP-Passwoerter werden kuenftig verschluesselt gespeichert; bestehende Werte werden per Migration verschluesselt.
 - Mailpasswoerter werden im SMTP-Formular nicht mehr im Klartext ausgegeben.
+- Zentrale Security-Header fuer normale Web-Seiten ergaenzt: `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, HSTS bei HTTPS sowie Frame-Schutz ausserhalb bewusst oeffentlicher Embeds.
+- Oeffentliche Schreib- und Tracking-Endpunkte gedrosselt: Formularantworten, Formular-Embeds, Einladungsantworten, Mailtracking und Gutscheinpruefung.
+- Zentraler HTML-Sanitizer fuer Editor-Inhalte ergaenzt und an Vorlagen, Eventbeschreibungen, Protokolltext, Formularbestaetigungen, Betreiber-Mitteilungen, Gutscheinmails, Austrittsmails und Spendenmails angebunden.
 
 Noch offen und bewusst nicht in diesem ersten Paket geloest:
 
 - Composer-/NPM-Dependency-Updates.
-- Vollstaendige Security-Header/CSP-Strategie.
+- Vollstaendige CSP-Strategie inklusive erlaubter Embed-Domains je Verein.
 - Private Migration bereits vorhandener Belegdateien aus Public Storage.
-- Robuste HTML-Sanitization fuer alle Editor-Inhalte.
+- Bestehende HTML-Inhalte in der Datenbank nachtraeglich bereinigen.
 - Vollstaendiges Admin-Auditlog.
 
 ## Positiv Geprüft
