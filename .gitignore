@@ -96,3 +96,5 @@ Homestead.json
 # Lokale Planung/Marketing-Arbeitsstände, niemals deployen
 /docs/ninox-import/
 /marketing/
+/public/.php-ini
+/public/.php-version
