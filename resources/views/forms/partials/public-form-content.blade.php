@@ -1,8 +1,10 @@
-<div class="{{ $embedded ?? false ? 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' : 'rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200' }}">
+<div class="{{ $embedded ?? false ? 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' : 'overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-xl shadow-slate-200/70' }}">
     @php
         $isEventBooking = $form->form_type === 'event' && $form->event;
         $event = $form->event;
         $currency = strtoupper($event?->currency ?: 'EUR');
+        $tenant = $form->tenant;
+        $tenantLogoUrl = $tenant?->logo_url;
         $participantCountOld = max(1, min((int) old('participant_count', 1), max(1, (int) ($event?->max_participants_per_booking ?: 1))));
         $participantRowsOld = old('participants', []);
         $participantTemplate = [];
@@ -29,20 +31,36 @@
         }
     @endphp
 
-    <div class="mb-8">
-        <div class="text-sm font-medium text-indigo-600">{{ $form->tenant->name }}</div>
-        <h1 class="mt-2 {{ ($embedded ?? false) ? 'text-2xl' : 'text-3xl' }} font-semibold text-gray-900">{{ $form->title }}</h1>
+    <div class="{{ $embedded ?? false ? 'mb-8' : 'bg-slate-950 px-5 py-6 text-white sm:px-8 sm:py-8' }}">
+        <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+                <div class="{{ ($embedded ?? false) ? 'text-sm font-medium text-indigo-600' : 'text-xs font-semibold uppercase tracking-[0.22em] text-white/60' }}">
+                    {{ $tenant->name }}
+                </div>
+                <h1 class="mt-3 {{ ($embedded ?? false) ? 'text-2xl text-gray-900' : 'text-3xl text-white sm:text-4xl' }} font-semibold tracking-tight">{{ $form->title }}</h1>
 
-        @if($form->description)
-            <p class="mt-3 text-base leading-7 text-gray-600">{{ $form->description }}</p>
+                @if($form->description)
+                    <p class="mt-3 max-w-2xl text-base leading-7 {{ ($embedded ?? false) ? 'text-gray-600' : 'text-white/75' }}">{{ $form->description }}</p>
+                @endif
+            </div>
+
+            @if($tenantLogoUrl)
+                <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white p-2 shadow-sm ring-1 ring-white/20 sm:h-20 sm:w-20">
+                    <img src="{{ $tenantLogoUrl }}" alt="Logo {{ $tenant->name }}" class="max-h-full max-w-full object-contain">
+                </div>
+            @endif
+        </div>
+
+        @if(!($embedded ?? false))
+            <div class="mt-6 h-px bg-white/10"></div>
         @endif
 
         @if($isEventBooking)
-            <div class="mt-4 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-4 text-sm text-indigo-950">
+            <div class="mt-5 rounded-2xl border {{ ($embedded ?? false) ? 'border-indigo-100 bg-indigo-50 text-indigo-950' : 'border-white/15 bg-white/10 text-white' }} px-4 py-4 text-sm backdrop-blur">
                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <div class="font-semibold">Event: {{ $event->title }}</div>
-                        <div class="mt-1 text-indigo-900/80">
+                        <div class="mt-1 {{ ($embedded ?? false) ? 'text-indigo-900/80' : 'text-white/70' }}">
                             @if($event->start)
                                 {{ $event->start->format('d.m.Y H:i') }} Uhr
                             @endif
@@ -63,14 +81,14 @@
                             </span>
                         @endif
 
-                        <span class="rounded-full bg-white px-3 py-1 font-medium text-slate-700 ring-1 ring-indigo-100">
+                        <span class="rounded-full {{ ($embedded ?? false) ? 'bg-white text-slate-700 ring-indigo-100' : 'bg-white/15 text-white ring-white/15' }} px-3 py-1 font-medium ring-1">
                             Max. {{ max(1, (int) $event->max_participants_per_booking) }} Person{{ max(1, (int) $event->max_participants_per_booking) === 1 ? '' : 'en' }} pro Anmeldung
                         </span>
                     </div>
                 </div>
             </div>
         @elseif($form->form_type === 'event' && $form->event)
-            <div class="mt-4 rounded-lg bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+            <div class="mt-4 rounded-2xl {{ ($embedded ?? false) ? 'bg-indigo-50 text-indigo-900' : 'bg-white/10 text-white/80' }} px-4 py-3 text-sm">
                 Event: {{ $form->event->title }}
                 @if($form->event->start)
                     · {{ $form->event->start->format('d.m.Y H:i') }}
@@ -79,21 +97,23 @@
         @endif
     </div>
 
-    @if(session('success'))
-        <div class="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-green-800">
-            {{ session('success') }}
-        </div>
-    @endif
+    <div class="{{ $embedded ?? false ? '' : 'px-5 py-6 sm:px-8 sm:py-8' }}">
+        @if(session('success'))
+            <div class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+                {{ session('success') }}
+            </div>
+        @endif
 
-    @if ($errors->any())
-        <div class="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">
-            <ul class="list-disc space-y-1 pl-5 text-sm">
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
-        </div>
-    @endif
+        @if ($errors->any())
+            <div class="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800">
+                <div class="text-sm font-semibold">Bitte prüfe die markierten Angaben.</div>
+                <ul class="mt-2 list-disc space-y-1 pl-5 text-sm">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
 
     <form method="POST"
           action="{{ ($embedded ?? false) ? route('forms.public.embed.submit', $form->slug) : route('forms.public.submit', $form->slug) }}"
@@ -163,7 +183,7 @@
         @csrf
 
         @if($isEventBooking)
-            <section class="space-y-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-5 sm:p-6">
+            <section class="space-y-6 rounded-3xl border border-slate-200 bg-slate-50/80 p-5 sm:p-6">
                 <div>
                     <h2 class="text-lg font-semibold text-slate-900">Ansprechpartner</h2>
                     <p class="mt-1 text-sm text-slate-500">Diese Person erhält die Bestätigung und weitere Informationen zur Buchung.</p>
@@ -240,7 +260,7 @@
                                name="fields[organization]"
                                value="{{ old('fields.organization') }}"
                                x-model="booker.organization"
-                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10"
                                placeholder="{{ $field->placeholder }}">
                         @if($field->help_text)
                             <div class="mt-1 text-sm leading-6 text-gray-500">{!! $field->rendered_help_text !!}</div>
@@ -251,7 +271,7 @@
                 @continue
             @endif
             <div>
-                <label class="block text-sm font-medium text-gray-700">
+                <label class="block text-sm font-semibold text-slate-700">
                     {{ $field->label }}
                     @if($field->is_required)
                         <span class="text-red-500">*</span>
@@ -266,10 +286,10 @@
                 @endphp
 
                 @if($field->field_type === 'textarea')
-                    <textarea name="{{ $name }}" rows="4" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="{{ $field->placeholder }}">{{ $value }}</textarea>
+                    <textarea name="{{ $name }}" rows="4" class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10" placeholder="{{ $field->placeholder }}">{{ $value }}</textarea>
                 @elseif($field->field_type === 'select')
-                    <select name="{{ $name }}" class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">Bitte waehlen</option>
+                    <select name="{{ $name }}" class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
+                        <option value="">Bitte wählen</option>
                         @foreach($options as $option)
                             <option value="{{ $option }}" @selected($value === $option)>{{ $option }}</option>
                         @endforeach
@@ -281,7 +301,7 @@
                                 <input type="radio"
                                        name="{{ $name }}"
                                        value="{{ $option }}"
-                                       class="mt-0.5 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                       class="mt-0.5 border-slate-300 text-slate-950 focus:ring-slate-500"
                                        @checked($value === $option)>
                                 <span class="font-medium">{{ $option }}</span>
                             </label>
@@ -294,16 +314,16 @@
                                 <input type="checkbox"
                                        name="{{ $name }}[]"
                                        value="{{ $option }}"
-                                       class="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                       class="mt-0.5 rounded border-slate-300 text-slate-950 focus:ring-slate-500"
                                        @checked($selectedValues->contains($option))>
                                 <span class="font-medium">{{ $option }}</span>
                             </label>
                         @endforeach
                     </div>
                 @elseif($field->field_type === 'checkbox')
-                    <label class="mt-2 inline-flex items-start gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm text-gray-700">
+                    <label class="mt-2 inline-flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-gray-700">
                         <input type="hidden" name="{{ $name }}" value="0">
-                        <input type="checkbox" name="{{ $name }}" value="1" class="mt-0.5 rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" @checked($value)>
+                        <input type="checkbox" name="{{ $name }}" value="1" class="mt-0.5 rounded border-slate-300 text-slate-950 shadow-sm focus:ring-slate-500" @checked($value)>
                         <div class="min-w-0 leading-6 text-gray-700">
                             {!! $field->rendered_help_text ?: \App\Models\PublicFormField::sanitizeHelpText('Ich stimme zu.') !!}
                         </div>
@@ -312,7 +332,7 @@
                     <input type="{{ $field->field_type }}"
                            name="{{ $name }}"
                            value="{{ is_bool($value) ? ($value ? '1' : '0') : $value }}"
-                           class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                           class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10"
                            placeholder="{{ $field->placeholder }}"
                            @if($isEventBooking && $field->slug === 'first_name')
                                x-model="booker.first_name"
@@ -330,7 +350,7 @@
                 @endif
 
                 @if($field->help_text && !in_array($field->field_type, ['checkbox'], true))
-                    <div class="mt-1 text-sm leading-6 text-gray-500">
+                    <div class="mt-2 text-sm leading-6 text-slate-500">
                         {!! $field->rendered_help_text !!}
                     </div>
                 @endif
@@ -340,12 +360,12 @@
         @if($isEventBooking)
             </section>
 
-            <section class="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <section class="space-y-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
                 <input type="hidden" name="participant_count" value="1" :disabled="bookingMode !== 'organization'">
 
                 <div class="grid gap-6 lg:grid-cols-[1fr_280px]">
                     <div>
-                        <label for="participant_count" class="block text-sm font-medium text-gray-700" x-show="bookingMode === 'person'">
+                        <label for="participant_count" class="block text-sm font-semibold text-slate-700" x-show="bookingMode === 'person'">
                             Teilnehmerzahl <span class="text-red-500">*</span>
                         </label>
                         <input id="participant_count"
@@ -357,7 +377,7 @@
                                @input="syncParticipants()"
                                :disabled="bookingMode !== 'person'"
                                x-show="bookingMode === 'person'"
-                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                               class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
                         <p class="mt-1 text-sm text-gray-500" x-show="bookingMode === 'person'">
                             Maximal {{ max(1, (int) $event->max_participants_per_booking) }} Person{{ max(1, (int) $event->max_participants_per_booking) === 1 ? '' : 'en' }} pro Anmeldung.
                         </p>
@@ -455,7 +475,7 @@
                                     <input type="text"
                                            :name="`participants[${index}][first_name]`"
                                            x-model="participant.first_name"
-                                           class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                           class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
                                 </div>
 
                                 <div>
@@ -465,7 +485,7 @@
                                     <input type="text"
                                            :name="`participants[${index}][last_name]`"
                                            x-model="participant.last_name"
-                                           class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                           class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
                                 </div>
 
                                 <div>
@@ -473,7 +493,7 @@
                                     <input type="email"
                                            :name="`participants[${index}][email]`"
                                            x-model="participant.email"
-                                           class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                           class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
                                 </div>
 
                                 <div>
@@ -481,7 +501,7 @@
                                     <input type="text"
                                            :name="`participants[${index}][phone]`"
                                            x-model="participant.phone"
-                                           class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                           class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
                                 </div>
                             </div>
                         </div>
@@ -489,18 +509,22 @@
                 </div>
 
                 <div>
-                    <label for="participant_notes" class="block text-sm font-medium text-gray-700">Hinweis zur Gruppe</label>
+                    <label for="participant_notes" class="block text-sm font-semibold text-slate-700">Hinweis zur Gruppe</label>
                     <textarea id="participant_notes"
                               name="participant_notes"
                               rows="4"
-                              class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                              class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10"
                               placeholder="z. B. gemeinsames Sitzen, Kindersitz oder wichtige Hinweise">{{ old('participant_notes') }}</textarea>
                 </div>
             </section>
         @endif
 
-        <button type="submit" class="inline-flex rounded-lg bg-indigo-600 px-5 py-3 font-medium text-white shadow hover:bg-indigo-700">
+        <div class="flex flex-col gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-sm leading-6 text-slate-500">Deine Angaben werden verschlüsselt übertragen und nur für diesen Zweck verwendet.</p>
+            <button type="submit" class="inline-flex min-h-12 items-center justify-center rounded-2xl bg-slate-950 px-6 text-base font-semibold text-white shadow-sm transition hover:bg-slate-800">
             {{ $isEventBooking ? 'Verbindlich anmelden' : 'Formular absenden' }}
-        </button>
+            </button>
+        </div>
     </form>
+    </div>
 </div>
