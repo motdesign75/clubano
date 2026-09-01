@@ -369,6 +369,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/events/{event}/edit', [$cls, 'edit'])->middleware('tenant.role:events')->whereNumber('event')->name('events.edit');
         Route::match(['put', 'patch'], '/events/{event}', [$cls, 'update'])->middleware('tenant.role:events')->whereNumber('event')->name('events.update');
         Route::delete('/events/{event}', [$cls, 'destroy'])->middleware('tenant.role:events')->whereNumber('event')->name('events.destroy');
+        Route::post('/events/{event}/anmeldefelder', [$cls, 'storeBookingField'])->middleware('tenant.role:events')->whereNumber('event')->name('events.booking-fields.store');
+        Route::put('/events/{event}/anmeldefelder/{field}', [$cls, 'updateBookingField'])->middleware('tenant.role:events')->whereNumber('event')->name('events.booking-fields.update');
+        Route::patch('/events/{event}/anmeldefelder/{field}/move', [$cls, 'moveBookingField'])->middleware('tenant.role:events')->whereNumber('event')->name('events.booking-fields.move');
+        Route::delete('/events/{event}/anmeldefelder/{field}', [$cls, 'destroyBookingField'])->middleware('tenant.role:events')->whereNumber('event')->name('events.booking-fields.destroy');
         Route::get('/events/{event}', [$cls, 'show'])->whereNumber('event')->name('events.show');
         Route::get('/events/{event}/teilnehmer', [$cls, 'participants'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.manage');
         Route::get('/events/{event}/teilnehmer/mail', [$cls, 'participantMailForm'])->middleware('tenant.role:events')->whereNumber('event')->name('events.participants.mail.form');

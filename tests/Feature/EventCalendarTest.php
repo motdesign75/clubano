@@ -11,6 +11,9 @@ use App\Models\EventChangeLog;
 use App\Models\EventInvitation;
 use App\Models\EventShiftAssignment;
 use App\Models\Member;
+use App\Models\PublicForm;
+use App\Models\PublicFormField;
+use App\Models\PublicFormSubmission;
 use App\Models\Tag;
 use App\Models\Tenant;
 use App\Models\User;
@@ -61,6 +64,101 @@ test('event managers can create calendar event and audit log is written', functi
     $log = EventChangeLog::query()->where('event_id', $event->id)->where('action', 'created')->first();
 
     expect($log)->not->toBeNull();
+});
+
+test('event managers can add custom registration fields to event bookings', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Anmeldeverein',
+        'slug' => 'anmeldeverein',
+        'email' => 'events@example.test',
+    ]);
+
+    $eventManager = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_EVENT_MANAGER,
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Sommerkurs',
+        'location' => 'Vereinsheim',
+        'start' => now()->addWeek()->setTime(18, 0),
+        'end' => now()->addWeek()->setTime(20, 0),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 0,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 2,
+        'created_by' => $eventManager->id,
+        'updated_by' => $eventManager->id,
+    ]);
+
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'title' => 'Anmeldung: Sommerkurs',
+        'slug' => 'sommerkurs-anmeldung',
+        'description' => 'Melde dich an.',
+        'form_type' => 'event',
+        'success_message' => 'Danke.',
+        'is_active' => true,
+    ]);
+
+    foreach ([
+        ['label' => 'Vorname Ansprechpartner', 'slug' => 'first_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 1],
+        ['label' => 'Nachname Ansprechpartner', 'slug' => 'last_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 2],
+        ['label' => 'E-Mail', 'slug' => 'email', 'field_type' => 'email', 'is_required' => true, 'sort_order' => 3],
+        ['label' => 'Telefon', 'slug' => 'phone', 'field_type' => 'text', 'is_required' => false, 'sort_order' => 4],
+    ] as $field) {
+        PublicFormField::create($field + ['public_form_id' => $form->id]);
+    }
+
+    $this->actingAs($eventManager)->get(route('events.edit', $event))
+        ->assertOk()
+        ->assertSee('Anmeldefelder')
+        ->assertSee('Neue Zusatzfrage');
+
+    $this->actingAs($eventManager)->post(route('events.booking-fields.store', $event), [
+        'label' => 'Essenswunsch',
+        'field_type' => 'select',
+        'options' => "Vegetarisch\nFleisch\nKeine Angabe",
+        'is_required' => '1',
+    ])->assertRedirect(route('events.edit', $event) . '#anmeldefelder');
+
+    $customField = PublicFormField::query()
+        ->where('public_form_id', $form->id)
+        ->where('slug', 'essenswunsch')
+        ->first();
+
+    expect($customField)->not->toBeNull()
+        ->and($customField->options)->toBe('Vegetarisch|Fleisch|Keine Angabe')
+        ->and($customField->is_required)->toBeTrue();
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertSee('Essenswunsch')
+        ->assertSee('Vegetarisch');
+
+    $this->post(route('forms.public.submit', $form->slug), [
+        'fields' => [
+            'first_name' => 'Anna',
+            'last_name' => 'Anmeldung',
+            'email' => 'anna@example.test',
+            'phone' => '012345',
+            'essenswunsch' => 'Vegetarisch',
+        ],
+        'participant_count' => 1,
+        'use_booker_as_participant' => 1,
+    ])->assertRedirect();
+
+    $submission = PublicFormSubmission::query()
+        ->where('public_form_id', $form->id)
+        ->firstOrFail();
+
+    expect($submission->answers['essenswunsch'])->toBe('Vegetarisch')
+        ->and(EventBooking::query()->where('event_id', $event->id)->count())->toBe(1);
 });
 
 test('overlapping events are marked as conflicts in calendar index', function () {

@@ -21,6 +21,7 @@ use App\Models\Document;
 use App\Models\Invoice;
 use App\Models\Member;
 use App\Models\PublicForm;
+use App\Models\PublicFormField;
 use App\Models\PublicFormSubmission;
 use App\Models\Tag;
 use App\Models\Tenant;
@@ -687,6 +688,8 @@ class EventController extends Controller
             'categories' => EventCategory::query()->with('defaultTargetTag')->orderBy('name')->get(),
             'targetTags' => Tag::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
             'users' => User::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
+            'bookingFieldTypes' => $this->bookingFieldTypeLabels(),
+            'bookingSystemFieldSlugs' => $this->eventBookingSystemFieldSlugs(),
             ...$this->participantSummaryData($event),
             ...$this->shiftSummaryData($event),
         ]);
@@ -725,6 +728,100 @@ class EventController extends Controller
         $this->logEventChange($event, 'updated', $before, $event->fresh()->toArray(), $this->buildUpdateSummary($before, $event->fresh()->toArray()));
 
         return redirect()->route('events.edit', $event)->with('success', 'Event aktualisiert.');
+    }
+
+    public function storeBookingField(Request $request, Event $event)
+    {
+        $this->authorizeEvent($event);
+
+        $form = $this->editableBookingForm($event);
+        $validated = $this->validateBookingField($request, $form);
+        $validated['slug'] = Str::slug(($validated['slug'] ?? '') ?: $validated['label'], '_');
+        $validated['sort_order'] = ($form->fields()->max('sort_order') ?? 0) + 1;
+
+        $form->fields()->create($this->normalizeBookingFieldPayload($validated));
+
+        return redirect()
+            ->to(route('events.edit', $event) . '#anmeldefelder')
+            ->with('success', 'Anmeldefeld wurde hinzugefügt.');
+    }
+
+    public function updateBookingField(Request $request, Event $event, PublicFormField $field)
+    {
+        $this->authorizeEvent($event);
+
+        $form = $this->editableBookingForm($event);
+        $this->authorizeBookingField($form, $field);
+        abort_if(in_array($field->slug, $this->eventBookingSystemFieldSlugs(), true), 403, 'Standardfelder können nicht bearbeitet werden.');
+
+        $validated = $this->validateBookingField($request, $form, $field);
+        $validated['slug'] = Str::slug(($validated['slug'] ?? '') ?: $validated['label'], '_');
+
+        $field->update($this->normalizeBookingFieldPayload($validated));
+
+        return redirect()
+            ->to(route('events.edit', $event) . '#anmeldefelder')
+            ->with('success', 'Anmeldefeld wurde aktualisiert.');
+    }
+
+    public function moveBookingField(Request $request, Event $event, PublicFormField $field)
+    {
+        $this->authorizeEvent($event);
+
+        $form = $this->editableBookingForm($event);
+        $this->authorizeBookingField($form, $field);
+        abort_if(in_array($field->slug, $this->eventBookingSystemFieldSlugs(), true), 403, 'Standardfelder können nicht sortiert werden.');
+
+        $validated = $request->validate([
+            'direction' => ['required', Rule::in(['up', 'down'])],
+        ]);
+
+        $customFields = $form->fields()
+            ->whereNotIn('slug', $this->eventBookingSystemFieldSlugs())
+            ->orderBy('sort_order')
+            ->get()
+            ->values();
+        $currentIndex = $customFields->search(fn (PublicFormField $item) => $item->id === $field->id);
+
+        if ($currentIndex === false) {
+            abort(404);
+        }
+
+        $swapIndex = $validated['direction'] === 'up' ? $currentIndex - 1 : $currentIndex + 1;
+
+        if (!isset($customFields[$swapIndex])) {
+            return redirect()
+                ->to(route('events.edit', $event) . '#anmeldefelder')
+                ->with('success', 'Die Reihenfolge ist bereits passend.');
+        }
+
+        $swapField = $customFields[$swapIndex];
+        $currentOrder = $field->sort_order;
+
+        $field->update(['sort_order' => $swapField->sort_order]);
+        $swapField->update(['sort_order' => $currentOrder]);
+
+        $this->normalizeBookingFieldSortOrder($form);
+
+        return redirect()
+            ->to(route('events.edit', $event) . '#anmeldefelder')
+            ->with('success', 'Die Reihenfolge der Anmeldefelder wurde aktualisiert.');
+    }
+
+    public function destroyBookingField(Event $event, PublicFormField $field)
+    {
+        $this->authorizeEvent($event);
+
+        $form = $this->editableBookingForm($event);
+        $this->authorizeBookingField($form, $field);
+        abort_if(in_array($field->slug, $this->eventBookingSystemFieldSlugs(), true), 403, 'Standardfelder können nicht gelöscht werden.');
+
+        $field->delete();
+        $this->normalizeBookingFieldSortOrder($form);
+
+        return redirect()
+            ->to(route('events.edit', $event) . '#anmeldefelder')
+            ->with('success', 'Anmeldefeld wurde gelöscht.');
     }
 
     public function show(Event $event)
@@ -2066,6 +2163,137 @@ class EventController extends Controller
                 $field + ['sort_order' => $index + 1]
             );
         }
+    }
+
+    private function editableBookingForm(Event $event): PublicForm
+    {
+        abort_unless($event->booking_enabled, 422, 'Schalte die Anmeldung zuerst im Termin ein.');
+
+        $event->loadMissing('activeBookingForm.fields');
+
+        if (!$event->activeBookingForm) {
+            $this->syncBookingForm($event);
+            $event->load('activeBookingForm.fields');
+        }
+
+        return $event->activeBookingForm ?: abort(404);
+    }
+
+    private function bookingFieldTypeLabels(): array
+    {
+        return [
+            'text' => 'Kurze Antwort',
+            'textarea' => 'Lange Antwort',
+            'select' => 'Auswahlliste',
+            'radio' => 'Einfachauswahl',
+            'checkbox_group' => 'Mehrfachauswahl',
+            'checkbox' => 'Checkbox',
+            'email' => 'E-Mail',
+            'number' => 'Zahl',
+            'date' => 'Datum',
+        ];
+    }
+
+    private function eventBookingSystemFieldSlugs(): array
+    {
+        return [
+            'first_name',
+            'last_name',
+            'email',
+            'phone',
+            'mobile',
+            'street',
+            'zip',
+            'city',
+            'country',
+            'participant_count',
+            'participant_notes',
+        ];
+    }
+
+    private function validateBookingField(Request $request, PublicForm $form, ?PublicFormField $field = null): array
+    {
+        $validated = $request->validate([
+            'label' => ['required', 'string', 'max:255'],
+            'slug' => [
+                'nullable',
+                'string',
+                'max:255',
+                'regex:/^[a-zA-Z0-9_]+$/',
+                Rule::unique('public_form_fields', 'slug')
+                    ->where('public_form_id', $form->id)
+                    ->ignore($field?->id),
+            ],
+            'field_type' => ['required', Rule::in(array_keys($this->bookingFieldTypeLabels()))],
+            'help_text' => ['nullable', 'string'],
+            'placeholder' => ['nullable', 'string', 'max:255'],
+            'options' => ['nullable', 'string'],
+            'is_required' => ['nullable', 'boolean'],
+        ]) + [
+            'is_required' => $request->boolean('is_required'),
+        ];
+
+        $slug = Str::slug(($validated['slug'] ?? '') ?: $validated['label'], '_');
+
+        if (in_array($slug, $this->eventBookingSystemFieldSlugs(), true)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'slug' => 'Dieser interne Kurzname ist für Standardfelder reserviert.',
+            ]);
+        }
+
+        if (in_array($validated['field_type'], ['select', 'radio', 'checkbox_group'], true)
+            && blank($this->normalizeBookingOptions($validated['options'] ?? null))) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'options' => 'Bitte lege für dieses Auswahlfeld mindestens eine Option an.',
+            ]);
+        }
+
+        return $validated;
+    }
+
+    private function normalizeBookingFieldPayload(array $validated): array
+    {
+        $validated['options'] = $this->normalizeBookingOptions($validated['options'] ?? null);
+
+        if (!in_array($validated['field_type'], ['select', 'radio', 'checkbox_group'], true)) {
+            $validated['options'] = null;
+        }
+
+        if ($validated['field_type'] === 'checkbox' && blank($validated['help_text'] ?? null)) {
+            $validated['help_text'] = 'Ich stimme zu.';
+        }
+
+        return $validated;
+    }
+
+    private function normalizeBookingOptions(?string $value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        $options = collect(preg_split('/\r\n|\r|\n|\|/', $value) ?: [])
+            ->map(fn ($item) => trim((string) $item))
+            ->filter()
+            ->values();
+
+        return $options->isEmpty() ? null : $options->implode('|');
+    }
+
+    private function authorizeBookingField(PublicForm $form, PublicFormField $field): void
+    {
+        abort_if((int) $field->public_form_id !== (int) $form->id, 404);
+    }
+
+    private function normalizeBookingFieldSortOrder(PublicForm $form): void
+    {
+        $form->fields()
+            ->orderBy('sort_order')
+            ->get()
+            ->values()
+            ->each(function (PublicFormField $field, int $index) {
+                $field->update(['sort_order' => $index + 1]);
+            });
     }
 
     private function participantViewData(Event $event): array

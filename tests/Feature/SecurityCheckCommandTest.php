@@ -27,6 +27,21 @@ test('security check blocks public environment leaks', function () {
     }
 });
 
+test('security check blocks public database dump leaks', function () {
+    $path = public_path('clubano-live-dump.sql');
+
+    File::put($path, '-- versehentlich abgelegter dump');
+
+    try {
+        $this->artisan('clubano:security-check')
+            ->expectsOutputToContain('Webroot enthält interne Dateien')
+            ->expectsOutputToContain('public/clubano-live-dump.sql')
+            ->assertExitCode(1);
+    } finally {
+        File::delete($path);
+    }
+});
+
 test('security check blocks destructive pending migrations', function () {
     $path = database_path('migrations/9999_12_31_235959_drop_member_notes_for_security_check.php');
 
@@ -63,4 +78,22 @@ PHP);
     } finally {
         File::delete($path);
     }
+});
+
+test('security check blocks unsafe production configuration', function () {
+    config([
+        'app.env' => 'production',
+        'app.debug' => true,
+        'app.url' => 'http://app.clubano.test',
+        'session.secure' => false,
+        'session.http_only' => true,
+        'session.same_site' => 'lax',
+    ]);
+
+    $this->artisan('clubano:security-check')
+        ->expectsOutputToContain('Produktionskonfiguration unsicher')
+        ->expectsOutputToContain('APP_DEBUG ist in Produktion aktiv.')
+        ->expectsOutputToContain('APP_URL nutzt in Produktion kein HTTPS.')
+        ->expectsOutputToContain('SESSION_SECURE_COOKIE ist in Produktion nicht aktiv.')
+        ->assertExitCode(1);
 });

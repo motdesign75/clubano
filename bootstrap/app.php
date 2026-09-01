@@ -13,6 +13,8 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
 
+        $middleware->trustHosts();
+
         // ✅ Stripe Webhooks dürfen nicht durch CSRF laufen (sonst 419)
         $middleware->validateCsrfTokens(except: [
             'stripe/webhook',

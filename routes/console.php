@@ -100,6 +100,18 @@ Artisan::command('clubano:security-check {--json : Gibt das Ergebnis als JSON au
         ->filter(fn (string $path) => File::exists(public_path($path)))
         ->map(fn (string $path) => 'public/' . $path)
         ->values()
+        ->merge(collect([
+            ...File::glob(public_path('.env*')) ?: [],
+            ...File::glob(public_path('*.sql')) ?: [],
+            ...File::glob(public_path('*.zip')) ?: [],
+            ...File::glob(public_path('*.tar')) ?: [],
+            ...File::glob(public_path('*.tgz')) ?: [],
+            ...File::glob(public_path('*.tar.gz')) ?: [],
+            ...File::glob(public_path('*.bak')) ?: [],
+            ...File::glob(public_path('*.old')) ?: [],
+        ])->map(fn (string $path) => 'public/' . basename($path)))
+        ->unique()
+        ->values()
         ->all();
 
     if ($publicFindings !== []) {
@@ -128,6 +140,42 @@ Artisan::command('clubano:security-check {--json : Gibt das Ergebnis als JSON au
 
     $storageLinked = File::exists(public_path('storage')) && is_link(public_path('storage'));
     $add($storageLinked ? 'ok' : 'warning', 'Storage-Link', $storageLinked ? 'Der öffentliche Storage-Link ist vorhanden.' : 'Der öffentliche Storage-Link fehlt oder ist kein Symlink.');
+
+    $environmentFindings = [];
+    $environmentWarnings = [];
+    $appUrl = (string) config('app.url');
+    $appUrlScheme = parse_url($appUrl, PHP_URL_SCHEME);
+    $isProduction = config('app.env') === 'production';
+
+    if ($isProduction && config('app.debug')) {
+        $environmentFindings[] = 'APP_DEBUG ist in Produktion aktiv.';
+    }
+
+    if ($isProduction && $appUrlScheme !== 'https') {
+        $environmentFindings[] = 'APP_URL nutzt in Produktion kein HTTPS.';
+    }
+
+    if ($isProduction && ! config('session.secure')) {
+        $environmentFindings[] = 'SESSION_SECURE_COOKIE ist in Produktion nicht aktiv.';
+    }
+
+    if (! config('session.http_only')) {
+        $environmentFindings[] = 'SESSION_HTTP_ONLY ist deaktiviert.';
+    }
+
+    $sameSite = strtolower((string) config('session.same_site'));
+
+    if (! in_array($sameSite, ['lax', 'strict'], true)) {
+        $environmentWarnings[] = 'SESSION_SAME_SITE sollte lax oder strict sein.';
+    }
+
+    if ($environmentFindings !== []) {
+        $add('critical', 'Produktionskonfiguration unsicher', 'Wichtige Sicherheitswerte sind für den Livebetrieb nicht korrekt gesetzt.', $environmentFindings);
+    } elseif ($environmentWarnings !== []) {
+        $add('warning', 'Produktionskonfiguration prüfen', 'Die Konfiguration ist lauffähig, sollte aber vor einem Release geprüft werden.', $environmentWarnings);
+    } else {
+        $add('ok', 'Produktionskonfiguration', 'APP-URL, Debug-Modus und Session-Cookies wirken sicher konfiguriert.');
+    }
 
     try {
         $migrator = app(\Illuminate\Database\Migrations\Migrator::class);
