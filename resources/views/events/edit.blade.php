@@ -274,7 +274,7 @@
                                             <div class="font-semibold text-slate-950">{{ $field->label }}</div>
                                             <div class="mt-1 text-sm text-slate-500">
                                                 {{ $bookingFieldTypes[$field->field_type] ?? $field->field_type }}
-                                                @if($field->is_required)
+                                                @if($field->is_required && !$field->isDisplayOnly())
                                                     <span class="ml-2 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">Pflichtfeld</span>
                                                 @endif
                                             </div>
@@ -283,45 +283,45 @@
                                     </summary>
 
                                     <div class="mt-4 border-t border-slate-100 pt-4">
-                                        <form method="POST" action="{{ route('events.booking-fields.update', [$event, $field]) }}" class="grid gap-4 md:grid-cols-2">
+                                        <form method="POST" action="{{ route('events.booking-fields.update', [$event, $field]) }}" class="grid gap-4 md:grid-cols-2" x-data="{ fieldType: '{{ $field->field_type }}', displayOnly() { return ['heading', 'content', 'divider'].includes(this.fieldType); } }">
                                             @csrf
                                             @method('PUT')
 
                                             <div>
-                                                <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Feldname</label>
+                                                <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400" x-text="fieldType === 'heading' ? 'Überschrift' : (fieldType === 'content' ? 'Titel des Textblocks' : (fieldType === 'divider' ? 'Beschriftung der Trennlinie' : 'Feldname'))"></label>
                                                 <input type="text" name="label" value="{{ old('label', $field->label) }}" class="w-full rounded-lg border-slate-300 text-sm">
                                             </div>
 
                                             <div>
                                                 <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Art</label>
-                                                <select name="field_type" class="w-full rounded-lg border-slate-300 text-sm">
+                                                <select name="field_type" x-model="fieldType" class="w-full rounded-lg border-slate-300 text-sm">
                                                     @foreach($bookingFieldTypes as $type => $label)
                                                         <option value="{{ $type }}" @selected(old('field_type', $field->field_type) === $type)>{{ $label }}</option>
                                                     @endforeach
                                                 </select>
                                             </div>
 
-                                            <div>
+                                            <div x-show="!displayOnly()" x-cloak>
                                                 <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Interner Kurzname</label>
                                                 <input type="text" name="slug" value="{{ old('slug', $field->slug) }}" class="w-full rounded-lg border-slate-300 text-sm">
                                             </div>
 
-                                            <div>
+                                            <div x-show="!displayOnly()" x-cloak>
                                                 <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Platzhalter</label>
                                                 <input type="text" name="placeholder" value="{{ old('placeholder', $field->placeholder) }}" class="w-full rounded-lg border-slate-300 text-sm">
                                             </div>
 
-                                            <div class="md:col-span-2">
+                                            <div class="md:col-span-2" x-show="['select', 'radio', 'checkbox_group'].includes(fieldType)" x-cloak>
                                                 <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Antwortmöglichkeiten</label>
                                                 <textarea name="options" rows="3" class="w-full rounded-lg border-slate-300 text-sm" placeholder="Eine Option pro Zeile">{{ old('options', str_replace('|', "\n", (string) $field->options)) }}</textarea>
                                             </div>
 
                                             <div class="md:col-span-2">
-                                                <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Hilfetext</label>
+                                                <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400" x-text="displayOnly() ? 'Text' : 'Hilfetext'"></label>
                                                 <textarea name="help_text" rows="2" class="w-full rounded-lg border-slate-300 text-sm">{{ old('help_text', $field->help_text) }}</textarea>
                                             </div>
 
-                                            <div class="flex items-center gap-2 md:col-span-2">
+                                            <div class="flex items-center gap-2 md:col-span-2" x-show="!displayOnly()">
                                                 <input id="required-{{ $field->id }}" type="checkbox" name="is_required" value="1" @checked(old('is_required', $field->is_required)) class="rounded border-slate-300 text-slate-950">
                                                 <label for="required-{{ $field->id }}" class="text-sm font-semibold text-slate-700">Pflichtfeld</label>
                                             </div>
@@ -363,26 +363,32 @@
                             @endforelse
                         </div>
 
-                        <form method="POST" action="{{ route('events.booking-fields.store', $event) }}" class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                        <form method="POST" action="{{ route('events.booking-fields.store', $event) }}" class="rounded-xl border border-slate-200 bg-slate-50 p-4" x-data="{ fieldType: {{ json_encode(old('field_type', 'text')) }}, label: {{ json_encode(old('label', '')) }}, displayOnly() { return ['heading', 'content', 'divider'].includes(this.fieldType); }, choose(type) { this.fieldType = type; if (type === 'heading' && !this.label) this.label = 'Neuer Abschnitt'; if (type === 'content' && !this.label) this.label = 'Hinweis'; if (type === 'divider' && !this.label) this.label = 'Trennlinie'; } }">
                             @csrf
                             <div class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Neue Zusatzfrage</div>
 
                             <div class="mt-4 space-y-4">
+                                <div class="grid gap-2 sm:grid-cols-3">
+                                    <button type="button" @click="choose('heading')" :class="fieldType === 'heading' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700'" class="rounded-xl border px-3 py-3 text-left text-sm font-semibold transition">Überschrift</button>
+                                    <button type="button" @click="choose('content')" :class="fieldType === 'content' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700'" class="rounded-xl border px-3 py-3 text-left text-sm font-semibold transition">Text</button>
+                                    <button type="button" @click="choose('divider')" :class="fieldType === 'divider' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700'" class="rounded-xl border px-3 py-3 text-left text-sm font-semibold transition">Linie</button>
+                                </div>
+
                                 <div>
-                                    <label class="mb-1 block text-sm font-semibold text-slate-700">Was soll abgefragt werden?</label>
-                                    <input type="text" name="label" value="{{ old('label') }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="z. B. Essenswunsch">
+                                    <label class="mb-1 block text-sm font-semibold text-slate-700" x-text="fieldType === 'heading' ? 'Überschrift' : (fieldType === 'content' ? 'Titel des Textblocks' : (fieldType === 'divider' ? 'Beschriftung der Trennlinie' : 'Was soll abgefragt werden?'))"></label>
+                                    <input type="text" name="label" x-model="label" class="w-full rounded-lg border-slate-300 text-sm" placeholder="z. B. Essenswunsch">
                                 </div>
 
                                 <div>
                                     <label class="mb-1 block text-sm font-semibold text-slate-700">Antwortart</label>
-                                    <select name="field_type" class="w-full rounded-lg border-slate-300 text-sm">
+                                    <select name="field_type" x-model="fieldType" class="w-full rounded-lg border-slate-300 text-sm">
                                         @foreach($bookingFieldTypes as $type => $label)
                                             <option value="{{ $type }}" @selected(old('field_type', 'text') === $type)>{{ $label }}</option>
                                         @endforeach
                                     </select>
                                 </div>
 
-                                <div>
+                                <div x-show="['select', 'radio', 'checkbox_group'].includes(fieldType)" x-cloak>
                                     <label class="mb-1 block text-sm font-semibold text-slate-700">Antwortmöglichkeiten</label>
                                     <textarea name="options" rows="4" class="w-full rounded-lg border-slate-300 text-sm" placeholder="Nur bei Auswahlfeldern:&#10;Vegetarisch&#10;Fleisch&#10;Keine Angabe">{{ old('options') }}</textarea>
                                 </div>
@@ -390,22 +396,22 @@
                                 <details class="rounded-lg border border-slate-200 bg-white">
                                     <summary class="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-slate-700">Feinheiten</summary>
                                     <div class="space-y-3 border-t border-slate-100 p-3">
-                                        <div>
+                                        <div x-show="!displayOnly()" x-cloak>
                                             <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Interner Kurzname</label>
                                             <input type="text" name="slug" value="{{ old('slug') }}" class="w-full rounded-lg border-slate-300 text-sm" placeholder="z_b_essenswunsch">
                                         </div>
-                                        <div>
+                                        <div x-show="!displayOnly()" x-cloak>
                                             <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Platzhalter</label>
                                             <input type="text" name="placeholder" value="{{ old('placeholder') }}" class="w-full rounded-lg border-slate-300 text-sm">
                                         </div>
                                         <div>
-                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Hilfetext</label>
+                                            <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-400" x-text="displayOnly() ? 'Text' : 'Hilfetext'"></label>
                                             <textarea name="help_text" rows="2" class="w-full rounded-lg border-slate-300 text-sm">{{ old('help_text') }}</textarea>
                                         </div>
                                     </div>
                                 </details>
 
-                                <label class="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                <label class="flex items-center gap-2 text-sm font-semibold text-slate-700" x-show="!displayOnly()">
                                     <input type="checkbox" name="is_required" value="1" @checked(old('is_required')) class="rounded border-slate-300 text-slate-950">
                                     Muss ausgefüllt werden
                                 </label>

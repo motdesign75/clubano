@@ -739,7 +739,7 @@ class EventController extends Controller
 
         $form = $this->editableBookingForm($event);
         $validated = $this->validateBookingField($request, $form);
-        $validated['slug'] = Str::slug(($validated['slug'] ?? '') ?: $validated['label'], '_');
+        $validated['slug'] = $this->uniqueBookingFieldSlug($form, ($validated['slug'] ?? '') ?: $validated['label']);
         $validated['sort_order'] = ($form->fields()->max('sort_order') ?? 0) + 1;
 
         $form->fields()->create($this->normalizeBookingFieldPayload($validated));
@@ -758,7 +758,7 @@ class EventController extends Controller
         abort_if($field->slug !== 'organization' && in_array($field->slug, $this->eventBookingSystemFieldSlugs(), true), 403, 'Standardfelder können nicht bearbeitet werden.');
 
         $validated = $this->validateBookingField($request, $form, $field);
-        $validated['slug'] = Str::slug(($validated['slug'] ?? '') ?: $validated['label'], '_');
+        $validated['slug'] = $this->uniqueBookingFieldSlug($form, ($validated['slug'] ?? '') ?: $validated['label'], $field->id);
 
         $field->update($this->normalizeBookingFieldPayload($validated));
 
@@ -1398,7 +1398,9 @@ class EventController extends Controller
         $event->load(['activeBookingForm.fields']);
 
         $bookings = $event->bookings()->with('participants')->get();
-        $fieldLabels = $event->activeBookingForm?->fields?->pluck('label', 'slug') ?? collect();
+        $fieldLabels = $event->activeBookingForm?->fields
+            ?->reject(fn (PublicFormField $field) => $field->isDisplayOnly())
+            ->pluck('label', 'slug') ?? collect();
 
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
@@ -2189,6 +2191,9 @@ class EventController extends Controller
         return [
             'text' => 'Kurze Antwort',
             'textarea' => 'Lange Antwort',
+            'heading' => 'Überschrift',
+            'content' => 'Textblock',
+            'divider' => 'Trennlinie',
             'select' => 'Auswahlliste',
             'radio' => 'Einfachauswahl',
             'checkbox_group' => 'Mehrfachauswahl',
@@ -2220,7 +2225,7 @@ class EventController extends Controller
     private function validateBookingField(Request $request, PublicForm $form, ?PublicFormField $field = null): array
     {
         $validated = $request->validate([
-            'label' => ['required', 'string', 'max:255'],
+            'label' => ['nullable', 'string', 'max:255'],
             'slug' => [
                 'nullable',
                 'string',
@@ -2238,6 +2243,16 @@ class EventController extends Controller
         ]) + [
             'is_required' => $request->boolean('is_required'),
         ];
+
+        if (blank($validated['label'] ?? null) && ($validated['field_type'] ?? null) === 'divider') {
+            $validated['label'] = 'Trennlinie';
+        }
+
+        if (blank($validated['label'] ?? null)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'label' => 'Bitte gib eine Bezeichnung ein.',
+            ]);
+        }
 
         $slug = Str::slug(($validated['slug'] ?? '') ?: $validated['label'], '_');
 
@@ -2265,6 +2280,12 @@ class EventController extends Controller
             $validated['options'] = null;
         }
 
+        if (in_array($validated['field_type'], PublicFormField::displayOnlyTypes(), true)) {
+            $validated['placeholder'] = null;
+            $validated['options'] = null;
+            $validated['is_required'] = false;
+        }
+
         if ($validated['field_type'] === 'checkbox' && blank($validated['help_text'] ?? null)) {
             $validated['help_text'] = 'Ich stimme zu.';
         }
@@ -2284,6 +2305,25 @@ class EventController extends Controller
             ->values();
 
         return $options->isEmpty() ? null : $options->implode('|');
+    }
+
+    private function uniqueBookingFieldSlug(PublicForm $form, string $value, ?int $ignoreFieldId = null): string
+    {
+        $base = Str::slug($value ?: 'feld', '_') ?: 'feld';
+        $slug = $base;
+        $counter = 2;
+
+        while (
+            $form->fields()
+                ->when($ignoreFieldId, fn ($query) => $query->where('id', '!=', $ignoreFieldId))
+                ->where('slug', $slug)
+                ->exists()
+        ) {
+            $slug = $base . '_' . $counter;
+            $counter++;
+        }
+
+        return $slug;
     }
 
     private function authorizeBookingField(PublicForm $form, PublicFormField $field): void

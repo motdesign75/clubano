@@ -61,6 +61,57 @@ function createConversionForm(Tenant $tenant, string $type = 'membership', ?Even
     return $form;
 }
 
+test('forms can use headings text blocks and dividers without storing answers', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $admin] = createConversionTenant();
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Strukturiertes Formular',
+        'slug' => 'strukturiertes-formular-' . Str::random(6),
+        'form_type' => 'general',
+        'success_message' => 'ok',
+        'is_active' => true,
+    ]);
+
+    foreach ([
+        ['label' => 'Persönliche Daten', 'slug' => 'personliche_daten', 'field_type' => 'heading', 'help_text' => 'Bitte kurz und sauber ausfüllen.'],
+        ['label' => 'Hinweis', 'slug' => 'hinweis', 'field_type' => 'content', 'help_text' => 'Diese Angaben helfen uns bei der Zuordnung.'],
+        ['label' => 'Trennlinie', 'slug' => 'trennlinie', 'field_type' => 'divider'],
+        ['label' => 'Name', 'slug' => 'name', 'field_type' => 'text', 'is_required' => true],
+    ] as $index => $field) {
+        PublicFormField::create($field + [
+            'public_form_id' => $form->id,
+            'sort_order' => $index + 1,
+            'is_required' => $field['is_required'] ?? false,
+        ]);
+    }
+
+    $this->actingAs($admin)
+        ->get(route('forms.edit', $form))
+        ->assertOk()
+        ->assertSee('Überschrift')
+        ->assertSee('Textblock')
+        ->assertSee('Trennlinie');
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertSee('Persönliche Daten')
+        ->assertSee('Diese Angaben helfen uns bei der Zuordnung.');
+
+    $this->post(route('forms.public.submit', $form->slug), [
+        'fields' => [
+            'name' => 'Max Muster',
+        ],
+    ])->assertRedirect();
+
+    $submission = PublicFormSubmission::withoutGlobalScopes()
+        ->where('public_form_id', $form->id)
+        ->firstOrFail();
+
+    expect($submission->answers)->toBe(['name' => 'Max Muster']);
+});
+
 test('membership form submissions stay pending until an admin converts them to members', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

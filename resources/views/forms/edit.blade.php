@@ -56,7 +56,7 @@
                                         {{ $field->sort_order }}
                                     </span>
                                     <h3 class="truncate text-base font-semibold text-slate-950">{{ $field->label }}</h3>
-                                    @if($field->is_required)
+                                    @if($field->is_required && !$field->isDisplayOnly())
                                         <span class="inline-flex items-center rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-700 ring-1 ring-rose-200">
                                             Pflichtfeld
                                         </span>
@@ -65,7 +65,9 @@
 
                                 <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
                                     <span>{{ $fieldTypes[$field->field_type] ?? $field->field_type }}</span>
-                                    <span>{{ $field->slug }}</span>
+                                    @unless($field->isDisplayOnly())
+                                        <span>{{ $field->slug }}</span>
+                                    @endunless
                                     @if($field->placeholder)
                                         <span>Platzhalter: {{ $field->placeholder }}</span>
                                     @endif
@@ -86,16 +88,16 @@
                     </summary>
 
                     <div class="border-t border-slate-200 px-5 py-5 sm:px-6">
-                        <form method="POST" action="{{ route('forms.fields.update', [$form, $field]) }}" class="space-y-5" x-data="{ fieldType: '{{ $field->field_type }}' }">
+                        <form method="POST" action="{{ route('forms.fields.update', [$form, $field]) }}" class="space-y-5" x-data="{ fieldType: '{{ $field->field_type }}', displayOnly() { return ['heading', 'content', 'divider'].includes(this.fieldType); } }">
                             @csrf
                             @method('PUT')
 
                             <div class="grid gap-4 md:grid-cols-2">
                                 <div>
-                                    <label class="mb-1 block text-sm font-medium text-slate-700">Name des Feldes</label>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700" x-text="fieldType === 'heading' ? 'Überschrift' : (fieldType === 'content' ? 'Titel des Textblocks' : (fieldType === 'divider' ? 'Beschriftung der Trennlinie' : 'Name des Feldes'))"></label>
                                     <input type="text" name="label" value="{{ old('label', $field->label) }}" class="w-full rounded-2xl border border-slate-300 px-4 py-3 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10">
                                 </div>
-                                <div>
+                                <div x-show="!displayOnly()" x-cloak>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Interner Kurzname</label>
                                     <input type="text" name="slug" value="{{ old('slug', $field->slug) }}" class="w-full rounded-2xl border border-slate-300 px-4 py-3 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10">
                                 </div>
@@ -107,16 +109,16 @@
                                         @endforeach
                                     </select>
                                 </div>
-                                <div>
+                                <div x-show="!displayOnly()" x-cloak>
                                     <label class="mb-1 block text-sm font-medium text-slate-700">Platzhalter</label>
                                     <input type="text" name="placeholder" value="{{ old('placeholder', $field->placeholder) }}" class="w-full rounded-2xl border border-slate-300 px-4 py-3 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10">
                                 </div>
                             </div>
 
                             <div>
-                                <label class="mb-1 block text-sm font-medium text-slate-700">Hilfetext</label>
+                                <label class="mb-1 block text-sm font-medium text-slate-700" x-text="displayOnly() ? 'Text' : 'Hilfetext'"></label>
                                 <textarea name="help_text" rows="2" class="w-full rounded-2xl border border-slate-300 px-4 py-3 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10">{{ old('help_text', $field->help_text) }}</textarea>
-                                <p class="mt-2 text-xs text-slate-500">Kurze Hilfe fuer Menschen. Kein Techniktext.</p>
+                                <p class="mt-2 text-xs text-slate-500" x-text="displayOnly() ? 'Dieser Text erscheint direkt im Formular und wird nicht als Antwort gespeichert.' : 'Kurze Hilfe fuer Menschen. Kein Techniktext.'"></p>
                             </div>
 
                             <div x-show="['select', 'radio', 'checkbox_group'].includes(fieldType)" x-cloak>
@@ -127,7 +129,7 @@
 
                             <div class="flex flex-col gap-4 border-t border-slate-200 pt-4 lg:flex-row lg:items-center lg:justify-between">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                                    <label class="inline-flex items-center text-sm text-slate-700">
+                                    <label class="inline-flex items-center text-sm text-slate-700" x-show="!displayOnly()">
                                         <input type="checkbox" name="is_required" value="1" class="rounded border-gray-300" @checked($field->is_required)>
                                         <span class="ml-2">Muss ausgefuellt werden</span>
                                     </label>
@@ -183,7 +185,17 @@
         <aside class="space-y-6">
             @include('forms.partials.embed-card', ['form' => $form])
 
-            <section id="neues-feld" class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" x-data="{ fieldType: 'text' }">
+            <section id="neues-feld" class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" x-data="{
+                fieldType: 'text',
+                label: '',
+                displayOnly() { return ['heading', 'content', 'divider'].includes(this.fieldType); },
+                choose(type) {
+                    this.fieldType = type;
+                    if (type === 'heading' && !this.label) this.label = 'Neuer Abschnitt';
+                    if (type === 'content' && !this.label) this.label = 'Hinweis';
+                    if (type === 'divider' && !this.label) this.label = 'Trennlinie';
+                }
+            }">
                 <div>
                     <h2 class="text-lg font-semibold text-slate-900">Neues Feld hinzufuegen</h2>
                     <p class="mt-1 text-sm text-slate-500">
@@ -194,9 +206,24 @@
                 <form method="POST" action="{{ route('forms.fields.store', $form) }}" class="mt-5 space-y-4">
                     @csrf
 
+                    <div class="grid gap-2 sm:grid-cols-3">
+                        <button type="button" @click="choose('heading')" :class="fieldType === 'heading' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-slate-50 text-slate-700'" class="rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition">
+                            Überschrift
+                            <span class="mt-1 block text-xs font-normal opacity-75">Neuer Abschnitt</span>
+                        </button>
+                        <button type="button" @click="choose('content')" :class="fieldType === 'content' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-slate-50 text-slate-700'" class="rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition">
+                            Text
+                            <span class="mt-1 block text-xs font-normal opacity-75">Erklärung oder Hinweis</span>
+                        </button>
+                        <button type="button" @click="choose('divider')" :class="fieldType === 'divider' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-slate-50 text-slate-700'" class="rounded-2xl border px-3 py-3 text-left text-sm font-semibold transition">
+                            Linie
+                            <span class="mt-1 block text-xs font-normal opacity-75">Optische Trennung</span>
+                        </button>
+                    </div>
+
                     <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">Frage oder Bezeichnung</label>
-                        <input type="text" name="label" class="w-full rounded-2xl border border-slate-300 px-4 py-3 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="z. B. Telefonnummer" required>
+                        <label class="mb-1 block text-sm font-medium text-slate-700" x-text="fieldType === 'heading' ? 'Überschrift' : (fieldType === 'content' ? 'Titel des Textblocks' : (fieldType === 'divider' ? 'Beschriftung der Trennlinie' : 'Frage oder Bezeichnung'))"></label>
+                        <input type="text" name="label" x-model="label" class="w-full rounded-2xl border border-slate-300 px-4 py-3 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="z. B. Telefonnummer">
                     </div>
 
                     <div>
@@ -218,22 +245,22 @@
                             Erweiterte Einstellungen
                         </summary>
                         <div class="space-y-4 border-t border-slate-200 px-4 py-4">
-                            <div>
+                            <div x-show="!displayOnly()" x-cloak>
                                 <label class="mb-1 block text-sm font-medium text-slate-700">Interner Kurzname</label>
                                 <input type="text" name="slug" class="w-full rounded-2xl border border-slate-300 px-4 py-3 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10" placeholder="z. B. phone">
                             </div>
 
-                            <div>
+                            <div x-show="!displayOnly()" x-cloak>
                                 <label class="mb-1 block text-sm font-medium text-slate-700">Platzhalter</label>
                                 <input type="text" name="placeholder" class="w-full rounded-2xl border border-slate-300 px-4 py-3 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10">
                             </div>
 
                             <div>
-                                <label class="mb-1 block text-sm font-medium text-slate-700">Hilfetext</label>
+                                <label class="mb-1 block text-sm font-medium text-slate-700" x-text="displayOnly() ? 'Text' : 'Hilfetext'"></label>
                                 <textarea name="help_text" rows="2" class="w-full rounded-2xl border border-slate-300 px-4 py-3 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900/10"></textarea>
                             </div>
 
-                            <label class="inline-flex items-center text-sm text-slate-700">
+                            <label class="inline-flex items-center text-sm text-slate-700" x-show="!displayOnly()">
                                 <input type="checkbox" name="is_required" value="1" class="rounded border-gray-300">
                                 <span class="ml-2">Muss ausgefuellt werden</span>
                             </label>

@@ -150,7 +150,7 @@ class PublicFormController extends Controller
         ];
 
         $columns = ['id', 'eingegangen_am', 'full_name', 'email', 'phone'];
-        foreach ($form->fields as $field) {
+        foreach ($form->fields->reject(fn (PublicFormField $field) => $field->isDisplayOnly()) as $field) {
             $columns[] = $field->slug;
         }
 
@@ -438,7 +438,7 @@ class PublicFormController extends Controller
         $this->authorizeForm($form);
 
         $validated = $this->validateField($request, $form);
-        $validated['slug'] = Str::slug($validated['slug'] ?: $validated['label'], '_');
+        $validated['slug'] = $this->uniqueFieldSlug($form, $validated['slug'] ?: $validated['label']);
         $validated['sort_order'] = ($form->fields()->max('sort_order') ?? 0) + 1;
         $validated = $this->normalizeFieldPayload($validated);
 
@@ -455,7 +455,7 @@ class PublicFormController extends Controller
         $this->authorizeField($form, $field);
 
         $validated = $this->validateField($request, $form, $field);
-        $validated['slug'] = Str::slug($validated['slug'] ?: $validated['label'], '_');
+        $validated['slug'] = $this->uniqueFieldSlug($form, $validated['slug'] ?: $validated['label'], $field->id);
         $validated = $this->normalizeFieldPayload($validated);
 
         $field->update($validated);
@@ -559,6 +559,10 @@ class PublicFormController extends Controller
         $bookingMode = $isEventBooking && $request->input('booking_mode') === 'organization' ? 'organization' : 'person';
 
         foreach ($form->fields as $field) {
+            if ($field->isDisplayOnly()) {
+                continue;
+            }
+
             if ($isEventBooking && in_array($field->slug, ['participant_count', 'participant_notes'], true)) {
                 continue;
             }
@@ -619,6 +623,7 @@ class PublicFormController extends Controller
 
         $validated = $request->validate($rules);
         $answers = collect($form->fields)
+            ->reject(fn (PublicFormField $field) => $field->isDisplayOnly())
             ->reject(fn (PublicFormField $field) => $isEventBooking && $field->isLegacyEventBookingAddressDuplicate($fieldSlugs))
             ->mapWithKeys(function (PublicFormField $field) use ($validated) {
             $value = data_get($validated, 'fields.' . $field->slug);
@@ -862,6 +867,9 @@ class PublicFormController extends Controller
                 'radio' => 'Einzelauswahl',
                 'checkbox_group' => 'Mehrfachauswahl',
                 'checkbox' => 'Zustimmungs-Checkbox',
+                'heading' => 'Überschrift',
+                'content' => 'Textblock',
+                'divider' => 'Trennlinie',
             ],
         ];
     }
@@ -891,7 +899,7 @@ class PublicFormController extends Controller
     private function validateField(Request $request, PublicForm $form, ?PublicFormField $field = null): array
     {
         $validated = $request->validate([
-            'label' => ['required', 'string', 'max:255'],
+            'label' => ['nullable', 'string', 'max:255'],
             'slug' => [
                 'nullable',
                 'string',
@@ -901,7 +909,7 @@ class PublicFormController extends Controller
                     ->where('public_form_id', $form->id)
                     ->ignore($field?->id),
             ],
-            'field_type' => ['required', Rule::in(['text', 'email', 'number', 'date', 'textarea', 'select', 'radio', 'checkbox_group', 'checkbox'])],
+            'field_type' => ['required', Rule::in(['text', 'email', 'number', 'date', 'textarea', 'select', 'radio', 'checkbox_group', 'checkbox', 'heading', 'content', 'divider'])],
             'help_text' => ['nullable', 'string'],
             'placeholder' => ['nullable', 'string', 'max:255'],
             'options' => ['nullable', 'string'],
@@ -909,6 +917,16 @@ class PublicFormController extends Controller
         ]) + [
             'is_required' => $request->boolean('is_required'),
         ];
+
+        if (blank($validated['label'] ?? null) && ($validated['field_type'] ?? null) === 'divider') {
+            $validated['label'] = 'Trennlinie';
+        }
+
+        if (blank($validated['label'] ?? null)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'label' => 'Bitte gib eine Bezeichnung ein.',
+            ]);
+        }
 
         if (in_array($validated['field_type'], ['select', 'radio', 'checkbox_group'], true)
             && blank($this->normalizeOptions($validated['options'] ?? null))) {
@@ -947,6 +965,12 @@ class PublicFormController extends Controller
             $validated['options'] = null;
         }
 
+        if (in_array($validated['field_type'], PublicFormField::displayOnlyTypes(), true)) {
+            $validated['placeholder'] = null;
+            $validated['options'] = null;
+            $validated['is_required'] = false;
+        }
+
         if ($validated['field_type'] === 'checkbox' && blank($validated['help_text'] ?? null)) {
             $validated['help_text'] = 'Ich stimme zu.';
         }
@@ -967,6 +991,25 @@ class PublicFormController extends Controller
             ->values();
 
         return $options->isEmpty() ? null : $options->implode('|');
+    }
+
+    private function uniqueFieldSlug(PublicForm $form, string $value, ?int $ignoreFieldId = null): string
+    {
+        $base = Str::slug($value ?: 'feld', '_') ?: 'feld';
+        $slug = $base;
+        $counter = 2;
+
+        while (
+            $form->fields()
+                ->when($ignoreFieldId, fn ($query) => $query->where('id', '!=', $ignoreFieldId))
+                ->where('slug', $slug)
+                ->exists()
+        ) {
+            $slug = $base . '_' . $counter;
+            $counter++;
+        }
+
+        return $slug;
     }
 
     private function parseOptions(?string $value): array

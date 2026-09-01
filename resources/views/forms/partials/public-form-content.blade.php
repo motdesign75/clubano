@@ -176,6 +176,36 @@
         @foreach($form->fields as $field)
             @continue($isEventBooking && in_array($field->slug, ['participant_count', 'participant_notes'], true))
             @continue($isEventBooking && $field->isLegacyEventBookingAddressDuplicate($fieldSlugs))
+            @if($field->field_type === 'heading')
+                <div class="pt-2">
+                    <h2 class="text-xl font-semibold tracking-tight text-slate-950">{{ $field->label }}</h2>
+                    @if($field->help_text)
+                        <div class="mt-2 text-sm leading-6 text-slate-600">{!! $field->rendered_help_text !!}</div>
+                    @endif
+                </div>
+
+                @continue
+            @endif
+            @if($field->field_type === 'content')
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-700">
+                    <div class="font-semibold text-slate-950">{{ $field->label }}</div>
+                    @if($field->help_text)
+                        <div class="mt-2">{!! $field->rendered_help_text !!}</div>
+                    @endif
+                </div>
+
+                @continue
+            @endif
+            @if($field->field_type === 'divider')
+                <div class="py-2">
+                    <div class="border-t border-slate-200"></div>
+                    @if($field->label)
+                        <div class="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{{ $field->label }}</div>
+                    @endif
+                </div>
+
+                @continue
+            @endif
             @if($isEventBooking && $field->slug === 'organization')
                 <div class="space-y-4">
                     <input type="hidden" name="booking_mode" :value="bookingMode">

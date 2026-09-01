@@ -38,6 +38,16 @@ class PublicFormField extends Model
         return self::sanitizeHelpText($this->help_text);
     }
 
+    public function isDisplayOnly(): bool
+    {
+        return in_array($this->field_type, self::displayOnlyTypes(), true);
+    }
+
+    public static function displayOnlyTypes(): array
+    {
+        return ['heading', 'content', 'divider'];
+    }
+
     public function isLegacyEventBookingAddressDuplicate(iterable $fieldSlugs): bool
     {
         $slugs = collect($fieldSlugs)->map(fn ($slug) => (string) $slug);
