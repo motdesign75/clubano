@@ -498,7 +498,7 @@ class PublicFormController extends Controller
 
         if (!isset($fields[$swapIndex])) {
             return redirect()
-                ->route('forms.edit', $form)
+                ->to(route('forms.edit', $form) . '#formularfeld-' . $field->id)
                 ->with('success', 'Die Reihenfolge ist bereits optimal.');
         }
 
@@ -511,7 +511,7 @@ class PublicFormController extends Controller
         $this->normalizeSortOrder($form);
 
         return redirect()
-            ->route('forms.edit', $form)
+            ->to(route('forms.edit', $form) . '#formularfeld-' . $field->id)
             ->with('success', 'Die Reihenfolge der Felder wurde aktualisiert.');
     }
 

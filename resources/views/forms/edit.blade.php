@@ -47,7 +47,7 @@
             </div>
 
             @forelse($form->fields as $field)
-                <details class="group rounded-3xl border border-slate-200 bg-white shadow-sm" @if($loop->first) open @endif>
+                <details id="formularfeld-{{ $field->id }}" class="group rounded-3xl border border-slate-200 bg-white shadow-sm scroll-mt-24" @if($loop->first) open @endif>
                     <summary class="list-none cursor-pointer px-5 py-4 sm:px-6">
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div class="min-w-0">
@@ -74,7 +74,30 @@
                                 </div>
                             </div>
 
-                            <div class="flex items-center gap-3">
+                            <div class="flex flex-wrap items-center gap-2" onclick="event.stopPropagation()">
+                                <span class="hidden text-xs font-semibold uppercase tracking-[0.16em] text-slate-400 sm:inline">Sortieren</span>
+                                <form method="POST" action="{{ route('forms.fields.move', [$form, $field]) }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <input type="hidden" name="direction" value="up">
+                                    <button type="submit"
+                                            @disabled($loop->first)
+                                            aria-label="{{ $field->label }} nach oben verschieben"
+                                            class="inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35">
+                                        ↑
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ route('forms.fields.move', [$form, $field]) }}">
+                                    @csrf
+                                    @method('PATCH')
+                                    <input type="hidden" name="direction" value="down">
+                                    <button type="submit"
+                                            @disabled($loop->last)
+                                            aria-label="{{ $field->label }} nach unten verschieben"
+                                            class="inline-flex h-10 min-w-10 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35">
+                                        ↓
+                                    </button>
+                                </form>
                                 <span class="hidden text-sm text-slate-500 sm:inline">
                                     {{ $field->help_text ? Str::limit(strip_tags($field->help_text), 60) : 'Zum Bearbeiten aufklappen' }}
                                 </span>
@@ -134,26 +157,6 @@
                                         <span class="ml-2">Muss ausgefuellt werden</span>
                                     </label>
 
-                                    <div class="flex flex-wrap gap-2">
-                                        <button formaction="{{ route('forms.fields.move', [$form, $field]) }}"
-                                                formmethod="POST"
-                                                name="_method"
-                                                value="PATCH"
-                                                onclick="this.form.querySelector('input[name=direction]').value='up'"
-                                                type="submit"
-                                                class="rounded-full border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
-                                            Hoch
-                                        </button>
-                                        <button formaction="{{ route('forms.fields.move', [$form, $field]) }}"
-                                                formmethod="POST"
-                                                name="_method"
-                                                value="PATCH"
-                                                onclick="this.form.querySelector('input[name=direction]').value='down'"
-                                                type="submit"
-                                                class="rounded-full border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
-                                            Runter
-                                        </button>
-                                    </div>
                                 </div>
 
                                 <div class="flex flex-col gap-2 sm:flex-row">
@@ -170,8 +173,6 @@
                                     </button>
                                 </div>
                             </div>
-
-                            <input type="hidden" name="direction" value="">
                         </form>
                     </div>
                 </details>

@@ -794,7 +794,7 @@ class EventController extends Controller
 
         if (!isset($customFields[$swapIndex])) {
             return redirect()
-                ->to(route('events.edit', $event) . '#anmeldefelder')
+                ->to(route('events.edit', $event) . '#anmeldefeld-' . $field->id)
                 ->with('success', 'Die Reihenfolge ist bereits passend.');
         }
 
@@ -807,7 +807,7 @@ class EventController extends Controller
         $this->normalizeBookingFieldSortOrder($form);
 
         return redirect()
-            ->to(route('events.edit', $event) . '#anmeldefelder')
+            ->to(route('events.edit', $event) . '#anmeldefeld-' . $field->id)
             ->with('success', 'Die Reihenfolge der Anmeldefelder wurde aktualisiert.');
     }
 

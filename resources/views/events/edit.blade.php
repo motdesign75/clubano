@@ -268,10 +268,13 @@
                             </div>
 
                             @forelse($bookingCustomFields as $field)
-                                <details class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <details id="anmeldefeld-{{ $field->id }}" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm scroll-mt-24">
                                     <summary class="flex cursor-pointer list-none items-start justify-between gap-4">
                                         <div>
-                                            <div class="font-semibold text-slate-950">{{ $field->label }}</div>
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <span class="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-slate-100 px-2 text-xs font-semibold text-slate-600">{{ $field->sort_order }}</span>
+                                                <div class="font-semibold text-slate-950">{{ $field->label }}</div>
+                                            </div>
                                             <div class="mt-1 text-sm text-slate-500">
                                                 {{ $bookingFieldTypes[$field->field_type] ?? $field->field_type }}
                                                 @if($field->is_required && !$field->isDisplayOnly())
@@ -279,7 +282,31 @@
                                                 @endif
                                             </div>
                                         </div>
-                                        <x-heroicon-o-chevron-down class="h-5 w-5 shrink-0 text-slate-400" />
+                                        <div class="flex items-center gap-2" onclick="event.stopPropagation()">
+                                            <form method="POST" action="{{ route('events.booking-fields.move', [$event, $field]) }}">
+                                                @csrf
+                                                @method('PATCH')
+                                                <input type="hidden" name="direction" value="up">
+                                                <button type="submit"
+                                                        @disabled($loop->first)
+                                                        aria-label="{{ $field->label }} nach oben verschieben"
+                                                        class="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35">
+                                                    ↑
+                                                </button>
+                                            </form>
+                                            <form method="POST" action="{{ route('events.booking-fields.move', [$event, $field]) }}">
+                                                @csrf
+                                                @method('PATCH')
+                                                <input type="hidden" name="direction" value="down">
+                                                <button type="submit"
+                                                        @disabled($loop->last)
+                                                        aria-label="{{ $field->label }} nach unten verschieben"
+                                                        class="inline-flex h-9 min-w-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35">
+                                                    ↓
+                                                </button>
+                                            </form>
+                                            <x-heroicon-o-chevron-down class="h-5 w-5 shrink-0 text-slate-400" />
+                                        </div>
                                     </summary>
 
                                     <div class="mt-4 border-t border-slate-100 pt-4">
@@ -334,20 +361,6 @@
                                         </form>
 
                                         <div class="mt-3 flex flex-wrap gap-2">
-                                                <form method="POST" action="{{ route('events.booking-fields.move', [$event, $field]) }}">
-                                                    @csrf
-                                                    @method('PATCH')
-                                                    <input type="hidden" name="direction" value="up">
-                                                    <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">Hoch</button>
-                                                </form>
-
-                                                <form method="POST" action="{{ route('events.booking-fields.move', [$event, $field]) }}">
-                                                    @csrf
-                                                    @method('PATCH')
-                                                    <input type="hidden" name="direction" value="down">
-                                                    <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">Runter</button>
-                                                </form>
-
                                                 <form method="POST" action="{{ route('events.booking-fields.destroy', [$event, $field]) }}" onsubmit="return confirm('Anmeldefeld wirklich löschen? Bereits gespeicherte Antworten bleiben in alten Anmeldungen erhalten.');">
                                                     @csrf
                                                     @method('DELETE')
