@@ -518,6 +518,7 @@ class PublicFormController extends Controller
     public function publicShow(string $slug)
     {
         $form = $this->resolvePublicForm($slug);
+        $this->ensureEventOrganizationField($form);
         $this->ensureEventBillingFields($form);
 
         return view('forms.public', compact('form'));
@@ -526,6 +527,7 @@ class PublicFormController extends Controller
     public function publicEmbed(string $slug)
     {
         $form = $this->resolvePublicForm($slug);
+        $this->ensureEventOrganizationField($form);
         $this->ensureEventBillingFields($form);
 
         return response()
@@ -547,12 +549,14 @@ class PublicFormController extends Controller
     private function handlePublicSubmit(Request $request, string $slug, bool $embedded)
     {
         $form = $this->resolvePublicForm($slug);
+        $this->ensureEventOrganizationField($form);
         $this->ensureEventBillingFields($form);
 
         $rules = [];
         $isEventBooking = $form->form_type === 'event' && $form->event;
         $maxParticipants = max(1, (int) ($form->event?->max_participants_per_booking ?: 1));
         $fieldSlugs = $form->fields->pluck('slug');
+        $bookingMode = $isEventBooking && $request->input('booking_mode') === 'organization' ? 'organization' : 'person';
 
         foreach ($form->fields as $field) {
             if ($isEventBooking && in_array($field->slug, ['participant_count', 'participant_notes'], true)) {
@@ -598,7 +602,11 @@ class PublicFormController extends Controller
         }
 
         if ($isEventBooking) {
-            $rules['participant_count'] = ['required', 'integer', 'min:1', 'max:' . $maxParticipants];
+            $rules['booking_mode'] = ['nullable', ValidationRule::in(['person', 'organization'])];
+            if ($bookingMode === 'organization') {
+                $rules['fields.organization'] = ['required', 'string', 'max:255'];
+            }
+            $rules['participant_count'] = [$bookingMode === 'organization' ? 'nullable' : 'required', 'integer', 'min:1', 'max:' . $maxParticipants];
             $rules['participant_notes'] = ['nullable', 'string'];
             $rules['voucher_code'] = ['nullable', 'string', 'max:80'];
             $rules['use_booker_as_participant'] = ['nullable', 'boolean'];
@@ -628,10 +636,11 @@ class PublicFormController extends Controller
         })->all();
 
         if ($isEventBooking) {
-            $answers['participant_count'] = (int) ($validated['participant_count'] ?? 1);
+            $answers['booking_mode'] = $bookingMode;
+            $answers['participant_count'] = $bookingMode === 'organization' ? 1 : (int) ($validated['participant_count'] ?? 1);
             $answers['participant_notes'] = $validated['participant_notes'] ?? null;
             $answers['voucher_code'] = filled($validated['voucher_code'] ?? null) ? Voucher::normalizeCode($validated['voucher_code']) : null;
-            $answers['use_booker_as_participant'] = (bool) ($validated['use_booker_as_participant'] ?? false);
+            $answers['use_booker_as_participant'] = $bookingMode === 'organization' ? true : (bool) ($validated['use_booker_as_participant'] ?? false);
         }
 
         $submission = DB::transaction(function () use ($form, $answers, $validated, $isEventBooking) {
@@ -639,7 +648,9 @@ class PublicFormController extends Controller
                 'public_form_id' => $form->id,
                 'tenant_id' => $form->tenant_id,
                 'event_id' => $form->event_id,
-                'full_name' => trim(($answers['first_name'] ?? '') . ' ' . ($answers['last_name'] ?? '')) ?: ($answers['full_name'] ?? null),
+                'full_name' => $isEventBooking && ($answers['booking_mode'] ?? null) === 'organization'
+                    ? ($answers['organization'] ?: trim(($answers['first_name'] ?? '') . ' ' . ($answers['last_name'] ?? '')))
+                    : (trim(($answers['first_name'] ?? '') . ' ' . ($answers['last_name'] ?? '')) ?: ($answers['full_name'] ?? null)),
                 'email' => $answers['email'] ?? null,
                 'phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
                 'answers' => $answers,
@@ -647,16 +658,26 @@ class PublicFormController extends Controller
 
             if ($isEventBooking && $form->event) {
                 $useBookerAsParticipant = (bool) ($answers['use_booker_as_participant'] ?? false);
+                $bookingMode = ($answers['booking_mode'] ?? 'person') === 'organization' ? 'organization' : 'person';
                 $participantTarget = (int) ($answers['participant_count'] ?? 1);
                 $additionalParticipantTarget = max(0, $participantTarget - ($useBookerAsParticipant ? 1 : 0));
                 $participantRows = collect($validated['participants'] ?? [])
                     ->take($additionalParticipantTarget)
                     ->values();
 
-                if ($useBookerAsParticipant) {
+                if ($bookingMode === 'organization') {
                     $participantRows = collect([[
                         'first_name' => trim((string) ($answers['first_name'] ?? '')),
                         'last_name' => trim((string) ($answers['last_name'] ?? '')),
+                        'organization_name' => trim((string) ($answers['organization'] ?? '')),
+                        'email' => $answers['email'] ?? null,
+                        'phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
+                    ]]);
+                } elseif ($useBookerAsParticipant) {
+                    $participantRows = collect([[
+                        'first_name' => trim((string) ($answers['first_name'] ?? '')),
+                        'last_name' => trim((string) ($answers['last_name'] ?? '')),
+                        'organization_name' => null,
                         'email' => $answers['email'] ?? null,
                         'phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
                     ]])->concat($participantRows)->values();
@@ -667,11 +688,12 @@ class PublicFormController extends Controller
                         return [
                             'first_name' => trim((string) ($participant['first_name'] ?? '')),
                             'last_name' => trim((string) ($participant['last_name'] ?? '')),
+                            'organization_name' => trim((string) ($participant['organization_name'] ?? '')),
                             'email' => filled($participant['email'] ?? null) ? trim((string) $participant['email']) : null,
                             'phone' => filled($participant['phone'] ?? null) ? trim((string) $participant['phone']) : null,
                         ];
                     })
-                    ->filter(fn ($participant) => $participant['first_name'] !== '' || $participant['last_name'] !== '')
+                    ->filter(fn ($participant) => $participant['organization_name'] !== '' || $participant['first_name'] !== '' || $participant['last_name'] !== '')
                     ->values();
 
                 if ($participantRows->count() !== $participantTarget) {
@@ -720,7 +742,9 @@ class PublicFormController extends Controller
                     'event_id' => $form->event_id,
                     'public_form_submission_id' => $submission->id,
                     'booking_reference' => $this->generateBookingReference($form->event),
-                    'booker_name' => trim(($answers['first_name'] ?? '') . ' ' . ($answers['last_name'] ?? '')),
+                    'booker_name' => $bookingMode === 'organization'
+                        ? ($answers['organization'] ?: trim(($answers['first_name'] ?? '') . ' ' . ($answers['last_name'] ?? '')))
+                        : trim(($answers['first_name'] ?? '') . ' ' . ($answers['last_name'] ?? '')),
                     'booker_email' => $answers['email'] ?? null,
                     'booker_phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
                     'participant_count' => $participantCount,
@@ -747,6 +771,7 @@ class PublicFormController extends Controller
                         'position' => $index + 1,
                         'first_name' => $participant['first_name'],
                         'last_name' => $participant['last_name'],
+                        'organization_name' => $participant['organization_name'] ?: null,
                         'email' => $participant['email'] ?? null,
                         'phone' => $participant['phone'] ?? null,
                         'participant_type' => 'guest',
@@ -1305,6 +1330,34 @@ class PublicFormController extends Controller
             ->where('is_active', true)
             ->with(['fields', 'event', 'tenant'])
             ->firstOrFail();
+    }
+
+    private function ensureEventOrganizationField(PublicForm $form): void
+    {
+        if ($form->form_type !== 'event' || !$form->event) {
+            return;
+        }
+
+        $existing = $form->fields()->where('slug', 'organization')->first();
+
+        if ($existing) {
+            return;
+        }
+
+        $form->fields()->increment('sort_order');
+
+        $form->fields()->create([
+            'label' => 'Unternehmen, Organisation oder Verein',
+            'slug' => 'organization',
+            'field_type' => 'text',
+            'is_required' => false,
+            'help_text' => 'Optional: Wenn nicht eine einzelne Person, sondern eine Organisation angemeldet wird.',
+            'placeholder' => 'z. B. Musterverein e.V.',
+            'sort_order' => 1,
+        ]);
+
+        $this->normalizeSortOrder($form);
+        $form->load('fields');
     }
 
     private function ensureEventBillingFields(PublicForm $form): void

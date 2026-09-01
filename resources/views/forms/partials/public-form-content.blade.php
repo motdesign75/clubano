@@ -7,6 +7,16 @@
         $participantRowsOld = old('participants', []);
         $participantTemplate = [];
         $useBookerAsParticipantOld = (bool) old('use_booker_as_participant', 1);
+        $organizationField = $isEventBooking ? $form->fields->firstWhere('slug', 'organization') : null;
+        $bookingModeOld = old('booking_mode', filled(old('fields.organization')) ? 'organization' : 'person');
+        $bookingModeOld = in_array($bookingModeOld, ['person', 'organization'], true) ? $bookingModeOld : 'person';
+        if ($organizationField?->is_required) {
+            $bookingModeOld = 'organization';
+        }
+        if ($bookingModeOld === 'organization') {
+            $participantCountOld = 1;
+            $useBookerAsParticipantOld = true;
+        }
         $additionalParticipantCountOld = max(0, $participantCountOld - ($useBookerAsParticipantOld ? 1 : 0));
 
         for ($i = 0; $i < $additionalParticipantCountOld; $i++) {
@@ -96,16 +106,28 @@
                   voucherCode: {{ json_encode(old('voucher_code', '')) }},
                   participants: {{ json_encode($participantTemplate) }},
                   useBookerAsParticipant: {{ $useBookerAsParticipantOld ? 'true' : 'false' }},
+                  bookingMode: {{ json_encode($bookingModeOld) }},
+                  organizationRequired: {{ $organizationField?->is_required ? 'true' : 'false' }},
                   booker: {
+                      organization: {{ json_encode(old('fields.organization', '')) }},
                       first_name: {{ json_encode(old('fields.first_name', '')) }},
                       last_name: {{ json_encode(old('fields.last_name', '')) }},
                       email: {{ json_encode(old('fields.email', '')) }},
                       phone: {{ json_encode(old('fields.mobile', old('fields.phone', ''))) }},
                   },
                   additionalParticipantCount() {
+                      if (this.bookingMode === 'organization') {
+                          return 0;
+                      }
                       return Math.max(0, this.participantCount - (this.useBookerAsParticipant ? 1 : 0));
                   },
                   syncParticipants() {
+                      if (this.bookingMode === 'organization') {
+                          this.participantCount = 1;
+                          this.useBookerAsParticipant = true;
+                          this.participants = [];
+                          return;
+                      }
                       const target = Math.max(1, Math.min(this.maxParticipants, Number(this.participantCount) || 1));
                       this.participantCount = target;
                       const additionalTarget = this.additionalParticipantCount();
@@ -123,6 +145,10 @@
                       }
                   },
                   syncBookerToParticipant() {
+                      this.syncParticipants();
+                  },
+                  switchBookingMode(mode) {
+                      this.bookingMode = this.organizationRequired ? 'organization' : mode;
                       this.syncParticipants();
                   },
                   totalAmount() {
@@ -150,6 +176,50 @@
         @foreach($form->fields as $field)
             @continue($isEventBooking && in_array($field->slug, ['participant_count', 'participant_notes'], true))
             @continue($isEventBooking && $field->isLegacyEventBookingAddressDuplicate($fieldSlugs))
+            @if($isEventBooking && $field->slug === 'organization')
+                <div class="space-y-4">
+                    <input type="hidden" name="booking_mode" :value="bookingMode">
+
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <button type="button"
+                                @click="switchBookingMode('person')"
+                                :disabled="organizationRequired"
+                                :class="bookingMode === 'person' ? 'border-indigo-600 bg-indigo-50 text-indigo-950' : (organizationRequired ? 'border-slate-200 bg-slate-50 text-slate-400' : 'border-slate-200 bg-white text-slate-700')"
+                                class="min-h-16 rounded-2xl border px-4 py-3 text-left shadow-sm">
+                            <span class="block text-sm font-semibold">Person anmelden</span>
+                            <span class="mt-1 block text-xs leading-5 opacity-75">Für einzelne Teilnehmer oder Gruppen mit Personenliste.</span>
+                        </button>
+
+                        <button type="button"
+                                @click="switchBookingMode('organization')"
+                                :class="bookingMode === 'organization' ? 'border-indigo-600 bg-indigo-50 text-indigo-950' : 'border-slate-200 bg-white text-slate-700'"
+                                class="min-h-16 rounded-2xl border px-4 py-3 text-left shadow-sm">
+                            <span class="block text-sm font-semibold">Organisation oder Verein anmelden</span>
+                            <span class="mt-1 block text-xs leading-5 opacity-75">Für Unternehmen, Vereine, Sponsoren oder Gruppen als Einheit.</span>
+                        </button>
+                    </div>
+
+                    <div x-show="bookingMode === 'organization' || organizationRequired" x-cloak>
+                        <label class="block text-sm font-medium text-gray-700">
+                            {{ $field->label }}
+                            @if($field->is_required || $isEventBooking)
+                                <span class="text-red-500">*</span>
+                            @endif
+                        </label>
+                        <input type="text"
+                               name="fields[organization]"
+                               value="{{ old('fields.organization') }}"
+                               x-model="booker.organization"
+                               class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               placeholder="{{ $field->placeholder }}">
+                        @if($field->help_text)
+                            <div class="mt-1 text-sm leading-6 text-gray-500">{!! $field->rendered_help_text !!}</div>
+                        @endif
+                    </div>
+                </div>
+
+                @continue
+            @endif
             <div>
                 <label class="block text-sm font-medium text-gray-700">
                     {{ $field->label }}
@@ -241,9 +311,11 @@
             </section>
 
             <section class="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <input type="hidden" name="participant_count" value="1" :disabled="bookingMode !== 'organization'">
+
                 <div class="grid gap-6 lg:grid-cols-[1fr_280px]">
                     <div>
-                        <label for="participant_count" class="block text-sm font-medium text-gray-700">
+                        <label for="participant_count" class="block text-sm font-medium text-gray-700" x-show="bookingMode === 'person'">
                             Teilnehmerzahl <span class="text-red-500">*</span>
                         </label>
                         <input id="participant_count"
@@ -253,10 +325,15 @@
                                max="{{ max(1, (int) $event->max_participants_per_booking) }}"
                                x-model.number="participantCount"
                                @input="syncParticipants()"
+                               :disabled="bookingMode !== 'person'"
+                               x-show="bookingMode === 'person'"
                                class="mt-1 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <p class="mt-1 text-sm text-gray-500">
+                        <p class="mt-1 text-sm text-gray-500" x-show="bookingMode === 'person'">
                             Maximal {{ max(1, (int) $event->max_participants_per_booking) }} Person{{ max(1, (int) $event->max_participants_per_booking) === 1 ? '' : 'en' }} pro Anmeldung.
                         </p>
+                        <div x-show="bookingMode === 'organization'" x-cloak class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950">
+                            Die Organisation oder der Verein wird als eine Anmeldung geführt. Eine zusätzliche Teilnehmerzahl ist dafür nicht nötig.
+                        </div>
                     </div>
 
                     <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
@@ -306,12 +383,12 @@
                     </div>
                 @endif
 
-                <div>
+                <div x-show="bookingMode === 'person'" x-cloak>
                     <h2 class="text-lg font-semibold text-slate-900">Teilnehmer</h2>
                     <p class="mt-1 text-sm text-slate-500">Bitte trage alle Personen ein, für die du diese Veranstaltung buchen möchtest.</p>
                 </div>
 
-                <div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
+                <div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4" x-show="bookingMode === 'person'" x-cloak>
                     <input type="hidden" name="use_booker_as_participant" :value="useBookerAsParticipant ? 1 : 0">
                     <label class="flex items-start gap-3 text-sm text-indigo-950">
                         <input type="checkbox"
@@ -327,7 +404,7 @@
                     </label>
                 </div>
 
-                <div x-show="useBookerAsParticipant" x-cloak class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                <div x-show="bookingMode === 'person' && useBookerAsParticipant" x-cloak class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
                     <span class="font-semibold text-slate-900">Teilnehmer 1:</span>
                     <span x-text="`${booker.first_name || 'Vorname'} ${booker.last_name || 'Nachname'}`"></span>
                     <span class="text-slate-400">aus Ansprechpartner übernommen</span>

@@ -12,6 +12,7 @@
     $bookingFields = $event->activeBookingForm?->fields?->sortBy('sort_order') ?? collect();
     $bookingCustomFields = $bookingFields->reject(fn ($field) => in_array($field->slug, $bookingSystemFieldSlugs, true))->values();
     $bookingStandardFields = $bookingFields->filter(fn ($field) => in_array($field->slug, $bookingSystemFieldSlugs, true))->values();
+    $organizationBookingField = $bookingFields->firstWhere('slug', 'organization');
 @endphp
 
 <div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -236,6 +237,34 @@
                                         <span class="text-sm text-slate-500">Die Standardfelder werden beim Speichern der Anmeldung angelegt.</span>
                                     @endforelse
                                 </div>
+                                @if($organizationBookingField)
+                                    <form method="POST" action="{{ route('events.booking-fields.update', [$event, $organizationBookingField]) }}" class="mt-4 rounded-xl border border-indigo-100 bg-white p-4">
+                                        @csrf
+                                        @method('PUT')
+                                        <input type="hidden" name="label" value="Unternehmen, Organisation oder Verein">
+                                        <input type="hidden" name="slug" value="organization">
+                                        <input type="hidden" name="field_type" value="text">
+                                        <input type="hidden" name="placeholder" value="{{ $organizationBookingField->placeholder ?: 'z. B. Musterverein e.V.' }}">
+                                        <input type="hidden" name="help_text" value="{{ $organizationBookingField->help_text ?: 'Optional: Wenn nicht eine einzelne Person, sondern eine Organisation angemeldet wird.' }}">
+
+                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <div class="text-sm font-semibold text-slate-950">Organisationen und Vereine</div>
+                                                <p class="mt-1 text-sm leading-6 text-slate-500">
+                                                    In der Anmeldung steht die Auswahl direkt vor Vorname und Nachname. Bei Organisationen wird keine Teilnehmerzahl abgefragt.
+                                                </p>
+                                            </div>
+                                            <label class="flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-950">
+                                                <input type="checkbox" name="is_required" value="1" @checked($organizationBookingField->is_required) class="rounded border-indigo-200 text-indigo-600">
+                                                Nur Organisation/Verein zulassen
+                                            </label>
+                                        </div>
+
+                                        <button type="submit" class="mt-3 inline-flex min-h-10 items-center justify-center rounded-lg border border-indigo-200 px-4 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">
+                                            Einstellung speichern
+                                        </button>
+                                    </form>
+                                @endif
                             </div>
 
                             @forelse($bookingCustomFields as $field)

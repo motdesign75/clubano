@@ -679,6 +679,9 @@ class EventController extends Controller
     public function edit(Event $event)
     {
         $this->authorizeEvent($event);
+        if ($event->booking_enabled) {
+            $this->syncBookingForm($event);
+        }
         $event->load(['activeBookingForm.fields', 'category.defaultTargetTag', 'targetTag', 'tenant', 'responsibleUser', 'creator', 'updater', 'changeLogs.user']);
         $event->setAttribute('conflicting_events', $this->findConflictingEvents($event));
         $event->setAttribute('conflict_count', $event->conflicting_events->count());
@@ -752,7 +755,7 @@ class EventController extends Controller
 
         $form = $this->editableBookingForm($event);
         $this->authorizeBookingField($form, $field);
-        abort_if(in_array($field->slug, $this->eventBookingSystemFieldSlugs(), true), 403, 'Standardfelder können nicht bearbeitet werden.');
+        abort_if($field->slug !== 'organization' && in_array($field->slug, $this->eventBookingSystemFieldSlugs(), true), 403, 'Standardfelder können nicht bearbeitet werden.');
 
         $validated = $this->validateBookingField($request, $form, $field);
         $validated['slug'] = Str::slug(($validated['slug'] ?? '') ?: $validated['label'], '_');
@@ -2144,7 +2147,9 @@ class EventController extends Controller
                 : 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt.',
         ]);
 
+        $existingFields = $form->fields()->get()->keyBy('slug');
         $requiredFields = [
+            ['label' => 'Unternehmen, Organisation oder Verein', 'slug' => 'organization', 'field_type' => 'text', 'is_required' => (bool) ($existingFields['organization']->is_required ?? false), 'help_text' => 'Optional: Wenn nicht eine einzelne Person, sondern eine Organisation angemeldet wird.', 'placeholder' => 'z. B. Musterverein e.V.'],
             ['label' => 'Vorname Ansprechpartner', 'slug' => 'first_name', 'field_type' => 'text', 'is_required' => true, 'help_text' => 'Vorname der buchenden Person.', 'placeholder' => 'Vorname'],
             ['label' => 'Nachname Ansprechpartner', 'slug' => 'last_name', 'field_type' => 'text', 'is_required' => true, 'help_text' => 'Nachname der buchenden Person.', 'placeholder' => 'Nachname'],
             ['label' => 'E-Mail', 'slug' => 'email', 'field_type' => 'email', 'is_required' => true, 'help_text' => 'An diese Adresse senden wir Bestätigung und weitere Infos.', 'placeholder' => 'name@beispiel.de'],
@@ -2198,6 +2203,7 @@ class EventController extends Controller
     {
         return [
             'first_name',
+            'organization',
             'last_name',
             'email',
             'phone',
@@ -2235,7 +2241,7 @@ class EventController extends Controller
 
         $slug = Str::slug(($validated['slug'] ?? '') ?: $validated['label'], '_');
 
-        if (in_array($slug, $this->eventBookingSystemFieldSlugs(), true)) {
+        if ($slug !== 'organization' && in_array($slug, $this->eventBookingSystemFieldSlugs(), true)) {
             throw \Illuminate\Validation\ValidationException::withMessages([
                 'slug' => 'Dieser interne Kurzname ist für Standardfelder reserviert.',
             ]);

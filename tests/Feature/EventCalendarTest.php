@@ -118,7 +118,10 @@ test('event managers can add custom registration fields to event bookings', func
     $this->actingAs($eventManager)->get(route('events.edit', $event))
         ->assertOk()
         ->assertSee('Anmeldefelder')
-        ->assertSee('Neue Zusatzfrage');
+        ->assertSee('Neue Zusatzfrage')
+        ->assertSee('Organisationen und Vereine');
+
+    $form->refresh();
 
     $this->actingAs($eventManager)->post(route('events.booking-fields.store', $event), [
         'label' => 'Essenswunsch',
@@ -149,6 +152,7 @@ test('event managers can add custom registration fields to event bookings', func
             'phone' => '012345',
             'essenswunsch' => 'Vegetarisch',
         ],
+        'booking_mode' => 'person',
         'participant_count' => 1,
         'use_booker_as_participant' => 1,
     ])->assertRedirect();
@@ -159,6 +163,93 @@ test('event managers can add custom registration fields to event bookings', func
 
     expect($submission->answers['essenswunsch'])->toBe('Vegetarisch')
         ->and(EventBooking::query()->where('event_id', $event->id)->count())->toBe(1);
+});
+
+test('event bookings can be submitted as organization without participant counter', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Vereinsanmeldung',
+        'slug' => 'vereinsanmeldung',
+        'email' => 'verein@example.test',
+    ]);
+
+    $eventManager = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_EVENT_MANAGER,
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Netzwerktreffen',
+        'location' => 'Forum',
+        'start' => now()->addWeek()->setTime(19, 0),
+        'end' => now()->addWeek()->setTime(21, 0),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 25,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 10,
+        'created_by' => $eventManager->id,
+        'updated_by' => $eventManager->id,
+    ]);
+
+    $this->actingAs($eventManager)->get(route('events.edit', $event))->assertOk();
+
+    $form = PublicForm::query()
+        ->where('event_id', $event->id)
+        ->where('form_type', 'event')
+        ->firstOrFail();
+    $organizationField = PublicFormField::query()
+        ->where('public_form_id', $form->id)
+        ->where('slug', 'organization')
+        ->firstOrFail();
+
+    $this->actingAs($eventManager)->put(route('events.booking-fields.update', [$event, $organizationField]), [
+        'label' => 'Unternehmen, Organisation oder Verein',
+        'slug' => 'organization',
+        'field_type' => 'text',
+        'placeholder' => 'z. B. Musterverein e.V.',
+        'help_text' => 'Optional: Wenn nicht eine einzelne Person, sondern eine Organisation angemeldet wird.',
+        'is_required' => '1',
+    ])->assertRedirect(route('events.edit', $event) . '#anmeldefelder');
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertSee('Organisation oder Verein anmelden')
+        ->assertSee('Unternehmen, Organisation oder Verein');
+
+    $this->post(route('forms.public.submit', $form->slug), [
+        'booking_mode' => 'organization',
+        'fields' => [
+            'organization' => 'Musterverein e.V.',
+            'first_name' => 'Max',
+            'last_name' => 'Muster',
+            'email' => 'max@musterverein.test',
+            'phone' => '012345',
+            'street' => 'Musterweg 1',
+            'zip' => '12345',
+            'city' => 'Musterstadt',
+            'country' => 'Deutschland',
+        ],
+    ])->assertRedirect();
+
+    $submission = PublicFormSubmission::query()
+        ->where('public_form_id', $form->id)
+        ->firstOrFail();
+    $booking = EventBooking::query()
+        ->where('event_id', $event->id)
+        ->with('participants')
+        ->firstOrFail();
+
+    expect($submission->answers['booking_mode'])->toBe('organization')
+        ->and($submission->answers['organization'])->toBe('Musterverein e.V.')
+        ->and($submission->answers['participant_count'])->toBe(1)
+        ->and($booking->booker_name)->toBe('Musterverein e.V.')
+        ->and($booking->participant_count)->toBe(1)
+        ->and((float) $booking->gross_amount)->toBe(25.0)
+        ->and($booking->participants)->toHaveCount(1)
+        ->and($booking->participants->first()->organization_name)->toBe('Musterverein e.V.');
 });
 
 test('overlapping events are marked as conflicts in calendar index', function () {
