@@ -35,7 +35,7 @@
         }
     @endphp
 
-    <div class="{{ $embedded ?? false ? 'mb-8' : 'bg-slate-950 px-5 py-6 text-white sm:px-8 sm:py-8' }}">
+    <div class="{{ $embedded ?? false ? 'mb-8' : 'bg-gradient-to-br from-slate-950 via-teal-950 to-slate-900 px-5 py-6 text-white sm:px-8 sm:py-8' }}">
         <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
                 <div class="{{ ($embedded ?? false) ? 'text-sm font-medium text-indigo-600' : 'text-xs font-semibold uppercase tracking-[0.22em] text-white/60' }}">
@@ -45,11 +45,15 @@
 
                 @if($form->description)
                     <p class="mt-3 max-w-2xl text-base leading-7 {{ ($embedded ?? false) ? 'text-gray-600' : 'text-white/75' }}">{{ $form->description }}</p>
+                @elseif(!($embedded ?? false))
+                    <p class="mt-3 max-w-2xl text-base leading-7 text-white/75">
+                        Nimm dir kurz Zeit. Die Angaben landen direkt und sicher beim Verein.
+                    </p>
                 @endif
             </div>
 
             @if($tenantLogoUrl)
-                <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white p-2 shadow-sm ring-1 ring-white/20 sm:h-20 sm:w-20">
+                <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white p-2 shadow-lg shadow-slate-950/20 ring-1 ring-white/20 sm:h-20 sm:w-20">
                     <img src="{{ $tenantLogoUrl }}" alt="Logo {{ $tenant->name }}" class="max-h-full max-w-full object-contain">
                 </div>
             @endif
@@ -142,7 +146,7 @@
 
     <form method="POST"
           action="{{ ($embedded ?? false) ? route('forms.public.embed.submit', $form->slug) : route('forms.public.submit', $form->slug) }}"
-          class="space-y-8"
+          class="space-y-7"
           @if($isEventBooking)
               x-data="{
                   externalPricePerPerson: {{ json_encode($externalPrice) }},
@@ -240,11 +244,12 @@
         @php
             $fieldSlugs = $form->fields->pluck('slug');
         @endphp
+        <div class="grid gap-x-5 gap-y-6 md:grid-cols-2">
         @foreach($form->fields as $field)
             @continue($isEventBooking && in_array($field->slug, ['participant_count', 'participant_notes'], true))
             @continue($isEventBooking && $field->isLegacyEventBookingAddressDuplicate($fieldSlugs))
             @if($field->field_type === 'heading')
-                <div class="pt-2">
+                <div class="pt-2 md:col-span-2">
                     <h2 class="text-xl font-semibold tracking-tight text-slate-950">{{ $field->label }}</h2>
                     @if($field->help_text)
                         <div class="mt-2 text-sm leading-6 text-slate-600">{!! $field->rendered_help_text !!}</div>
@@ -254,7 +259,7 @@
                 @continue
             @endif
             @if($field->field_type === 'content')
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-700">
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-700 md:col-span-2">
                     <div class="font-semibold text-slate-950">{{ $field->label }}</div>
                     @if($field->help_text)
                         <div class="mt-2">{!! $field->rendered_help_text !!}</div>
@@ -264,7 +269,7 @@
                 @continue
             @endif
             @if($field->field_type === 'divider')
-                <div class="py-2">
+                <div class="py-2 md:col-span-2">
                     <div class="border-t border-slate-200"></div>
                     @if($field->label)
                         <div class="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{{ $field->label }}</div>
@@ -274,7 +279,7 @@
                 @continue
             @endif
             @if($isEventBooking && $field->slug === 'organization')
-                <div class="space-y-4">
+                <div class="space-y-4 md:col-span-2">
                     <input type="hidden" name="booking_mode" :value="bookingMode">
 
                     <div class="grid gap-3 sm:grid-cols-2">
@@ -340,7 +345,14 @@
 
                 @continue
             @endif
-            <div>
+            @php
+                $wideFieldSlugs = ['street', 'address', 'adresse', 'message', 'notes', 'participant_notes', 'iban'];
+                $fieldLayoutClass = in_array($field->field_type, ['textarea', 'checkbox', 'checkbox_group', 'radio'], true)
+                    || in_array($field->slug, $wideFieldSlugs, true)
+                    ? 'md:col-span-2'
+                    : '';
+            @endphp
+            <div class="{{ $fieldLayoutClass }}">
                 <label class="block text-sm font-semibold text-slate-700">
                     {{ $field->label }}
                     @if($field->is_required)
@@ -436,6 +448,7 @@
                 @endif
             </div>
         @endforeach
+        </div>
 
         @if($isEventBooking)
             </section>
