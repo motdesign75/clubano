@@ -24,6 +24,9 @@
     ];
 
     $accountGroups = $postingAccounts->groupBy('type');
+    $accountOptions = $postingAccounts->mapWithKeys(fn ($account) => [
+        $account->id => trim($account->number . ' · ' . $account->name),
+    ]);
     $accountTypeLabels = [
         'bank' => 'Bank & Kasse',
         'kasse' => 'Bank & Kasse',
@@ -33,6 +36,12 @@
 @endphp
 
 <div class="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
+    <datalist id="bank-import-account-options">
+        @foreach($postingAccounts as $account)
+            <option value="{{ $accountOptions[$account->id] }}" data-account-id="{{ $account->id }}"></option>
+        @endforeach
+    </datalist>
+
     <section class="rounded-3xl bg-slate-950 px-6 py-6 text-white shadow-sm sm:px-8">
         <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div class="max-w-3xl">
@@ -277,19 +286,18 @@
 
                                     <div>
                                         <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Gegenkonto</label>
-                                        <select name="selected_account_id" class="w-full rounded-xl border-slate-300 bg-white text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                            <option value="">Gegenkonto wählen</option>
-                                            @foreach($accountGroups as $type => $accounts)
-                                                <optgroup label="{{ $accountTypeLabels[$type] ?? ucfirst((string) $type) }}">
-                                                    @foreach($accounts as $account)
-                                                        @continue($account->id === $bankTransaction->account_id)
-                                                        <option value="{{ $account->id }}" @selected($bankTransaction->selected_account_id === $account->id)>
-                                                            {{ $account->number }} · {{ $account->name }}
-                                                        </option>
-                                                    @endforeach
-                                                </optgroup>
-                                            @endforeach
-                                        </select>
+                                        <input type="hidden"
+                                               name="selected_account_id"
+                                               value="{{ old('selected_account_id', $bankTransaction->selected_account_id) }}"
+                                               data-account-id-input>
+                                        <input type="search"
+                                               value="{{ $accountOptions[old('selected_account_id', $bankTransaction->selected_account_id)] ?? '' }}"
+                                               list="bank-import-account-options"
+                                               autocomplete="off"
+                                               placeholder="Kontonummer oder Name suchen"
+                                               data-account-search
+                                               class="w-full rounded-xl border-slate-300 bg-white text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                        <p class="mt-2 text-xs text-slate-500">Tippe z. B. „1200“, „Miete“ oder „Versicherung“.</p>
                                     </div>
 
                                     <details class="rounded-2xl border border-slate-200 bg-white p-3">
@@ -381,3 +389,32 @@
     </section>
 </div>
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('input', (event) => {
+            const search = event.target.closest('[data-account-search]');
+
+            if (! search) {
+                return;
+            }
+
+            const form = search.closest('form');
+            const hidden = form?.querySelector('[data-account-id-input]');
+            const options = document.getElementById('bank-import-account-options')?.options ?? [];
+
+            if (! hidden) {
+                return;
+            }
+
+            hidden.value = '';
+
+            for (const option of options) {
+                if (option.value === search.value) {
+                    hidden.value = option.dataset.accountId ?? '';
+                    return;
+                }
+            }
+        });
+    </script>
+@endpush
