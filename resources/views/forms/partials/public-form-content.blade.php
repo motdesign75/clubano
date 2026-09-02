@@ -6,6 +6,7 @@
         $externalPrice = (float) ($event?->price_per_person ?? 0);
         $memberPrice = (float) ($event?->member_price_per_person ?? 0);
         $hasMemberRate = $isEventBooking && $externalPrice > 0 && $memberPrice < $externalPrice;
+        $organizationsFree = $isEventBooking && (bool) ($event?->organization_bookings_free ?? false);
         $tenant = $form->tenant;
         $tenantLogoUrl = $tenant?->logo_url;
         $participantCountOld = max(1, min((int) old('participant_count', 1), max(1, (int) ($event?->max_participants_per_booking ?: 1))));
@@ -79,6 +80,18 @@
                                 <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
                                     Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.$currency : 'kostenfrei' }}
                                 </span>
+                                @if($organizationsFree)
+                                    <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
+                                        Vereine kostenfrei
+                                    </span>
+                                @endif
+                                <span class="rounded-full bg-white px-3 py-1 font-semibold text-slate-800">
+                                    Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                </span>
+                            @elseif($organizationsFree)
+                                <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
+                                    Vereine kostenfrei
+                                </span>
                                 <span class="rounded-full bg-white px-3 py-1 font-semibold text-slate-800">
                                     Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                 </span>
@@ -135,6 +148,7 @@
                   externalPricePerPerson: {{ json_encode($externalPrice) }},
                   memberPricePerPerson: {{ json_encode($memberPrice) }},
                   hasMemberRate: {{ $hasMemberRate ? 'true' : 'false' }},
+                  organizationsFree: {{ $organizationsFree ? 'true' : 'false' }},
                   maxParticipants: {{ max(1, (int) ($event->max_participants_per_booking ?: 1)) }},
                   participantCount: {{ $participantCountOld }},
                   voucherCode: {{ json_encode(old('voucher_code', '')) }},
@@ -192,9 +206,17 @@
                           && (this.bookingMode === 'organization' || this.useBookerAsParticipant);
                   },
                   externalParticipantCount() {
+                      if (this.bookingMode === 'organization' && this.organizationsFree) {
+                          return 0;
+                      }
+
                       return Math.max(0, this.participantCount - (this.memberRateApplies() ? 1 : 0));
                   },
                   totalAmount() {
+                      if (this.bookingMode === 'organization' && this.organizationsFree) {
+                          return '0,00';
+                      }
+
                       const memberTotal = this.memberRateApplies() ? this.memberPricePerPerson : 0;
                       return (memberTotal + (this.externalParticipantCount() * this.externalPricePerPerson)).toFixed(2).replace('.', ',');
                   },
@@ -419,6 +441,11 @@
                                     @if($event->is_paid)
                                         @if($hasMemberRate)
                                             Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.$currency : 'frei' }} · Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                            @if($organizationsFree)
+                                                · Vereine frei
+                                            @endif
+                                        @elseif($organizationsFree)
+                                            Vereine frei · Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                         @else
                                             {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                         @endif

@@ -252,6 +252,140 @@ test('event bookings can be submitted as organization without participant counte
         ->and($booking->participants->first()->organization_name)->toBe('Musterverein e.V.');
 });
 
+test('event booking form can use formal address tone for public copy', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Sie Verein',
+        'slug' => 'sie-verein',
+        'email' => 'sie@example.test',
+    ]);
+
+    $eventManager = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_EVENT_MANAGER,
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Braukurs',
+        'location' => 'Vereinsheim',
+        'start' => now()->addWeek()->setTime(18, 0),
+        'end' => now()->addWeek()->setTime(21, 0),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 70,
+        'member_price_per_person' => 0,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 4,
+        'created_by' => $eventManager->id,
+        'updated_by' => $eventManager->id,
+    ]);
+
+    $this->actingAs($eventManager)->put(route('events.update', $event), [
+        'title' => 'Braukurs',
+        'description' => 'Brauen wie vor 350 Jahren',
+        'location' => 'Vereinsheim',
+        'start' => $event->start->toDateTimeString(),
+        'end' => $event->end->toDateTimeString(),
+        'is_public' => 1,
+        'booking_enabled' => 1,
+        'price_per_person' => 70,
+        'member_price_per_person' => 0,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 4,
+        'booking_address_tone' => 'sie',
+    ])->assertRedirect(route('events.edit', $event));
+
+    $form = PublicForm::query()
+        ->where('event_id', $event->id)
+        ->where('form_type', 'event')
+        ->firstOrFail();
+
+    expect($form->booking_address_tone)->toBe('sie')
+        ->and($form->description)->toContain('Melden Sie sich hier verbindlich zur Veranstaltung an.')
+        ->and($form->description)->toContain('Für Mitglieder ist die Teilnahme kostenlos.')
+        ->and($form->description)->toContain('Für Gäste und Nichtmitglieder kostet die Teilnahme 70,00 €.')
+        ->and($form->description)->toContain('Nach der Buchung erhalten Sie automatisch eine Rechnung per E-Mail, wenn eine Zahlung fällig ist.')
+        ->and($form->success_message)->toContain('Danke für Ihre Anmeldung.');
+});
+
+test('event bookings can make external organization registrations free without membership claim', function () {
+    Mail::fake();
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Gastverein',
+        'slug' => 'gastverein',
+        'email' => 'gastverein@example.test',
+    ]);
+
+    $eventManager = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_EVENT_MANAGER,
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Netzwerkabend',
+        'location' => 'Forum',
+        'start' => now()->addWeek()->setTime(19, 0),
+        'end' => now()->addWeek()->setTime(21, 0),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 70,
+        'member_price_per_person' => 0,
+        'organization_bookings_free' => true,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 10,
+        'created_by' => $eventManager->id,
+        'updated_by' => $eventManager->id,
+    ]);
+
+    $this->actingAs($eventManager)->get(route('events.edit', $event))->assertOk();
+
+    $form = PublicForm::query()
+        ->where('event_id', $event->id)
+        ->where('form_type', 'event')
+        ->firstOrFail();
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertSee('Vereine und Organisationen können kostenfrei teilnehmen.')
+        ->assertSee('Vereine kostenfrei');
+
+    $this->post(route('forms.public.submit', $form->slug), [
+        'booking_mode' => 'organization',
+        'fields' => [
+            'organization' => 'Externer Partnerverein e.V.',
+            'first_name' => 'Eva',
+            'last_name' => 'Partner',
+            'email' => 'eva@partnerverein.test',
+            'phone' => '012345',
+            'street' => 'Partnerweg 1',
+            'zip' => '12345',
+            'city' => 'Partnerstadt',
+            'country' => 'Deutschland',
+        ],
+    ])
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Danke für die Anmeldung. Die Teilnahme ist kostenfrei, daher wurde keine Rechnung versendet.');
+
+    $booking = EventBooking::query()
+        ->where('event_id', $event->id)
+        ->with('participants')
+        ->firstOrFail();
+
+    expect($booking->booker_name)->toBe('Externer Partnerverein e.V.')
+        ->and($booking->payment_status)->toBe('not_required')
+        ->and((float) $booking->gross_amount)->toBe(0.0)
+        ->and($booking->invoice_id)->toBeNull()
+        ->and($booking->participants)->toHaveCount(1)
+        ->and($booking->participants->first()->participant_type)->toBe('guest')
+        ->and($booking->participants->first()->member_id)->toBeNull()
+        ->and((float) $booking->participants->first()->price_amount)->toBe(0.0);
+});
+
 test('event booking can apply member price to organization members with relaxed name matching', function () {
     Mail::fake();
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);

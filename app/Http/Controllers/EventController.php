@@ -528,8 +528,8 @@ class EventController extends Controller
         $events = $this->createEventsFromSeries($baseData, $request->boolean('recurrence_enabled'), $validated['recurrence_frequency'] ?? null, $validated['recurrence_until'] ?? null);
         $event = $events->first();
 
-        $events->each(function (Event $seriesEvent) {
-            $this->syncBookingForm($seriesEvent);
+        $events->each(function (Event $seriesEvent) use ($validated) {
+            $this->syncBookingForm($seriesEvent, $validated['booking_address_tone'] ?? null);
             $this->logEventChange($seriesEvent, 'created', null, $seriesEvent->fresh()->toArray(), 'Termin angelegt');
         });
 
@@ -553,6 +553,7 @@ class EventController extends Controller
             'target_tag_id' => ['nullable', Rule::exists('tags', 'id')->where('tenant_id', $tenantId)],
             'is_public'   => 'required|boolean',
             'booking_enabled' => 'nullable|boolean',
+            'organization_bookings_free' => 'nullable|boolean',
             'attendance_enabled' => 'nullable|boolean',
             'response_required' => 'nullable|boolean',
             'counts_toward_required_hours' => 'nullable|boolean',
@@ -561,6 +562,7 @@ class EventController extends Controller
             'member_price_per_person' => 'nullable|numeric|min:0',
             'currency' => 'nullable|string|size:3',
             'max_participants_per_booking' => 'nullable|integer|min:1|max:50',
+            'booking_address_tone' => ['nullable', Rule::in(['du', 'sie'])],
             'image'       => 'nullable|image|max:5120',
         ];
     }
@@ -578,6 +580,7 @@ class EventController extends Controller
             'end'         => $validated['end'],
             'is_public'   => (bool) $validated['is_public'],
             'booking_enabled' => $request->boolean('booking_enabled'),
+            'organization_bookings_free' => $request->boolean('booking_enabled') && $request->boolean('organization_bookings_free'),
             'attendance_enabled' => $request->boolean('attendance_enabled'),
             'response_required' => $request->boolean('response_required'),
             'counts_toward_required_hours' => $request->boolean('counts_toward_required_hours'),
@@ -729,7 +732,7 @@ class EventController extends Controller
             'updated_by' => Auth::id(),
         ]);
 
-        $this->syncBookingForm($event);
+        $this->syncBookingForm($event, $validated['booking_address_tone'] ?? null);
         $this->logEventChange($event, 'updated', $before, $event->fresh()->toArray(), $this->buildUpdateSummary($before, $event->fresh()->toArray()));
 
         return redirect()->route('events.edit', $event)->with('success', 'Event aktualisiert.');
@@ -1732,6 +1735,11 @@ class EventController extends Controller
 
         $participants = $this->manualParticipantPayloads($validated);
         $defaultPriceAmount = $event->priceForParticipantType($validated['participant_type']);
+        if (($validated['participant_type'] ?? null) === 'guest'
+            && ($validated['guest_mode'] ?? 'person') === 'organization'
+            && $event->organization_bookings_free) {
+            $defaultPriceAmount = 0;
+        }
         $paymentRequired = $request->has('payment_required')
             ? $request->boolean('payment_required')
             : (($validated['payment_status'] ?? null) !== 'not_required' && $defaultPriceAmount > 0);
@@ -2111,7 +2119,7 @@ class EventController extends Controller
         );
     }
 
-    private function syncBookingForm(Event $event): void
+    private function syncBookingForm(Event $event, ?string $addressTone = null): void
     {
         $existingForms = PublicForm::query()
             ->where('tenant_id', $event->tenant_id)
@@ -2124,6 +2132,9 @@ class EventController extends Controller
         }
 
         $form = $existingForms->first();
+        $addressTone = in_array($addressTone, ['du', 'sie'], true)
+            ? $addressTone
+            : ($form?->booking_address_tone ?: 'du');
 
         $slugBase = Str::slug($event->title ?: 'event-buchung');
         $slug = 'event-' . $event->id . '-' . $slugBase;
@@ -2137,6 +2148,7 @@ class EventController extends Controller
                 'description' => 'Melde dich hier verbindlich zur Veranstaltung an.',
                 'form_type' => 'event',
                 'success_message' => 'Danke fuer deine Anmeldung. Wir haben deinen Platz vorgemerkt.',
+                'booking_address_tone' => $addressTone,
                 'is_active' => true,
             ]);
         } else {
@@ -2149,10 +2161,9 @@ class EventController extends Controller
         }
 
         $form->update([
-            'description' => $this->eventBookingDescription($event),
-            'success_message' => $event->is_paid
-                ? 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt und prüfen, ob eine Zahlung fällig ist.'
-                : 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt.',
+            'description' => $this->eventBookingDescription($event, $addressTone),
+            'success_message' => $this->eventBookingSuccessMessage($event, $addressTone),
+            'booking_address_tone' => $addressTone,
         ]);
 
         $existingFields = $form->fields()->get()->keyBy('slug');
@@ -2732,9 +2743,12 @@ class EventController extends Controller
         return $members;
     }
 
-    private function eventBookingDescription(Event $event): string
+    private function eventBookingDescription(Event $event, string $addressTone = 'du'): string
     {
-        $base = 'Melde dich hier verbindlich zur Veranstaltung an.';
+        $formal = $addressTone === 'sie';
+        $base = $formal
+            ? 'Melden Sie sich hier verbindlich zur Veranstaltung an.'
+            : 'Melde dich hier verbindlich zur Veranstaltung an.';
 
         if (!$event->booking_enabled) {
             return $base;
@@ -2744,20 +2758,59 @@ class EventController extends Controller
             return $base . ' Die Teilnahme ist kostenfrei.';
         }
 
-        $currency = strtoupper($event->currency ?: 'EUR');
         $externalPrice = (float) $event->price_per_person;
         $memberPrice = (float) $event->member_price_per_person;
+        $invoiceHint = $formal
+            ? ' Nach der Buchung erhalten Sie automatisch eine Rechnung per E-Mail, wenn eine Zahlung fällig ist.'
+            : ' Nach der Buchung erhältst du automatisch eine Rechnung per E-Mail, wenn eine Zahlung fällig ist.';
 
         if ($externalPrice > 0 && $memberPrice < $externalPrice) {
+            $memberText = $memberPrice > 0
+                ? 'Für Mitglieder kostet die Teilnahme ' . $this->formatEventPriceForText($memberPrice, $event) . '.'
+                : 'Für Mitglieder ist die Teilnahme kostenlos.';
+            $organizationText = $event->organization_bookings_free
+                ? ' Vereine und Organisationen können kostenfrei teilnehmen.'
+                : '';
+
             return $base
-                . ' Mitglieder zahlen ' . ($memberPrice > 0 ? number_format($memberPrice, 2, ',', '.') . ' ' . $currency : 'nichts')
-                . ', Gaeste und Nichtmitglieder zahlen ' . number_format($externalPrice, 2, ',', '.') . ' ' . $currency
-                . '. Nach der Buchung erhaeltst du automatisch eine Rechnung per E-Mail, wenn eine Zahlung faellig ist.';
+                . ' ' . $memberText
+                . $organizationText
+                . ' Für Gäste und Nichtmitglieder kostet die Teilnahme ' . $this->formatEventPriceForText($externalPrice, $event) . '.'
+                . $invoiceHint;
+        }
+
+        if ($externalPrice > 0 && $event->organization_bookings_free) {
+            return $base
+                . ' Vereine und Organisationen können kostenfrei teilnehmen.'
+                . ' Für Gäste und Nichtmitglieder kostet die Teilnahme ' . $this->formatEventPriceForText($externalPrice, $event) . '.'
+                . $invoiceHint;
         }
 
         return $base
-            . ' Preis: ' . number_format($externalPrice, 2, ',', '.') . ' ' . $currency
-            . ' pro Person. Nach der Buchung erhaeltst du automatisch eine Rechnung per E-Mail, wenn eine Zahlung faellig ist.';
+            . ' Preis: ' . $this->formatEventPriceForText($externalPrice, $event)
+            . ' pro Person.'
+            . $invoiceHint;
+    }
+
+    private function eventBookingSuccessMessage(Event $event, string $addressTone = 'du'): string
+    {
+        if ($addressTone === 'sie') {
+            return $event->is_paid
+                ? 'Danke für Ihre Anmeldung. Wir haben Ihren Platz vorgemerkt und prüfen, ob eine Zahlung fällig ist.'
+                : 'Danke für Ihre Anmeldung. Wir haben Ihren Platz vorgemerkt.';
+        }
+
+        return $event->is_paid
+            ? 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt und prüfen, ob eine Zahlung fällig ist.'
+            : 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt.';
+    }
+
+    private function formatEventPriceForText(float $amount, Event $event): string
+    {
+        $currency = strtoupper($event->currency ?: 'EUR');
+        $suffix = $currency === 'EUR' ? '€' : $currency;
+
+        return number_format($amount, 2, ',', '.') . ' ' . $suffix;
     }
 
     private function attachConflictState($events)

@@ -71,10 +71,15 @@
         guestMode: 'person',
         externalPrice: {{ json_encode((float) ($event->price_per_person ?? 0)) }},
         memberPrice: {{ json_encode((float) ($event->member_price_per_person ?? 0)) }},
+        organizationsFree: {{ ($event->organization_bookings_free ?? false) ? 'true' : 'false' }},
         paymentRequired: false,
         priceAmount: 0,
         paymentStatus: 'not_required',
         defaultPrice() {
+            if (this.type === 'guest' && this.guestMode === 'organization' && this.organizationsFree) {
+                return 0;
+            }
+
             return this.type === 'member' ? this.memberPrice : this.externalPrice;
         },
         syncPayment() {
@@ -190,14 +195,20 @@
                 <div x-show="type === 'guest'" class="space-y-3">
                     <div class="grid gap-2 sm:grid-cols-2">
                         <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
-                            <input type="radio" name="guest_mode" value="person" x-model="guestMode" class="border-slate-300 text-slate-950 focus:ring-slate-400">
+                            <input type="radio" name="guest_mode" value="person" x-model="guestMode" @change="syncPayment()" class="border-slate-300 text-slate-950 focus:ring-slate-400">
                             Person
                         </label>
                         <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
-                            <input type="radio" name="guest_mode" value="organization" x-model="guestMode" class="border-slate-300 text-slate-950 focus:ring-slate-400">
+                            <input type="radio" name="guest_mode" value="organization" x-model="guestMode" @change="syncPayment()" class="border-slate-300 text-slate-950 focus:ring-slate-400">
                             Firma oder Organisation
                         </label>
                     </div>
+
+                    @if($event->organization_bookings_free)
+                        <div x-show="guestMode === 'organization'" x-cloak class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
+                            Für Vereine und Organisationen ist diese Anmeldung kostenfrei voreingestellt.
+                        </div>
+                    @endif
 
                     <div x-show="guestMode === 'person'" class="grid gap-3 sm:grid-cols-2">
                         <div>

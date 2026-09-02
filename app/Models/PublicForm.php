@@ -19,6 +19,7 @@ class PublicForm extends Model
         'description',
         'form_type',
         'success_message',
+        'booking_address_tone',
         'confirmation_mail_enabled',
         'confirmation_mail_subject',
         'confirmation_mail_body',

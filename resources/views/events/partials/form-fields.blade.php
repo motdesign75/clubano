@@ -1,6 +1,8 @@
 @php
     $isPublic = (int) old('is_public', $event->is_public ?? 1);
     $bookingEnabled = (bool) old('booking_enabled', $event->booking_enabled ?? false);
+    $bookingForm = $event->activeBookingForm ?? null;
+    $bookingAddressTone = old('booking_address_tone', $bookingForm?->booking_address_tone ?? 'du');
     $isEditingEvent = $event->exists;
     $recurrenceEnabled = (bool) old('recurrence_enabled', false);
     $categoryProfiles = ($categories ?? collect())->mapWithKeys(fn ($category) => [
@@ -247,6 +249,16 @@
 
             <div class="mt-5 grid gap-4">
                 <div>
+                    <label for="booking_address_tone" class="text-sm font-semibold text-slate-900">Ansprache im Anmeldeformular</label>
+                    <select name="booking_address_tone" id="booking_address_tone"
+                            class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                        <option value="du" @selected($bookingAddressTone === 'du')>Du-Ansprache</option>
+                        <option value="sie" @selected($bookingAddressTone === 'sie')>Sie-Ansprache</option>
+                    </select>
+                    <p class="mt-1 text-xs leading-5 text-slate-500">Für öffentliche Anmeldungen mit Gästen, Firmen oder anderen Vereinen wirkt die Sie-Ansprache oft passender.</p>
+                </div>
+
+                <div>
                     <label for="price_per_person" class="text-sm font-semibold text-slate-900">Preis für Gäste / Nichtmitglieder</label>
                     <input type="number" step="0.01" min="0" name="price_per_person" id="price_per_person"
                            value="{{ old('price_per_person', number_format((float) ($event->price_per_person ?? 0), 2, '.', '')) }}"
@@ -261,6 +273,14 @@
                            class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
                     <p class="mt-1 text-xs text-slate-500">0,00 bedeutet: Mitglieder nehmen kostenfrei teil.</p>
                 </div>
+
+                <label class="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <input type="checkbox" name="organization_bookings_free" value="1" class="mt-1 rounded border-emerald-300 text-emerald-700" @checked(old('organization_bookings_free', $event->organization_bookings_free ?? false))>
+                    <span>
+                        <span class="block text-sm font-semibold text-emerald-950">Vereine und Organisationen kostenfrei</span>
+                        <span class="mt-1 block text-sm text-emerald-700">Gilt für Anmeldungen als Unternehmen, Organisation oder Verein, auch ohne Mitgliedschaft.</span>
+                    </span>
+                </label>
 
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
                     <div>

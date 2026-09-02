@@ -742,8 +742,8 @@ class PublicFormController extends Controller
 
                 $participantCount = max(1, $participantRows->count());
                 $participantRows = $participantRows
-                    ->map(function (array $participant) use ($form) {
-                        $priceAmount = $form->event->priceForParticipantType($participant['participant_type'] ?? 'guest');
+                    ->map(function (array $participant) use ($form, $bookingMode) {
+                        $priceAmount = $form->event->priceForPublicBookingParticipant($participant, $bookingMode);
 
                         return $participant + [
                             'price_amount' => $priceAmount,
@@ -1566,19 +1566,29 @@ class PublicFormController extends Controller
             return $form->success_message ?: 'Vielen Dank. Das Formular wurde erfolgreich gesendet.';
         }
 
+        $formal = ($form->booking_address_tone ?? 'du') === 'sie';
+
         if ($booking->invoice) {
-            return 'Danke für die Anmeldung. Die Rechnung mit der Bitte um Überweisung wurde per E-Mail versendet.';
+            return $formal
+                ? 'Danke für Ihre Anmeldung. Die Rechnung mit der Bitte um Überweisung wurde per E-Mail versendet.'
+                : 'Danke für die Anmeldung. Die Rechnung mit der Bitte um Überweisung wurde per E-Mail versendet.';
         }
 
         if ((float) $booking->gross_amount > 0 && (float) $booking->total_amount <= 0) {
-            return 'Danke für die Anmeldung. Es ist kein offener Betrag mehr vorhanden, daher wurde keine Rechnung versendet.';
+            return $formal
+                ? 'Danke für Ihre Anmeldung. Es ist kein offener Betrag mehr vorhanden, daher wurde keine Rechnung versendet.'
+                : 'Danke für die Anmeldung. Es ist kein offener Betrag mehr vorhanden, daher wurde keine Rechnung versendet.';
         }
 
         if ((float) $booking->gross_amount <= 0) {
-            return 'Danke für die Anmeldung. Die Teilnahme ist kostenfrei, daher wurde keine Rechnung versendet.';
+            return $formal
+                ? 'Danke für Ihre Anmeldung. Die Teilnahme ist kostenfrei, daher wurde keine Rechnung versendet.'
+                : 'Danke für die Anmeldung. Die Teilnahme ist kostenfrei, daher wurde keine Rechnung versendet.';
         }
 
-        return $form->success_message ?: 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt.';
+        return $form->success_message ?: ($formal
+            ? 'Danke für Ihre Anmeldung. Wir haben Ihren Platz vorgemerkt.'
+            : 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt.');
     }
 
     private function seedStarterFields(PublicForm $form): void

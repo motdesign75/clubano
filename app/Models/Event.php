@@ -24,6 +24,7 @@ class Event extends Model
         'reminders_enabled',
         'price_per_person',
         'member_price_per_person',
+        'organization_bookings_free',
         'currency',
         'max_participants_per_booking',
         'image_path',
@@ -50,6 +51,7 @@ class Event extends Model
         'reminders_enabled' => 'boolean',
         'price_per_person' => 'decimal:2',
         'member_price_per_person' => 'decimal:2',
+        'organization_bookings_free' => 'boolean',
         'max_participants_per_booking' => 'integer',
         'recurrence_interval' => 'integer',
         'recurrence_until' => 'date',
@@ -174,11 +176,16 @@ class Event extends Model
 
         $prices = collect([
             (float) $this->member_price_per_person,
+            $this->organization_bookings_free ? 0.0 : null,
             (float) $this->price_per_person,
-        ])->filter(fn (float $price) => $price > 0);
+        ])->filter(fn ($price) => $price !== null);
 
         if ($prices->isEmpty()) {
             return 'Kostenlos';
+        }
+
+        if ((float) $prices->min() <= 0 && (float) $prices->max() > 0) {
+            return 'Teilweise kostenlos';
         }
 
         return 'Ab ' . number_format($prices->min(), 2, ',', '.') . ' ' . strtoupper($this->currency ?: 'EUR');
@@ -187,6 +194,15 @@ class Event extends Model
     public function priceForParticipantType(string $participantType): float
     {
         return round((float) ($participantType === 'member' ? $this->member_price_per_person : $this->price_per_person), 2);
+    }
+
+    public function priceForPublicBookingParticipant(array $participant, string $bookingMode): float
+    {
+        if ($bookingMode === 'organization' && $this->organization_bookings_free) {
+            return 0.0;
+        }
+
+        return $this->priceForParticipantType($participant['participant_type'] ?? 'guest');
     }
 
     public function getMonthGroupLabelAttribute(): string
