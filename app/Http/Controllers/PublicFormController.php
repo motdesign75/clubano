@@ -613,6 +613,7 @@ class PublicFormController extends Controller
             $rules['booking_mode'] = ['nullable', ValidationRule::in(['person', 'organization'])];
             if ($bookingMode === 'organization') {
                 $rules['fields.organization'] = ['required', 'string', 'max:255'];
+                $rules['organization_booking_type'] = ['required', ValidationRule::in(['club', 'business', 'organization'])];
             }
             $rules['participant_count'] = [$bookingMode === 'organization' ? 'nullable' : 'required', 'integer', 'min:1', 'max:' . $maxParticipants];
             $rules['participant_notes'] = ['nullable', 'string'];
@@ -652,6 +653,7 @@ class PublicFormController extends Controller
             $answers['voucher_code'] = filled($validated['voucher_code'] ?? null) ? Voucher::normalizeCode($validated['voucher_code']) : null;
             $answers['use_booker_as_participant'] = $bookingMode === 'organization' ? true : (bool) ($validated['use_booker_as_participant'] ?? false);
             $answers['booking_claims_membership'] = (bool) ($validated['booking_claims_membership'] ?? false);
+            $answers['organization_booking_type'] = $bookingMode === 'organization' ? ($validated['organization_booking_type'] ?? null) : null;
         }
 
         $bookerMember = null;
@@ -704,6 +706,7 @@ class PublicFormController extends Controller
                         'phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
                         'participant_type' => $bookerMember ? 'member' : 'guest',
                         'member_id' => $bookerMember?->id,
+                        'organization_booking_type' => $answers['organization_booking_type'] ?? null,
                     ]]);
                 } elseif ($useBookerAsParticipant) {
                     $participantRows = collect([[
@@ -726,8 +729,9 @@ class PublicFormController extends Controller
                             'email' => filled($participant['email'] ?? null) ? trim((string) $participant['email']) : null,
                             'phone' => filled($participant['phone'] ?? null) ? trim((string) $participant['phone']) : null,
                             'participant_type' => $participant['participant_type'] ?? 'guest',
-                            'member_id' => $participant['member_id'] ?? null,
-                        ];
+                        'member_id' => $participant['member_id'] ?? null,
+                        'organization_booking_type' => $participant['organization_booking_type'] ?? null,
+                    ];
                     })
                     ->filter(fn ($participant) => $participant['organization_name'] !== '' || $participant['first_name'] !== '' || $participant['last_name'] !== '')
                     ->values();
@@ -827,7 +831,9 @@ class PublicFormController extends Controller
                         'voucher_discount_amount' => $participantVoucherShare,
                         'payment_status' => $participantPaymentStatus,
                         'source' => 'online',
-                        'answers' => [],
+                        'answers' => array_filter([
+                            'organization_booking_type' => $participant['organization_booking_type'] ?? null,
+                        ]),
                     ]);
                 }
 

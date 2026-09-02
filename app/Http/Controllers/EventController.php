@@ -1710,6 +1710,11 @@ class EventController extends Controller
             'contact_ids' => ['required_if:participant_type,contact', 'nullable', 'array', 'min:1'],
             'contact_ids.*' => ['integer', Rule::exists('contacts', 'id')->where('tenant_id', $tenantId)],
             'guest_mode' => ['nullable', Rule::in(['person', 'organization'])],
+            'organization_booking_type' => [
+                Rule::requiredIf(fn () => $request->input('participant_type') === 'guest' && $request->input('guest_mode', 'person') === 'organization'),
+                'nullable',
+                Rule::in(['club', 'business', 'organization']),
+            ],
             'organization_name' => [
                 Rule::requiredIf(fn () => $request->input('participant_type') === 'guest' && $request->input('guest_mode', 'person') === 'organization'),
                 'nullable',
@@ -1737,6 +1742,7 @@ class EventController extends Controller
         $defaultPriceAmount = $event->priceForParticipantType($validated['participant_type']);
         if (($validated['participant_type'] ?? null) === 'guest'
             && ($validated['guest_mode'] ?? 'person') === 'organization'
+            && ($validated['organization_booking_type'] ?? null) === 'club'
             && $event->organization_bookings_free) {
             $defaultPriceAmount = 0;
         }
@@ -1782,6 +1788,9 @@ class EventController extends Controller
                 'payment_reason' => $validated['payment_reason'] ?? null,
                 'source' => $validated['source'],
                 'note' => $validated['note'] ?? null,
+                'answers' => array_filter([
+                    'organization_booking_type' => $validated['organization_booking_type'] ?? null,
+                ]),
             ]));
         });
 
@@ -2769,7 +2778,7 @@ class EventController extends Controller
                 ? 'Für Mitglieder kostet die Teilnahme ' . $this->formatEventPriceForText($memberPrice, $event) . '.'
                 : 'Für Mitglieder ist die Teilnahme kostenlos.';
             $organizationText = $event->organization_bookings_free
-                ? ' Vereine und Organisationen können kostenfrei teilnehmen.'
+                ? ' Externe Vereine können kostenfrei teilnehmen.'
                 : '';
 
             return $base
@@ -2781,8 +2790,8 @@ class EventController extends Controller
 
         if ($externalPrice > 0 && $event->organization_bookings_free) {
             return $base
-                . ' Vereine und Organisationen können kostenfrei teilnehmen.'
-                . ' Für Gäste und Nichtmitglieder kostet die Teilnahme ' . $this->formatEventPriceForText($externalPrice, $event) . '.'
+                . ' Externe Vereine können kostenfrei teilnehmen.'
+                . ' Firmen, Unternehmen, sonstige Organisationen, Gäste und Nichtmitglieder zahlen ' . $this->formatEventPriceForText($externalPrice, $event) . '.'
                 . $invoiceHint;
         }
 

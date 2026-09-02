@@ -6,7 +6,7 @@
         $externalPrice = (float) ($event?->price_per_person ?? 0);
         $memberPrice = (float) ($event?->member_price_per_person ?? 0);
         $hasMemberRate = $isEventBooking && $externalPrice > 0 && $memberPrice < $externalPrice;
-        $organizationsFree = $isEventBooking && (bool) ($event?->organization_bookings_free ?? false);
+        $clubBookingsFree = $isEventBooking && (bool) ($event?->organization_bookings_free ?? false);
         $tenant = $form->tenant;
         $tenantLogoUrl = $tenant?->logo_url;
         $participantCountOld = max(1, min((int) old('participant_count', 1), max(1, (int) ($event?->max_participants_per_booking ?: 1))));
@@ -80,7 +80,7 @@
                                 <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
                                     Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.$currency : 'kostenfrei' }}
                                 </span>
-                                @if($organizationsFree)
+                                @if($clubBookingsFree)
                                     <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
                                         Vereine kostenfrei
                                     </span>
@@ -88,7 +88,7 @@
                                 <span class="rounded-full bg-white px-3 py-1 font-semibold text-slate-800">
                                     Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                 </span>
-                            @elseif($organizationsFree)
+                            @elseif($clubBookingsFree)
                                 <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
                                     Vereine kostenfrei
                                 </span>
@@ -148,7 +148,8 @@
                   externalPricePerPerson: {{ json_encode($externalPrice) }},
                   memberPricePerPerson: {{ json_encode($memberPrice) }},
                   hasMemberRate: {{ $hasMemberRate ? 'true' : 'false' }},
-                  organizationsFree: {{ $organizationsFree ? 'true' : 'false' }},
+                  clubBookingsFree: {{ $clubBookingsFree ? 'true' : 'false' }},
+                  organizationBookingType: {{ json_encode(old('organization_booking_type', '')) }},
                   maxParticipants: {{ max(1, (int) ($event->max_participants_per_booking ?: 1)) }},
                   participantCount: {{ $participantCountOld }},
                   voucherCode: {{ json_encode(old('voucher_code', '')) }},
@@ -206,14 +207,14 @@
                           && (this.bookingMode === 'organization' || this.useBookerAsParticipant);
                   },
                   externalParticipantCount() {
-                      if (this.bookingMode === 'organization' && this.organizationsFree) {
+                      if (this.bookingMode === 'organization' && this.clubBookingsFree && this.organizationBookingType === 'club') {
                           return 0;
                       }
 
                       return Math.max(0, this.participantCount - (this.memberRateApplies() ? 1 : 0));
                   },
                   totalAmount() {
-                      if (this.bookingMode === 'organization' && this.organizationsFree) {
+                      if (this.bookingMode === 'organization' && this.clubBookingsFree && this.organizationBookingType === 'club') {
                           return '0,00';
                       }
 
@@ -290,7 +291,7 @@
                                 @click="switchBookingMode('organization')"
                                 :class="bookingMode === 'organization' ? 'border-indigo-600 bg-indigo-50 text-indigo-950' : 'border-slate-200 bg-white text-slate-700'"
                                 class="min-h-16 rounded-2xl border px-4 py-3 text-left shadow-sm">
-                            <span class="block text-sm font-semibold">Organisation oder Verein anmelden</span>
+                            <span class="block text-sm font-semibold">Firma, Organisation oder Verein anmelden</span>
                             <span class="mt-1 block text-xs leading-5 opacity-75">Für Unternehmen, Vereine, Sponsoren oder Gruppen als Einheit.</span>
                         </button>
                     </div>
@@ -311,6 +312,29 @@
                         @if($field->help_text)
                             <div class="mt-1 text-sm leading-6 text-gray-500">{!! $field->rendered_help_text !!}</div>
                         @endif
+
+                        <div class="mt-4">
+                            <label for="organization_booking_type" class="block text-sm font-semibold text-slate-700">
+                                Art der Anmeldung <span class="text-red-500">*</span>
+                            </label>
+                            <select id="organization_booking_type"
+                                    name="organization_booking_type"
+                                    x-model="organizationBookingType"
+                                    class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
+                                <option value="">Bitte wählen</option>
+                                <option value="club">Verein</option>
+                                <option value="business">Firma / Unternehmen</option>
+                                <option value="organization">Sonstige Organisation</option>
+                            </select>
+                            @if($clubBookingsFree)
+                                <p class="mt-2 text-sm leading-6 text-slate-500">
+                                    Kostenfrei gilt nur bei Auswahl „Verein“. Firmen, Unternehmen und sonstige Organisationen zahlen den Gästepreis.
+                                </p>
+                            @endif
+                            @error('organization_booking_type')
+                                <p class="mt-2 text-sm text-rose-700">{{ $message }}</p>
+                            @enderror
+                        </div>
                     </div>
                 </div>
 
@@ -441,11 +465,11 @@
                                     @if($event->is_paid)
                                         @if($hasMemberRate)
                                             Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.$currency : 'frei' }} · Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
-                                            @if($organizationsFree)
+                                            @if($clubBookingsFree)
                                                 · Vereine frei
                                             @endif
-                                        @elseif($organizationsFree)
-                                            Vereine frei · Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                        @elseif($clubBookingsFree)
+                                            Vereine frei · Firmen, Organisationen und Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                         @else
                                             {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                         @endif

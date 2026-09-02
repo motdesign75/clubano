@@ -277,8 +277,8 @@
                 <label class="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
                     <input type="checkbox" name="organization_bookings_free" value="1" class="mt-1 rounded border-emerald-300 text-emerald-700" @checked(old('organization_bookings_free', $event->organization_bookings_free ?? false))>
                     <span>
-                        <span class="block text-sm font-semibold text-emerald-950">Vereine und Organisationen kostenfrei</span>
-                        <span class="mt-1 block text-sm text-emerald-700">Gilt für Anmeldungen als Unternehmen, Organisation oder Verein, auch ohne Mitgliedschaft.</span>
+                        <span class="block text-sm font-semibold text-emerald-950">Vereine kostenfrei</span>
+                        <span class="mt-1 block text-sm text-emerald-700">Gilt nur für externe Vereine. Firmen, Unternehmen und sonstige Organisationen zahlen weiterhin den Gästepreis.</span>
                     </span>
                 </label>
 

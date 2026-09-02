@@ -198,7 +198,9 @@ class Event extends Model
 
     public function priceForPublicBookingParticipant(array $participant, string $bookingMode): float
     {
-        if ($bookingMode === 'organization' && $this->organization_bookings_free) {
+        if ($bookingMode === 'organization'
+            && $this->organization_bookings_free
+            && ($participant['organization_booking_type'] ?? null) === 'club') {
             return 0.0;
         }
 

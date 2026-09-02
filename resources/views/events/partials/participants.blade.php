@@ -69,14 +69,18 @@
         type: 'member',
         listDisplay: 'person',
         guestMode: 'person',
+        organizationBookingType: '',
         externalPrice: {{ json_encode((float) ($event->price_per_person ?? 0)) }},
         memberPrice: {{ json_encode((float) ($event->member_price_per_person ?? 0)) }},
-        organizationsFree: {{ ($event->organization_bookings_free ?? false) ? 'true' : 'false' }},
+        clubBookingsFree: {{ ($event->organization_bookings_free ?? false) ? 'true' : 'false' }},
         paymentRequired: false,
         priceAmount: 0,
         paymentStatus: 'not_required',
         defaultPrice() {
-            if (this.type === 'guest' && this.guestMode === 'organization' && this.organizationsFree) {
+            if (this.type === 'guest'
+                && this.guestMode === 'organization'
+                && this.organizationBookingType === 'club'
+                && this.clubBookingsFree) {
                 return 0;
             }
 
@@ -206,7 +210,7 @@
 
                     @if($event->organization_bookings_free)
                         <div x-show="guestMode === 'organization'" x-cloak class="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
-                            Für Vereine und Organisationen ist diese Anmeldung kostenfrei voreingestellt.
+                            Kostenfrei wird nur vorgeschlagen, wenn unten „Verein“ gewählt ist.
                         </div>
                     @endif
 
@@ -224,6 +228,19 @@
                     <div x-show="guestMode === 'organization'">
                         <label class="mb-1 block text-sm font-medium text-slate-600">Firma oder Organisation</label>
                         <input type="text" name="organization_name" placeholder="z. B. Muster GmbH, Förderverein, Gastverein" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                    </div>
+
+                    <div x-show="guestMode === 'organization'">
+                        <label class="mb-1 block text-sm font-medium text-slate-600">Art der Anmeldung</label>
+                        <select name="organization_booking_type" x-model="organizationBookingType" @change="syncPayment()" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                            <option value="">Bitte wählen</option>
+                            <option value="club">Verein</option>
+                            <option value="business">Firma / Unternehmen</option>
+                            <option value="organization">Sonstige Organisation</option>
+                        </select>
+                        @if($event->organization_bookings_free)
+                            <p class="mt-1 text-xs leading-5 text-slate-500">Nur Vereine werden kostenfrei vorgeschlagen. Firmen und sonstige Organisationen zahlen den Gästepreis.</p>
+                        @endif
                     </div>
                 </div>
 

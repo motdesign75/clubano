@@ -221,6 +221,7 @@ test('event bookings can be submitted as organization without participant counte
 
     $this->post(route('forms.public.submit', $form->slug), [
         'booking_mode' => 'organization',
+        'organization_booking_type' => 'club',
         'fields' => [
             'organization' => 'Musterverein e.V.',
             'first_name' => 'Max',
@@ -310,7 +311,7 @@ test('event booking form can use formal address tone for public copy', function 
         ->and($form->success_message)->toContain('Danke für Ihre Anmeldung.');
 });
 
-test('event bookings can make external organization registrations free without membership claim', function () {
+test('event bookings can make external club registrations free without making businesses free', function () {
     Mail::fake();
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
@@ -351,11 +352,12 @@ test('event bookings can make external organization registrations free without m
 
     $this->get(route('forms.public.show', $form->slug))
         ->assertOk()
-        ->assertSee('Vereine und Organisationen können kostenfrei teilnehmen.')
+        ->assertSee('Externe Vereine können kostenfrei teilnehmen.')
         ->assertSee('Vereine kostenfrei');
 
     $this->post(route('forms.public.submit', $form->slug), [
         'booking_mode' => 'organization',
+        'organization_booking_type' => 'club',
         'fields' => [
             'organization' => 'Externer Partnerverein e.V.',
             'first_name' => 'Eva',
@@ -384,6 +386,33 @@ test('event bookings can make external organization registrations free without m
         ->and($booking->participants->first()->participant_type)->toBe('guest')
         ->and($booking->participants->first()->member_id)->toBeNull()
         ->and((float) $booking->participants->first()->price_amount)->toBe(0.0);
+
+    $this->post(route('forms.public.submit', $form->slug), [
+        'booking_mode' => 'organization',
+        'organization_booking_type' => 'business',
+        'fields' => [
+            'organization' => 'Muster GmbH',
+            'first_name' => 'Berta',
+            'last_name' => 'Business',
+            'email' => 'berta@muster-gmbh.test',
+            'phone' => '012345',
+            'street' => 'Firmenweg 1',
+            'zip' => '12345',
+            'city' => 'Firmenstadt',
+            'country' => 'Deutschland',
+        ],
+    ])->assertRedirect();
+
+    $businessBooking = EventBooking::query()
+        ->where('event_id', $event->id)
+        ->where('booker_name', 'Muster GmbH')
+        ->with('participants')
+        ->firstOrFail();
+
+    expect($businessBooking->payment_status)->toBe('open')
+        ->and((float) $businessBooking->gross_amount)->toBe(70.0)
+        ->and($businessBooking->invoice_id)->not->toBeNull()
+        ->and((float) $businessBooking->participants->first()->price_amount)->toBe(70.0);
 });
 
 test('event booking can apply member price to organization members with relaxed name matching', function () {
@@ -454,6 +483,7 @@ test('event booking can apply member price to organization members with relaxed 
 
     $response = $this->post(route('forms.public.submit', $form->slug), [
         'booking_mode' => 'organization',
+        'organization_booking_type' => 'organization',
         'booking_claims_membership' => 1,
         'fields' => [
             'organization' => 'Stadtmarketing Musterstadt',
@@ -743,6 +773,7 @@ test('staff can manually add event participants from members contacts and guests
     $this->actingAs($staff)->post(route('events.manual-participants.store', $event), [
         'participant_type' => 'guest',
         'guest_mode' => 'organization',
+        'organization_booking_type' => 'club',
         'organization_name' => 'Gastverein Demostadt',
         'payment_status' => 'not_required',
         'source' => 'manual',
