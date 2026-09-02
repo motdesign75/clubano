@@ -664,21 +664,11 @@ class PublicFormController extends Controller
                 ]);
             }
 
-            $claimedValue = $bookingMode === 'organization'
-                ? trim((string) ($answers['organization'] ?? ''))
-                : trim((string) ($answers['email'] ?? ''));
-
-            $bookerMemberQuery = Member::withoutGlobalScopes()
-                ->where('tenant_id', $form->tenant_id)
-                ->whereNull('archived_at');
-
-            $bookerMember = $bookingMode === 'organization'
-                ? $bookerMemberQuery->where('organization', $claimedValue)->first()
-                : $bookerMemberQuery->where('email', $claimedValue)->first();
+            $bookerMember = $this->findMemberForPublicBookingClaim((int) $form->tenant_id, $bookingMode, $answers);
 
             if (! $bookerMember) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'booking_claims_membership' => 'Wir konnten die Mitgliedschaft mit diesen Angaben nicht prüfen. Bitte melde dich ohne Mitgliederpreis an oder kontaktiere den Verein.',
+                    'booking_claims_membership' => 'Wir konnten die Mitgliedschaft mit diesen Angaben nicht eindeutig prüfen. Bitte melde dich ohne Mitgliederpreis an oder kontaktiere den Verein.',
                 ]);
             }
         }
@@ -892,7 +882,7 @@ class PublicFormController extends Controller
 
         return redirect()
             ->route($embedded ? 'forms.public.embed' : 'forms.public.show', $form->slug)
-            ->with('success', $form->success_message ?: 'Vielen Dank. Das Formular wurde erfolgreich gesendet.');
+            ->with('success', $this->publicSubmissionSuccessMessage($form, $submission));
     }
 
     private function formViewData(PublicForm $form): array
@@ -1507,6 +1497,88 @@ class PublicFormController extends Controller
         } while (EventBooking::query()->where('booking_reference', $reference)->exists());
 
         return $reference;
+    }
+
+    private function findMemberForPublicBookingClaim(int $tenantId, string $bookingMode, array $answers): ?Member
+    {
+        $members = Member::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereNull('archived_at')
+            ->get(['id', 'first_name', 'last_name', 'organization', 'email', 'tenant_id']);
+
+        if ($bookingMode === 'organization') {
+            $claimedOrganization = $this->normalizeMembershipLookupValue((string) ($answers['organization'] ?? ''));
+
+            if ($claimedOrganization === '') {
+                return null;
+            }
+
+            return $members->first(function (Member $member) use ($claimedOrganization) {
+                return in_array($claimedOrganization, [
+                    $this->normalizeMembershipLookupValue((string) $member->organization),
+                    $this->normalizeMembershipLookupValue(trim((string) $member->first_name . ' ' . (string) $member->last_name)),
+                ], true);
+            });
+        }
+
+        $claimedEmail = Str::lower(trim((string) ($answers['email'] ?? '')));
+        if ($claimedEmail !== '') {
+            $member = $members->first(fn (Member $member) => Str::lower(trim((string) $member->email)) === $claimedEmail);
+
+            if ($member) {
+                return $member;
+            }
+        }
+
+        $claimedName = $this->normalizeMembershipLookupValue(trim((string) ($answers['first_name'] ?? '') . ' ' . (string) ($answers['last_name'] ?? '')));
+
+        if ($claimedName === '') {
+            return null;
+        }
+
+        return $members->first(function (Member $member) use ($claimedName) {
+            return in_array($claimedName, [
+                $this->normalizeMembershipLookupValue(trim((string) $member->first_name . ' ' . (string) $member->last_name)),
+                $this->normalizeMembershipLookupValue((string) $member->organization),
+            ], true);
+        });
+    }
+
+    private function normalizeMembershipLookupValue(string $value): string
+    {
+        $value = Str::of($value)
+            ->ascii()
+            ->lower()
+            ->replace('&', ' und ')
+            ->replaceMatches('/\b(eingetragener|eingetragene|verein|ev|e\s*v|e\.v|e\.v\.|gmbh|ug|ag|kg|ohg|eg)\b/u', ' ')
+            ->replaceMatches('/[^a-z0-9]+/u', ' ')
+            ->squish()
+            ->toString();
+
+        return str_replace(' ', '', $value);
+    }
+
+    private function publicSubmissionSuccessMessage(PublicForm $form, PublicFormSubmission $submission): string
+    {
+        $booking = $submission->eventBooking;
+
+        if (! $booking) {
+            return $form->success_message ?: 'Vielen Dank. Das Formular wurde erfolgreich gesendet.';
+        }
+
+        if ($booking->invoice) {
+            return 'Danke für die Anmeldung. Die Rechnung mit der Bitte um Überweisung wurde per E-Mail versendet.';
+        }
+
+        if ((float) $booking->gross_amount > 0 && (float) $booking->total_amount <= 0) {
+            return 'Danke für die Anmeldung. Es ist kein offener Betrag mehr vorhanden, daher wurde keine Rechnung versendet.';
+        }
+
+        if ((float) $booking->gross_amount <= 0) {
+            return 'Danke für die Anmeldung. Die Teilnahme ist kostenfrei, daher wurde keine Rechnung versendet.';
+        }
+
+        return $form->success_message ?: 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt.';
     }
 
     private function seedStarterFields(PublicForm $form): void

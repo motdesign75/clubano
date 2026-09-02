@@ -252,7 +252,7 @@ test('event bookings can be submitted as organization without participant counte
         ->and($booking->participants->first()->organization_name)->toBe('Musterverein e.V.');
 });
 
-test('event booking can apply member price to organization members', function () {
+test('event booking can apply member price to organization members with relaxed name matching', function () {
     Mail::fake();
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
@@ -318,11 +318,11 @@ test('event booking can apply member price to organization members', function ()
         ->assertSee('Ich / wir sind Mitglied in diesem Verein')
         ->assertSee('Mitglieder frei');
 
-    $this->post(route('forms.public.submit', $form->slug), [
+    $response = $this->post(route('forms.public.submit', $form->slug), [
         'booking_mode' => 'organization',
         'booking_claims_membership' => 1,
         'fields' => [
-            'organization' => 'Stadtmarketing Musterstadt e.V.',
+            'organization' => 'Stadtmarketing Musterstadt',
             'first_name' => 'Nina',
             'last_name' => 'Kontakt',
             'email' => 'neue-kontaktperson@stadtmarketing.test',
@@ -332,14 +332,18 @@ test('event booking can apply member price to organization members', function ()
             'city' => 'Musterstadt',
             'country' => 'Deutschland',
         ],
-    ])->assertRedirect();
+    ]);
+
+    $response
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Danke für die Anmeldung. Die Teilnahme ist kostenfrei, daher wurde keine Rechnung versendet.');
 
     $booking = EventBooking::query()
         ->where('event_id', $event->id)
         ->with('participants')
         ->firstOrFail();
 
-    expect($booking->booker_name)->toBe('Stadtmarketing Musterstadt e.V.')
+    expect($booking->booker_name)->toBe('Stadtmarketing Musterstadt')
         ->and($booking->payment_status)->toBe('not_required')
         ->and((float) $booking->gross_amount)->toBe(0.0)
         ->and($booking->invoice_id)->toBeNull()

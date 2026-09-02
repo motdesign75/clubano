@@ -2151,7 +2151,7 @@ class EventController extends Controller
         $form->update([
             'description' => $this->eventBookingDescription($event),
             'success_message' => $event->is_paid
-                ? 'Danke fuer die Anmeldung. Die Rechnung mit der Bitte um Ueberweisung wurde per E-Mail versendet.'
+                ? 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt und prüfen, ob eine Zahlung fällig ist.'
                 : 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt.',
         ]);
 
@@ -2757,7 +2757,7 @@ class EventController extends Controller
 
         return $base
             . ' Preis: ' . number_format($externalPrice, 2, ',', '.') . ' ' . $currency
-            . ' pro Person. Nach der Buchung erhaeltst du automatisch eine Rechnung per E-Mail.';
+            . ' pro Person. Nach der Buchung erhaeltst du automatisch eine Rechnung per E-Mail, wenn eine Zahlung faellig ist.';
     }
 
     private function attachConflictState($events)
