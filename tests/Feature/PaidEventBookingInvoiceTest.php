@@ -258,7 +258,7 @@ test('event booking can keep verified member free while guest participant pays',
 
     $this->get(route('forms.public.show', $form->slug))
         ->assertOk()
-        ->assertSee('Ich bin Mitglied in diesem Verein')
+        ->assertSee('Ich / wir sind Mitglied in diesem Verein')
         ->assertSee('Mitglieder frei');
 
     $this->post(route('forms.public.submit', $form->slug), [

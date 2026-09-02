@@ -651,26 +651,34 @@ class PublicFormController extends Controller
             $answers['participant_notes'] = $validated['participant_notes'] ?? null;
             $answers['voucher_code'] = filled($validated['voucher_code'] ?? null) ? Voucher::normalizeCode($validated['voucher_code']) : null;
             $answers['use_booker_as_participant'] = $bookingMode === 'organization' ? true : (bool) ($validated['use_booker_as_participant'] ?? false);
-            $answers['booking_claims_membership'] = $bookingMode === 'person' && (bool) ($validated['booking_claims_membership'] ?? false);
+            $answers['booking_claims_membership'] = (bool) ($validated['booking_claims_membership'] ?? false);
         }
 
         $bookerMember = null;
         if ($isEventBooking && ($answers['booking_claims_membership'] ?? false)) {
-            if (! ($answers['use_booker_as_participant'] ?? false)) {
+            $bookingMode = ($answers['booking_mode'] ?? 'person') === 'organization' ? 'organization' : 'person';
+
+            if ($bookingMode === 'person' && ! ($answers['use_booker_as_participant'] ?? false)) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'booking_claims_membership' => 'Der Mitgliederpreis gilt nur, wenn der Ansprechpartner selbst teilnimmt.',
+                    'booking_claims_membership' => 'Der Mitgliederpreis gilt nur für den Ansprechpartner oder die angemeldete Organisation.',
                 ]);
             }
 
-            $bookerMember = Member::withoutGlobalScopes()
+            $claimedValue = $bookingMode === 'organization'
+                ? trim((string) ($answers['organization'] ?? ''))
+                : trim((string) ($answers['email'] ?? ''));
+
+            $bookerMemberQuery = Member::withoutGlobalScopes()
                 ->where('tenant_id', $form->tenant_id)
-                ->where('email', trim((string) ($answers['email'] ?? '')))
-                ->whereNull('archived_at')
-                ->first();
+                ->whereNull('archived_at');
+
+            $bookerMember = $bookingMode === 'organization'
+                ? $bookerMemberQuery->where('organization', $claimedValue)->first()
+                : $bookerMemberQuery->where('email', $claimedValue)->first();
 
             if (! $bookerMember) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
-                    'booking_claims_membership' => 'Wir konnten die Mitgliedschaft mit dieser E-Mail-Adresse nicht prüfen. Bitte melde dich ohne Mitgliederpreis an oder kontaktiere den Verein.',
+                    'booking_claims_membership' => 'Wir konnten die Mitgliedschaft mit diesen Angaben nicht prüfen. Bitte melde dich ohne Mitgliederpreis an oder kontaktiere den Verein.',
                 ]);
             }
         }
@@ -704,8 +712,8 @@ class PublicFormController extends Controller
                         'organization_name' => trim((string) ($answers['organization'] ?? '')),
                         'email' => $answers['email'] ?? null,
                         'phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
-                        'participant_type' => 'guest',
-                        'member_id' => null,
+                        'participant_type' => $bookerMember ? 'member' : 'guest',
+                        'member_id' => $bookerMember?->id,
                     ]]);
                 } elseif ($useBookerAsParticipant) {
                     $participantRows = collect([[

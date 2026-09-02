@@ -187,10 +187,12 @@
                       this.syncParticipants();
                   },
                   memberRateApplies() {
-                      return this.hasMemberRate && this.bookingMode === 'person' && this.useBookerAsParticipant && this.bookerClaimsMembership;
+                      return this.hasMemberRate
+                          && this.bookerClaimsMembership
+                          && (this.bookingMode === 'organization' || this.useBookerAsParticipant);
                   },
                   externalParticipantCount() {
-                      return this.bookingMode === 'organization' ? 1 : Math.max(0, this.participantCount - (this.memberRateApplies() ? 1 : 0));
+                      return Math.max(0, this.participantCount - (this.memberRateApplies() ? 1 : 0));
                   },
                   totalAmount() {
                       const memberTotal = this.memberRateApplies() ? this.memberPricePerPerson : 0;
@@ -487,7 +489,7 @@
                 </div>
 
                 @if($hasMemberRate)
-                    <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4" x-show="bookingMode === 'person' && useBookerAsParticipant" x-cloak>
+                    <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4" x-show="bookingMode === 'organization' || useBookerAsParticipant" x-cloak>
                         <input type="hidden" name="booking_claims_membership" value="0">
                         <label class="flex items-start gap-3 text-sm text-emerald-950">
                             <input type="checkbox"
@@ -496,9 +498,10 @@
                                    x-model="bookerClaimsMembership"
                                    class="mt-0.5 rounded border-emerald-200 text-emerald-700 focus:ring-emerald-500">
                             <span>
-                                <span class="block font-semibold">Ich bin Mitglied in diesem Verein</span>
+                                <span class="block font-semibold">Ich / wir sind Mitglied in diesem Verein</span>
                                 <span class="mt-1 block text-emerald-900/80">
-                                    Clubano prüft die Mitgliedschaft über deine E-Mail-Adresse. Nur der Ansprechpartner erhält dann den Mitgliederpreis.
+                                    Clubano prüft die Mitgliedschaft im Verein über E-Mail-Adresse und, bei Organisationen, über den Organisationsnamen.
+                                    Der Mitgliederpreis gilt für den Ansprechpartner oder die angemeldete Organisation.
                                 </span>
                             </span>
                         </label>

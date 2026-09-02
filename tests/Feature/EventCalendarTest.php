@@ -252,6 +252,103 @@ test('event bookings can be submitted as organization without participant counte
         ->and($booking->participants->first()->organization_name)->toBe('Musterverein e.V.');
 });
 
+test('event booking can apply member price to organization members', function () {
+    Mail::fake();
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Organisationstest',
+        'slug' => 'organisationstest',
+        'email' => 'orga@example.test',
+    ]);
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'organization' => 'Stadtmarketing Musterstadt e.V.',
+        'first_name' => 'Sina',
+        'last_name' => 'Vorstand',
+        'email' => 'verein@stadtmarketing.test',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    $eventManager = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_EVENT_MANAGER,
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Unternehmertreffen',
+        'location' => 'Forum',
+        'start' => now()->addWeek()->setTime(19, 0),
+        'end' => now()->addWeek()->setTime(21, 0),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 50,
+        'member_price_per_person' => 0,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 10,
+        'created_by' => $eventManager->id,
+        'updated_by' => $eventManager->id,
+    ]);
+
+    $this->actingAs($eventManager)->get(route('events.edit', $event))->assertOk();
+
+    $form = PublicForm::query()
+        ->where('event_id', $event->id)
+        ->where('form_type', 'event')
+        ->firstOrFail();
+
+    $organizationField = PublicFormField::query()
+        ->where('public_form_id', $form->id)
+        ->where('slug', 'organization')
+        ->firstOrFail();
+
+    $this->actingAs($eventManager)->put(route('events.booking-fields.update', [$event, $organizationField]), [
+        'label' => 'Unternehmen, Organisation oder Verein',
+        'slug' => 'organization',
+        'field_type' => 'text',
+        'placeholder' => 'z. B. Musterverein e.V.',
+        'help_text' => 'Pflichtfeld fuer Organisationen.',
+        'is_required' => '1',
+    ])->assertRedirect(route('events.edit', $event) . '#anmeldefelder');
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertSee('Ich / wir sind Mitglied in diesem Verein')
+        ->assertSee('Mitglieder frei');
+
+    $this->post(route('forms.public.submit', $form->slug), [
+        'booking_mode' => 'organization',
+        'booking_claims_membership' => 1,
+        'fields' => [
+            'organization' => 'Stadtmarketing Musterstadt e.V.',
+            'first_name' => 'Nina',
+            'last_name' => 'Kontakt',
+            'email' => 'neue-kontaktperson@stadtmarketing.test',
+            'phone' => '012345',
+            'street' => 'Musterweg 1',
+            'zip' => '12345',
+            'city' => 'Musterstadt',
+            'country' => 'Deutschland',
+        ],
+    ])->assertRedirect();
+
+    $booking = EventBooking::query()
+        ->where('event_id', $event->id)
+        ->with('participants')
+        ->firstOrFail();
+
+    expect($booking->booker_name)->toBe('Stadtmarketing Musterstadt e.V.')
+        ->and($booking->payment_status)->toBe('not_required')
+        ->and((float) $booking->gross_amount)->toBe(0.0)
+        ->and($booking->invoice_id)->toBeNull()
+        ->and($booking->participants)->toHaveCount(1)
+        ->and($booking->participants->first()->participant_type)->toBe('member')
+        ->and($booking->participants->first()->member_id)->toBe($member->id)
+        ->and((float) $booking->participants->first()->price_amount)->toBe(0.0);
+});
+
 test('overlapping events are marked as conflicts in calendar index', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
