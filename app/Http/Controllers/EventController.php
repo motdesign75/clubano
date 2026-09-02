@@ -2225,6 +2225,7 @@ class EventController extends Controller
             'checkbox_group' => 'Mehrfachauswahl',
             'checkbox' => 'Checkbox',
             'email' => 'E-Mail',
+            'iban' => 'IBAN',
             'number' => 'Zahl',
             'date' => 'Datum',
         ];

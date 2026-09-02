@@ -112,6 +112,59 @@ test('forms can use headings text blocks and dividers without storing answers', 
     expect($submission->answers)->toBe(['name' => 'Max Muster']);
 });
 
+test('forms can collect and validate iban fields', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $admin] = createConversionTenant();
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Bankdaten',
+        'slug' => 'bankdaten-' . Str::random(6),
+        'form_type' => 'general',
+        'success_message' => 'ok',
+        'is_active' => true,
+    ]);
+
+    PublicFormField::create([
+        'public_form_id' => $form->id,
+        'label' => 'IBAN',
+        'slug' => 'iban',
+        'field_type' => 'iban',
+        'is_required' => true,
+        'sort_order' => 1,
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('forms.edit', $form))
+        ->assertOk()
+        ->assertSee('IBAN');
+
+    $this->from(route('forms.public.show', $form->slug))
+        ->post(route('forms.public.submit', $form->slug), [
+            'fields' => [
+                'iban' => 'DE89 3704 0044 0532 0130 01',
+            ],
+        ])
+        ->assertRedirect(route('forms.public.show', $form->slug))
+        ->assertSessionHasErrors('fields.iban');
+
+    expect(PublicFormSubmission::withoutGlobalScopes()->where('public_form_id', $form->id)->count())->toBe(0);
+
+    $this->post(route('forms.public.submit', $form->slug), [
+        'fields' => [
+            'iban' => 'DE89 3704 0044 0532 0130 00',
+        ],
+    ])->assertRedirect();
+
+    $submission = PublicFormSubmission::withoutGlobalScopes()
+        ->where('public_form_id', $form->id)
+        ->firstOrFail();
+
+    expect($submission->answers)->toBe([
+        'iban' => 'DE89370400440532013000',
+    ]);
+});
+
 test('membership form submissions stay pending until an admin converts them to members', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

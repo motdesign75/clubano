@@ -28,7 +28,7 @@ return new class extends Migration
             $table->foreignId('public_form_id')->constrained()->cascadeOnDelete();
             $table->string('label');
             $table->string('slug');
-            $table->enum('field_type', ['text', 'email', 'number', 'date', 'textarea', 'select', 'radio', 'checkbox_group', 'checkbox', 'heading', 'content', 'divider'])->default('text');
+            $table->enum('field_type', ['text', 'email', 'iban', 'number', 'date', 'textarea', 'select', 'radio', 'checkbox_group', 'checkbox', 'heading', 'content', 'divider'])->default('text');
             $table->text('help_text')->nullable();
             $table->string('placeholder')->nullable();
             $table->text('options')->nullable();

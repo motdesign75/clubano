@@ -398,6 +398,16 @@
                             {!! $field->rendered_help_text ?: \App\Models\PublicFormField::sanitizeHelpText('Ich stimme zu.') !!}
                         </div>
                     </label>
+                @elseif($field->field_type === 'iban')
+                    <input type="text"
+                           name="{{ $name }}"
+                           value="{{ $value }}"
+                           inputmode="text"
+                           autocomplete="off"
+                           autocapitalize="characters"
+                           spellcheck="false"
+                           class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 font-mono text-base uppercase tracking-wide shadow-sm focus:border-slate-900 focus:ring-slate-900/10"
+                           placeholder="{{ $field->placeholder ?: 'DE12 3456 7890 1234 5678 90' }}">
                 @else
                     <input type="{{ $field->field_type }}"
                            name="{{ $name }}"

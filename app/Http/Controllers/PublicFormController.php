@@ -579,6 +579,11 @@ class PublicFormController extends Controller
             $options = $this->parseOptions($field->options);
             $fieldRules = match ($field->field_type) {
                 'email' => ['nullable', 'email'],
+                'iban' => ['nullable', 'string', 'max:48', function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (filled($value) && !$this->isValidIban((string) $value)) {
+                        $fail('Bitte gib eine gültige IBAN ein.');
+                    }
+                }],
                 'number' => ['nullable', 'numeric'],
                 'date' => ['nullable', 'date'],
                 'checkbox' => ['nullable', 'boolean'],
@@ -641,6 +646,8 @@ class PublicFormController extends Controller
                     ->filter(fn ($item) => filled($item))
                     ->values()
                     ->all();
+            } elseif ($field->field_type === 'iban') {
+                $value = $this->normalizeIban($value);
             }
 
             return [$field->slug => $value];
@@ -908,6 +915,7 @@ class PublicFormController extends Controller
             'fieldTypes' => [
                 'text' => 'Text',
                 'email' => 'E-Mail',
+                'iban' => 'IBAN',
                 'number' => 'Zahl',
                 'date' => 'Datum',
                 'textarea' => 'Mehrzeilig',
@@ -957,7 +965,7 @@ class PublicFormController extends Controller
                     ->where('public_form_id', $form->id)
                     ->ignore($field?->id),
             ],
-            'field_type' => ['required', Rule::in(['text', 'email', 'number', 'date', 'textarea', 'select', 'radio', 'checkbox_group', 'checkbox', 'heading', 'content', 'divider'])],
+            'field_type' => ['required', Rule::in(['text', 'email', 'iban', 'number', 'date', 'textarea', 'select', 'radio', 'checkbox_group', 'checkbox', 'heading', 'content', 'divider'])],
             'help_text' => ['nullable', 'string'],
             'placeholder' => ['nullable', 'string', 'max:255'],
             'options' => ['nullable', 'string'],
@@ -1039,6 +1047,36 @@ class PublicFormController extends Controller
             ->values();
 
         return $options->isEmpty() ? null : $options->implode('|');
+    }
+
+    private function normalizeIban(mixed $value): ?string
+    {
+        $iban = strtoupper(preg_replace('/\s+/', '', (string) $value) ?: '');
+
+        return $iban === '' ? null : $iban;
+    }
+
+    private function isValidIban(string $value): bool
+    {
+        $iban = $this->normalizeIban($value);
+
+        if (!$iban || !preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/', $iban)) {
+            return false;
+        }
+
+        $rearranged = substr($iban, 4) . substr($iban, 0, 4);
+        $numeric = '';
+
+        foreach (str_split($rearranged) as $character) {
+            $numeric .= ctype_alpha($character) ? (string) (ord($character) - 55) : $character;
+        }
+
+        $remainder = 0;
+        foreach (str_split($numeric) as $digit) {
+            $remainder = ($remainder * 10 + (int) $digit) % 97;
+        }
+
+        return $remainder === 1;
     }
 
     private function uniqueFieldSlug(PublicForm $form, string $value, ?int $ignoreFieldId = null): string
