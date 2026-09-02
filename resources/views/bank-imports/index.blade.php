@@ -120,7 +120,7 @@
 
                 <div>
                     <label for="statement_file" class="mb-1 block text-sm font-semibold text-slate-700">Datei</label>
-                    <input id="statement_file" name="statement_file" type="file" accept=".xml,.camt,.csv,.txt,.sta,.mta,.mt940,application/xml,text/xml,text/csv,text/plain,application/vnd.ms-excel" required class="block w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm file:mr-4 file:rounded-xl file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-800 hover:file:bg-slate-200">
+                    <input id="statement_file" name="statement_file" type="file" required class="block w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm file:mr-4 file:rounded-xl file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-800 hover:file:bg-slate-200">
                     <p class="mt-2 text-xs text-slate-500">Erlaubt: CAMT/XML, CSV, TXT, MT940, STA und MTA. PDF ist hier nicht geeignet, PDF bleibt nur Beleg.</p>
                 </div>
             </div>
