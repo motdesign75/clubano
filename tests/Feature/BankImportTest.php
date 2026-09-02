@@ -156,6 +156,46 @@ XML;
     expect($bankTransaction->purpose)->toBe('Rechnung R-20260824001 · Braukurs');
 });
 
+test('finance users can import mt940 mta bank statements', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('mt940');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $mt940 = <<<'MT940'
+:20:STARTUMSE
+:25:DE19251900011353312600
+:28C:00000/001
+:60F:C260101EUR0,00
+:61:2607130713C100,00NTRFNONREF
+:86:?20Rechnung R-20260712184614?21Braukurs?32Henrik Polak?34DE14259501300031871923
+:62F:C260902EUR100,00
+MT940;
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $bankAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('Umsaetze_1353312600_02.09.2026.mta', $mt940),
+    ])->assertRedirect();
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+
+    expect($bankTransaction)->not->toBeNull();
+    expect($bankTransaction->booking_date->toDateString())->toBe('2026-07-13');
+    expect((float) $bankTransaction->amount)->toBe(100.0);
+    expect($bankTransaction->counterparty_name)->toBe('Henrik Polak');
+    expect($bankTransaction->counterparty_iban)->toBe('DE14259501300031871923');
+    expect($bankTransaction->purpose)->toContain('Rechnung R-20260712184614');
+});
+
 test('bank import list uses purpose when no counterparty name exists', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

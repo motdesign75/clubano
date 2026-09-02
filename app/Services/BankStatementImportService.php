@@ -28,6 +28,13 @@ class BankStatementImportService
             ];
         }
 
+        if (in_array($extension, ['sta', 'mta', 'mt940'], true) || str_contains($content, ':61:')) {
+            return [
+                'format' => 'MT940',
+                'rows' => $this->parseMt940($content),
+            ];
+        }
+
         if (in_array($extension, ['csv', 'txt'], true)) {
             return [
                 'format' => 'CSV',
@@ -35,7 +42,7 @@ class BankStatementImportService
             ];
         }
 
-        throw new RuntimeException('Bitte lade eine CAMT.053-XML-Datei oder eine CSV-Datei hoch.');
+        throw new RuntimeException('Bitte lade eine CAMT.053-XML-Datei, eine MT940/MTA-Datei oder eine CSV-Datei hoch.');
     }
 
     private function parseCamt(string $content): array
@@ -194,6 +201,95 @@ class BankStatementImportService
         }
 
         fclose($handle);
+
+        return $rows;
+    }
+
+    private function parseMt940(string $content): array
+    {
+        $content = str_replace(["\r\n", "\r"], "\n", $content);
+        $lines = explode("\n", $content);
+        $entries = [];
+        $current = null;
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+
+            if ($line === '') {
+                continue;
+            }
+
+            if (str_starts_with($line, ':61:')) {
+                if ($current !== null) {
+                    $entries[] = $current;
+                }
+
+                $current = [
+                    'statement' => substr($line, 4),
+                    'description' => '',
+                ];
+
+                continue;
+            }
+
+            if ($current === null) {
+                continue;
+            }
+
+            if (str_starts_with($line, ':86:')) {
+                $current['description'] .= ' ' . substr($line, 4);
+                continue;
+            }
+
+            if (preg_match('/^:\d{2}[A-Z]?:/', $line)) {
+                continue;
+            }
+
+            $current['description'] .= ' ' . $line;
+        }
+
+        if ($current !== null) {
+            $entries[] = $current;
+        }
+
+        $rows = [];
+
+        foreach ($entries as $entry) {
+            $statement = (string) $entry['statement'];
+            $description = $this->normalizeMt940Description((string) $entry['description']);
+
+            if (! preg_match('/^(?<date>\d{6})(?:\d{4})?(?<sign>R?[CD])(?<amount>\d+[,.]\d{0,2})/i', $statement, $matches)) {
+                continue;
+            }
+
+            $amount = $this->decimal($matches['amount']);
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $sign = strtoupper($matches['sign']);
+            $signedAmount = str_ends_with($sign, 'D') ? -1 * $amount : $amount;
+            $bookingDate = $this->parseMt940Date($matches['date']);
+            $counterpartyName = $this->mt940StructuredValue((string) $entry['description'], ['32', '33', '34'])
+                ?: $this->guessCounterpartyFromPurpose($description);
+            $counterpartyIban = $this->mt940Iban((string) $entry['description']);
+
+            $rows[] = $this->normalizeRow([
+                'booking_date' => $bookingDate,
+                'value_date' => null,
+                'amount' => $signedAmount,
+                'currency' => 'EUR',
+                'counterparty_name' => $counterpartyName,
+                'counterparty_iban' => $counterpartyIban,
+                'purpose' => $description,
+                'end_to_end_id' => $this->mt940StructuredValue((string) $entry['description'], ['20', '21', '22']),
+                'bank_reference' => $this->clean($statement, 255),
+                'raw' => [
+                    'statement' => $statement,
+                    'description' => trim((string) $entry['description']),
+                ],
+            ]);
+        }
 
         return $rows;
     }
@@ -400,6 +496,65 @@ class BankStatementImportService
         }
 
         return null;
+    }
+
+    private function parseMt940Date(string $value): ?string
+    {
+        $year = (int) substr($value, 0, 2);
+        $prefix = $year >= 70 ? '19' : '20';
+
+        return $this->parseDate($prefix . substr($value, 0, 2) . '-' . substr($value, 2, 2) . '-' . substr($value, 4, 2));
+    }
+
+    private function normalizeMt940Description(string $value): ?string
+    {
+        $value = preg_replace('/\?\d{2}/', ' ', $value) ?? $value;
+        $value = str_replace(['<', '>'], ' ', $value);
+
+        return $this->clean($value, 2000);
+    }
+
+    private function mt940StructuredValue(string $value, array $keys): ?string
+    {
+        foreach ($keys as $key) {
+            if (preg_match('/\?' . preg_quote($key, '/') . '(?<value>.*?)(?=\?\d{2}|$)/s', $value, $matches)) {
+                $result = $this->clean($matches['value'], 255);
+
+                if ($result !== null && ! preg_match('/^[A-Z]{2}\d{2}/i', $result)) {
+                    return $result;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function mt940Iban(string $value): ?string
+    {
+        if (preg_match('/[A-Z]{2}\d{2}[A-Z0-9]{10,30}/i', str_replace(' ', '', $value), $matches)) {
+            return strtoupper($matches[0]);
+        }
+
+        return null;
+    }
+
+    private function guessCounterpartyFromPurpose(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        foreach (['EREF+', 'SVWZ+', 'KREF+', 'MREF+', 'IBAN+', 'BIC+'] as $marker) {
+            $position = stripos($value, $marker);
+            if ($position !== false) {
+                $value = trim(substr($value, 0, $position));
+                break;
+            }
+        }
+
+        return $this->clean($value, 120);
     }
 
     private function clean(?string $value, int $limit): ?string
