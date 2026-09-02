@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Event;
 use App\Models\EventBooking;
 use App\Models\Invoice;
+use App\Models\Member;
 use App\Models\PublicForm;
 use App\Models\PublicFormField;
 use App\Models\TemplateDispatchLog;
@@ -197,6 +198,176 @@ test('event booking reuses booker as first participant when multiple participant
     expect($booking->participants)->toHaveCount(2);
     expect($booking->participants[0]->full_name)->toBe('Anna Ansprechpartner');
     expect($booking->participants[1]->full_name)->toBe('Ben Begleitung');
+});
+
+test('event booking can keep verified member free while guest participant pays', function () {
+    Mail::fake();
+
+    $tenant = Tenant::create([
+        'name' => 'Preisverein',
+        'slug' => 'preisverein-event',
+        'email' => 'vorstand-preis@example.test',
+    ]);
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Mira',
+        'last_name' => 'Mitglied',
+        'email' => 'mira@example.test',
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Kurs mit Mitgliederpreis',
+        'start' => now()->addWeek(),
+        'end' => now()->addWeek()->addHours(3),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 30,
+        'member_price_per_person' => 0,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 3,
+    ]);
+
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'title' => 'Anmeldung Kurs mit Mitgliederpreis',
+        'slug' => 'kurs-mitgliederpreis',
+        'description' => 'Anmeldung',
+        'form_type' => 'event',
+        'success_message' => 'ok',
+        'is_active' => true,
+    ]);
+
+    foreach ([
+        ['label' => 'Vorname Ansprechpartner', 'slug' => 'first_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 1],
+        ['label' => 'Nachname Ansprechpartner', 'slug' => 'last_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 2],
+        ['label' => 'E-Mail', 'slug' => 'email', 'field_type' => 'email', 'is_required' => true, 'sort_order' => 3],
+        ['label' => 'Telefon', 'slug' => 'phone', 'field_type' => 'text', 'is_required' => false, 'sort_order' => 4],
+    ] as $field) {
+        PublicFormField::create([
+            'public_form_id' => $form->id,
+            'label' => $field['label'],
+            'slug' => $field['slug'],
+            'field_type' => $field['field_type'],
+            'is_required' => $field['is_required'],
+            'sort_order' => $field['sort_order'],
+        ]);
+    }
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertSee('Ich bin Mitglied in diesem Verein')
+        ->assertSee('Mitglieder frei');
+
+    $this->post(route('forms.public.submit', $form->slug), [
+        'fields' => [
+            'first_name' => 'Mira',
+            'last_name' => 'Mitglied',
+            'email' => 'mira@example.test',
+            'phone' => '0123000000',
+            'street' => 'Musterstrasse 12',
+            'zip' => '12345',
+            'city' => 'Musterstadt',
+            'country' => 'Deutschland',
+        ],
+        'participant_count' => 2,
+        'use_booker_as_participant' => 1,
+        'booking_claims_membership' => 1,
+        'participants' => [
+            [
+                'first_name' => 'Gerd',
+                'last_name' => 'Gast',
+                'email' => 'gerd@example.test',
+                'phone' => '',
+            ],
+        ],
+    ])->assertRedirect();
+
+    $booking = EventBooking::query()->where('event_id', $event->id)->with(['participants', 'invoice.items'])->firstOrFail();
+
+    expect((float) $booking->gross_amount)->toBe(30.0)
+        ->and((float) $booking->total_amount)->toBe(30.0)
+        ->and($booking->payment_status)->toBe('open')
+        ->and($booking->participants)->toHaveCount(2)
+        ->and($booking->participants[0]->participant_type)->toBe('member')
+        ->and((float) $booking->participants[0]->price_amount)->toBe(0.0)
+        ->and($booking->participants[0]->payment_status)->toBe('not_required')
+        ->and($booking->participants[1]->participant_type)->toBe('guest')
+        ->and((float) $booking->participants[1]->price_amount)->toBe(30.0)
+        ->and($booking->invoice)->not->toBeNull()
+        ->and($booking->invoice->items)->toHaveCount(1)
+        ->and((float) $booking->invoice->getTotal())->toBe(30.0);
+});
+
+test('event booking rejects member price when email is not a tenant member', function () {
+    Mail::fake();
+
+    $tenant = Tenant::create([
+        'name' => 'Pruefverein',
+        'slug' => 'pruefverein-event',
+        'email' => 'vorstand-pruef@example.test',
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Geschuetzter Mitgliederpreis',
+        'start' => now()->addWeek(),
+        'end' => now()->addWeek()->addHours(3),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 30,
+        'member_price_per_person' => 0,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 1,
+    ]);
+
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'title' => 'Anmeldung geschuetzt',
+        'slug' => 'geschuetzter-mitgliederpreis',
+        'description' => 'Anmeldung',
+        'form_type' => 'event',
+        'success_message' => 'ok',
+        'is_active' => true,
+    ]);
+
+    foreach ([
+        ['label' => 'Vorname Ansprechpartner', 'slug' => 'first_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 1],
+        ['label' => 'Nachname Ansprechpartner', 'slug' => 'last_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 2],
+        ['label' => 'E-Mail', 'slug' => 'email', 'field_type' => 'email', 'is_required' => true, 'sort_order' => 3],
+    ] as $field) {
+        PublicFormField::create([
+            'public_form_id' => $form->id,
+            'label' => $field['label'],
+            'slug' => $field['slug'],
+            'field_type' => $field['field_type'],
+            'is_required' => $field['is_required'],
+            'sort_order' => $field['sort_order'],
+        ]);
+    }
+
+    $this->from(route('forms.public.show', $form->slug))
+        ->post(route('forms.public.submit', $form->slug), [
+            'fields' => [
+                'first_name' => 'Falscher',
+                'last_name' => 'Gast',
+                'email' => 'gast@example.test',
+                'street' => 'Musterstrasse 12',
+                'zip' => '12345',
+                'city' => 'Musterstadt',
+                'country' => 'Deutschland',
+            ],
+            'participant_count' => 1,
+            'use_booker_as_participant' => 1,
+            'booking_claims_membership' => 1,
+        ])
+        ->assertRedirect(route('forms.public.show', $form->slug))
+        ->assertSessionHasErrors('booking_claims_membership');
+
+    expect(EventBooking::query()->where('event_id', $event->id)->count())->toBe(0);
 });
 
 test('paid public event booking can redeem a voucher and invoices only the remaining amount', function () {

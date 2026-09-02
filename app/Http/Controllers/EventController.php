@@ -558,6 +558,7 @@ class EventController extends Controller
             'counts_toward_required_hours' => 'nullable|boolean',
             'reminders_enabled' => 'nullable|boolean',
             'price_per_person' => 'nullable|numeric|min:0',
+            'member_price_per_person' => 'nullable|numeric|min:0',
             'currency' => 'nullable|string|size:3',
             'max_participants_per_booking' => 'nullable|integer|min:1|max:50',
             'image'       => 'nullable|image|max:5120',
@@ -582,6 +583,7 @@ class EventController extends Controller
             'counts_toward_required_hours' => $request->boolean('counts_toward_required_hours'),
             'reminders_enabled' => $request->boolean('reminders_enabled'),
             'price_per_person' => $request->boolean('booking_enabled') ? ($validated['price_per_person'] ?? 0) : 0,
+            'member_price_per_person' => $request->boolean('booking_enabled') ? ($validated['member_price_per_person'] ?? 0) : 0,
             'currency' => strtoupper($validated['currency'] ?? ($event?->currency ?: 'EUR')),
             'max_participants_per_booking' => $validated['max_participants_per_booking'] ?? ($event?->max_participants_per_booking ?: 1),
             'image_path'  => array_key_exists('image_path', $validated) ? $validated['image_path'] : $event?->image_path,
@@ -1729,8 +1731,11 @@ class EventController extends Controller
         ]);
 
         $participants = $this->manualParticipantPayloads($validated);
-        $paymentRequired = $request->boolean('payment_required');
-        $priceAmount = $paymentRequired ? round((float) ($validated['price_amount'] ?? $event->price_per_person ?? 0), 2) : 0;
+        $defaultPriceAmount = $event->priceForParticipantType($validated['participant_type']);
+        $paymentRequired = $request->has('payment_required')
+            ? $request->boolean('payment_required')
+            : (($validated['payment_status'] ?? null) !== 'not_required' && $defaultPriceAmount > 0);
+        $priceAmount = $paymentRequired ? round((float) ($validated['price_amount'] ?? $defaultPriceAmount), 2) : 0;
         $paymentStatus = $paymentRequired ? $validated['payment_status'] : 'not_required';
 
         if ($priceAmount <= 0 && $paymentStatus === 'open') {
@@ -1751,6 +1756,7 @@ class EventController extends Controller
             'booker_phone' => $participants->count() === 1 ? ($firstParticipant['phone'] ?? null) : null,
             'participant_count' => $participants->count(),
             'price_per_person' => $priceAmount,
+            'gross_amount' => $priceAmount * $participants->count(),
             'total_amount' => $priceAmount * $participants->count(),
             'currency' => strtoupper($event->currency ?: 'EUR'),
             'payment_status' => $paymentStatus,
@@ -2738,8 +2744,19 @@ class EventController extends Controller
             return $base . ' Die Teilnahme ist kostenfrei.';
         }
 
+        $currency = strtoupper($event->currency ?: 'EUR');
+        $externalPrice = (float) $event->price_per_person;
+        $memberPrice = (float) $event->member_price_per_person;
+
+        if ($externalPrice > 0 && $memberPrice < $externalPrice) {
+            return $base
+                . ' Mitglieder zahlen ' . ($memberPrice > 0 ? number_format($memberPrice, 2, ',', '.') . ' ' . $currency : 'nichts')
+                . ', Gaeste und Nichtmitglieder zahlen ' . number_format($externalPrice, 2, ',', '.') . ' ' . $currency
+                . '. Nach der Buchung erhaeltst du automatisch eine Rechnung per E-Mail, wenn eine Zahlung faellig ist.';
+        }
+
         return $base
-            . ' Preis: ' . number_format((float) $event->price_per_person, 2, ',', '.') . ' ' . strtoupper($event->currency ?: 'EUR')
+            . ' Preis: ' . number_format($externalPrice, 2, ',', '.') . ' ' . $currency
             . ' pro Person. Nach der Buchung erhaeltst du automatisch eine Rechnung per E-Mail.';
     }
 

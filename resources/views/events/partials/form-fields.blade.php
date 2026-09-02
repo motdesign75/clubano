@@ -247,11 +247,19 @@
 
             <div class="mt-5 grid gap-4">
                 <div>
-                    <label for="price_per_person" class="text-sm font-semibold text-slate-900">Preis pro Person</label>
+                    <label for="price_per_person" class="text-sm font-semibold text-slate-900">Preis für Gäste / Nichtmitglieder</label>
                     <input type="number" step="0.01" min="0" name="price_per_person" id="price_per_person"
                            value="{{ old('price_per_person', number_format((float) ($event->price_per_person ?? 0), 2, '.', '')) }}"
                            class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
-                    <p class="mt-1 text-xs text-slate-500">0,00 bedeutet kostenfrei.</p>
+                    <p class="mt-1 text-xs text-slate-500">Dieser Preis gilt für externe Teilnehmer, Gäste, Firmen und Organisationen.</p>
+                </div>
+
+                <div>
+                    <label for="member_price_per_person" class="text-sm font-semibold text-slate-900">Preis für Mitglieder</label>
+                    <input type="number" step="0.01" min="0" name="member_price_per_person" id="member_price_per_person"
+                           value="{{ old('member_price_per_person', number_format((float) ($event->member_price_per_person ?? 0), 2, '.', '')) }}"
+                           class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                    <p class="mt-1 text-xs text-slate-500">0,00 bedeutet: Mitglieder nehmen kostenfrei teil.</p>
                 </div>
 
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">

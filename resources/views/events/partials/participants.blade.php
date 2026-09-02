@@ -65,7 +65,24 @@
     @endif
 
     @if($canManageManualParticipants ?? false)
-    <div id="teilnehmer-nachtragen" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5" x-data="{ type: 'member', listDisplay: 'person', guestMode: 'person', paymentRequired: {{ (float) $event->price_per_person > 0 ? 'true' : 'false' }} }">
+    <div id="teilnehmer-nachtragen" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5" x-data="{
+        type: 'member',
+        listDisplay: 'person',
+        guestMode: 'person',
+        externalPrice: {{ json_encode((float) ($event->price_per_person ?? 0)) }},
+        memberPrice: {{ json_encode((float) ($event->member_price_per_person ?? 0)) }},
+        paymentRequired: false,
+        priceAmount: 0,
+        paymentStatus: 'not_required',
+        defaultPrice() {
+            return this.type === 'member' ? this.memberPrice : this.externalPrice;
+        },
+        syncPayment() {
+            this.priceAmount = Number(this.defaultPrice()).toFixed(2);
+            this.paymentRequired = Number(this.priceAmount) > 0;
+            this.paymentStatus = this.paymentRequired ? 'open' : 'not_required';
+        }
+    }" x-init="syncPayment()">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
                 <h3 class="text-base font-semibold text-slate-950">Teilnehmer nachtragen</h3>
@@ -79,15 +96,15 @@
 
             <div class="grid gap-3 sm:grid-cols-3">
                 <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
-                    <input type="radio" name="participant_type" value="member" x-model="type" class="border-slate-300 text-slate-950 focus:ring-slate-400">
+                    <input type="radio" name="participant_type" value="member" x-model="type" @change="syncPayment()" class="border-slate-300 text-slate-950 focus:ring-slate-400">
                     Mitglied
                 </label>
                 <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
-                    <input type="radio" name="participant_type" value="contact" x-model="type" class="border-slate-300 text-slate-950 focus:ring-slate-400">
+                    <input type="radio" name="participant_type" value="contact" x-model="type" @change="syncPayment()" class="border-slate-300 text-slate-950 focus:ring-slate-400">
                     Kontakt
                 </label>
                 <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
-                    <input type="radio" name="participant_type" value="guest" x-model="type" class="border-slate-300 text-slate-950 focus:ring-slate-400">
+                    <input type="radio" name="participant_type" value="guest" x-model="type" @change="syncPayment()" class="border-slate-300 text-slate-950 focus:ring-slate-400">
                     Freier Gast
                 </label>
             </div>
@@ -213,7 +230,7 @@
 
             <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem_14rem_14rem] lg:items-end">
                 <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-                    <input type="checkbox" name="payment_required" value="1" x-model="paymentRequired" class="mt-0.5 rounded border-slate-300 text-slate-950 focus:ring-slate-400">
+                    <input type="checkbox" name="payment_required" value="1" x-model="paymentRequired" @change="if (!paymentRequired) { paymentStatus = 'not_required' } else if (paymentStatus === 'not_required') { paymentStatus = 'open' }" class="mt-0.5 rounded border-slate-300 text-slate-950 focus:ring-slate-400">
                     <span>
                         <span class="block font-medium text-slate-950">Teilnehmer muss zahlen</span>
                         <span class="mt-1 block text-slate-500">Wenn aus, wird der Teilnehmer als kostenfrei geführt.</span>
@@ -221,13 +238,13 @@
                 </label>
                 <div>
                     <label class="mb-1 block text-sm font-medium text-slate-600">Preis</label>
-                    <input type="number" step="0.01" min="0" name="price_amount" value="{{ number_format((float) $event->price_per_person, 2, '.', '') }}" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                    <input type="number" step="0.01" min="0" name="price_amount" x-model="priceAmount" @input="paymentRequired = Number(priceAmount) > 0; if (!paymentRequired) { paymentStatus = 'not_required' } else if (paymentStatus === 'not_required') { paymentStatus = 'open' }" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                 </div>
                 <div>
                     <label class="mb-1 block text-sm font-medium text-slate-600">Zahlstatus</label>
-                    <select name="payment_status" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                    <select name="payment_status" x-model="paymentStatus" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                         <option value="not_required">Keine Zahlung nötig</option>
-                        <option value="open" @selected((float) $event->price_per_person > 0)>Offen</option>
+                        <option value="open">Offen</option>
                         <option value="paid">Bezahlt</option>
                         <option value="cancelled">Storniert</option>
                     </select>

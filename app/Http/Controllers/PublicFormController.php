@@ -385,8 +385,11 @@ class PublicFormController extends Controller
                 ->withErrors(['conversion' => 'Für einen Teilnehmer fehlen Name, Organisation oder E-Mail. Bitte prüfe die Antwort.']);
         }
 
-        $paymentRequired = $request->boolean('payment_required');
-        $priceAmount = $paymentRequired ? round((float) ($validated['price_amount'] ?? $event->price_per_person ?? 0), 2) : 0;
+        $defaultPriceAmount = $event->priceForParticipantType($validated['participant_type']);
+        $paymentRequired = $request->has('payment_required')
+            ? $request->boolean('payment_required')
+            : (($validated['payment_status'] ?? null) !== 'not_required' && $defaultPriceAmount > 0);
+        $priceAmount = $paymentRequired ? round((float) ($validated['price_amount'] ?? $defaultPriceAmount), 2) : 0;
         $paymentStatus = $paymentRequired ? $validated['payment_status'] : 'not_required';
 
         if ($priceAmount <= 0 && $paymentStatus === 'open') {
@@ -404,6 +407,7 @@ class PublicFormController extends Controller
                 'booker_phone' => $participantPayload['phone'] ?? $submission->phone,
                 'participant_count' => 1,
                 'price_per_person' => $priceAmount,
+                'gross_amount' => $priceAmount,
                 'total_amount' => $priceAmount,
                 'currency' => strtoupper($event->currency ?: 'EUR'),
                 'payment_status' => $paymentStatus,
@@ -613,6 +617,7 @@ class PublicFormController extends Controller
             $rules['participant_count'] = [$bookingMode === 'organization' ? 'nullable' : 'required', 'integer', 'min:1', 'max:' . $maxParticipants];
             $rules['participant_notes'] = ['nullable', 'string'];
             $rules['voucher_code'] = ['nullable', 'string', 'max:80'];
+            $rules['booking_claims_membership'] = ['nullable', 'boolean'];
             $rules['use_booker_as_participant'] = ['nullable', 'boolean'];
             $rules['participants'] = ['nullable', 'array', 'min:1', 'max:' . $maxParticipants];
             $rules['participants.*.first_name'] = ['nullable', 'string', 'max:255'];
@@ -646,9 +651,31 @@ class PublicFormController extends Controller
             $answers['participant_notes'] = $validated['participant_notes'] ?? null;
             $answers['voucher_code'] = filled($validated['voucher_code'] ?? null) ? Voucher::normalizeCode($validated['voucher_code']) : null;
             $answers['use_booker_as_participant'] = $bookingMode === 'organization' ? true : (bool) ($validated['use_booker_as_participant'] ?? false);
+            $answers['booking_claims_membership'] = $bookingMode === 'person' && (bool) ($validated['booking_claims_membership'] ?? false);
         }
 
-        $submission = DB::transaction(function () use ($form, $answers, $validated, $isEventBooking) {
+        $bookerMember = null;
+        if ($isEventBooking && ($answers['booking_claims_membership'] ?? false)) {
+            if (! ($answers['use_booker_as_participant'] ?? false)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'booking_claims_membership' => 'Der Mitgliederpreis gilt nur, wenn der Ansprechpartner selbst teilnimmt.',
+                ]);
+            }
+
+            $bookerMember = Member::withoutGlobalScopes()
+                ->where('tenant_id', $form->tenant_id)
+                ->where('email', trim((string) ($answers['email'] ?? '')))
+                ->whereNull('archived_at')
+                ->first();
+
+            if (! $bookerMember) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'booking_claims_membership' => 'Wir konnten die Mitgliedschaft mit dieser E-Mail-Adresse nicht prüfen. Bitte melde dich ohne Mitgliederpreis an oder kontaktiere den Verein.',
+                ]);
+            }
+        }
+
+        $submission = DB::transaction(function () use ($form, $answers, $validated, $isEventBooking, $bookerMember) {
             $submission = PublicFormSubmission::create([
                 'public_form_id' => $form->id,
                 'tenant_id' => $form->tenant_id,
@@ -677,6 +704,8 @@ class PublicFormController extends Controller
                         'organization_name' => trim((string) ($answers['organization'] ?? '')),
                         'email' => $answers['email'] ?? null,
                         'phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
+                        'participant_type' => 'guest',
+                        'member_id' => null,
                     ]]);
                 } elseif ($useBookerAsParticipant) {
                     $participantRows = collect([[
@@ -685,6 +714,8 @@ class PublicFormController extends Controller
                         'organization_name' => null,
                         'email' => $answers['email'] ?? null,
                         'phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
+                        'participant_type' => $bookerMember ? 'member' : 'guest',
+                        'member_id' => $bookerMember?->id,
                     ]])->concat($participantRows)->values();
                 }
 
@@ -696,6 +727,8 @@ class PublicFormController extends Controller
                             'organization_name' => trim((string) ($participant['organization_name'] ?? '')),
                             'email' => filled($participant['email'] ?? null) ? trim((string) $participant['email']) : null,
                             'phone' => filled($participant['phone'] ?? null) ? trim((string) $participant['phone']) : null,
+                            'participant_type' => $participant['participant_type'] ?? 'guest',
+                            'member_id' => $participant['member_id'] ?? null,
                         ];
                     })
                     ->filter(fn ($participant) => $participant['organization_name'] !== '' || $participant['first_name'] !== '' || $participant['last_name'] !== '')
@@ -710,8 +743,17 @@ class PublicFormController extends Controller
                 }
 
                 $participantCount = max(1, $participantRows->count());
-                $pricePerPerson = (float) ($form->event->price_per_person ?? 0);
-                $grossAmount = round($participantCount * $pricePerPerson, 2);
+                $participantRows = $participantRows
+                    ->map(function (array $participant) use ($form) {
+                        $priceAmount = $form->event->priceForParticipantType($participant['participant_type'] ?? 'guest');
+
+                        return $participant + [
+                            'price_amount' => $priceAmount,
+                            'payment_required' => $priceAmount > 0,
+                        ];
+                    });
+                $pricePerPerson = $participantCount > 0 ? round($participantRows->sum('price_amount') / $participantCount, 2) : 0;
+                $grossAmount = round($participantRows->sum('price_amount'), 2);
                 $voucher = null;
                 $voucherDiscountAmount = 0.0;
 
@@ -738,7 +780,7 @@ class PublicFormController extends Controller
                 }
 
                 $totalAmount = max(0, round($grossAmount - $voucherDiscountAmount, 2));
-                $paymentStatus = $pricePerPerson > 0
+                $paymentStatus = $grossAmount > 0
                     ? ($totalAmount > 0 ? 'open' : 'paid')
                     : 'not_required';
 
@@ -765,23 +807,25 @@ class PublicFormController extends Controller
 
                 $remainingVoucherShare = $voucherDiscountAmount;
                 foreach ($participantRows as $index => $participant) {
-                    $participantVoucherShare = min($pricePerPerson, $remainingVoucherShare);
+                    $participantPrice = (float) ($participant['price_amount'] ?? 0);
+                    $participantVoucherShare = min($participantPrice, $remainingVoucherShare);
                     $remainingVoucherShare = max(0, round($remainingVoucherShare - $participantVoucherShare, 2));
-                    $participantPaymentStatus = $pricePerPerson > 0
-                        ? (($pricePerPerson - $participantVoucherShare) > 0 ? 'open' : 'paid')
+                    $participantPaymentStatus = $participantPrice > 0
+                        ? (($participantPrice - $participantVoucherShare) > 0 ? 'open' : 'paid')
                         : 'not_required';
 
                     EventBookingParticipant::create([
                         'event_booking_id' => $booking->id,
                         'position' => $index + 1,
+                        'member_id' => $participant['member_id'] ?? null,
                         'first_name' => $participant['first_name'],
                         'last_name' => $participant['last_name'],
                         'organization_name' => $participant['organization_name'] ?: null,
                         'email' => $participant['email'] ?? null,
                         'phone' => $participant['phone'] ?? null,
-                        'participant_type' => 'guest',
-                        'payment_required' => $pricePerPerson > 0,
-                        'price_amount' => $pricePerPerson,
+                        'participant_type' => $participant['participant_type'] ?? 'guest',
+                        'payment_required' => $participantPrice > 0,
+                        'price_amount' => $participantPrice,
                         'voucher_discount_amount' => $participantVoucherShare,
                         'payment_status' => $participantPaymentStatus,
                         'source' => 'online',
@@ -812,7 +856,7 @@ class PublicFormController extends Controller
                     'event_booking_id' => $booking->id,
                 ]);
 
-                if ($pricePerPerson > 0 && $totalAmount > 0 && $form->tenant) {
+                if ($grossAmount > 0 && $totalAmount > 0 && $form->tenant) {
                     $invoice = $this->eventBookingBillingService->createInvoiceForBooking(
                         $booking,
                         $answers,

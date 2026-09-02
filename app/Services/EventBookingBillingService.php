@@ -22,7 +22,7 @@ class EventBookingBillingService
 
     public function createInvoiceForBooking(EventBooking $booking, array $answers, Event $event, Tenant $tenant): Invoice
     {
-        $booking->loadMissing('invoice');
+        $booking->loadMissing(['invoice', 'participants']);
 
         if ($booking->invoice) {
             return $booking->invoice;
@@ -48,14 +48,33 @@ class EventBookingBillingService
             'closing_text' => "Mit freundlichen Gruessen\n" . ($tenant->name ?? 'Euer Verein'),
         ]);
 
-        InvoiceItem::create([
-            'invoice_id' => $invoice->id,
-            'description' => $this->buildItemDescription($event),
-            'details' => 'Buchungsnummer: ' . $booking->booking_reference,
-            'quantity' => $booking->participant_count,
-            'unit' => 'Teilnehmer',
-            'unit_price' => $booking->price_per_person,
-        ]);
+        $participantGroups = $booking->participants
+            ->filter(fn ($participant) => (float) $participant->price_amount > 0)
+            ->groupBy(fn ($participant) => $participant->participant_type . '|' . number_format((float) $participant->price_amount, 2, '.', ''));
+
+        if ($participantGroups->isNotEmpty()) {
+            foreach ($participantGroups as $key => $participants) {
+                [$type, $price] = explode('|', $key);
+
+                InvoiceItem::create([
+                    'invoice_id' => $invoice->id,
+                    'description' => $this->buildItemDescription($event) . ($type === 'member' ? ' - Mitglieder' : ' - Gäste/Nichtmitglieder'),
+                    'details' => 'Buchungsnummer: ' . $booking->booking_reference,
+                    'quantity' => $participants->count(),
+                    'unit' => 'Teilnehmer',
+                    'unit_price' => (float) $price,
+                ]);
+            }
+        } else {
+            InvoiceItem::create([
+                'invoice_id' => $invoice->id,
+                'description' => $this->buildItemDescription($event),
+                'details' => 'Buchungsnummer: ' . $booking->booking_reference,
+                'quantity' => $booking->participant_count,
+                'unit' => 'Teilnehmer',
+                'unit_price' => $booking->price_per_person,
+            ]);
+        }
 
         if ((float) ($booking->voucher_discount_amount ?? 0) > 0) {
             InvoiceItem::create([

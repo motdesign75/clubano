@@ -350,12 +350,27 @@
                                     </form>
 
                                     @if($canConvertToEventParticipant)
-                                        <form method="POST" action="{{ route('forms.submissions.convert-participant', [$form, $submission]) }}" class="rounded-2xl border border-slate-200 bg-white p-4" x-data="{ participantType: 'guest' }">
+                                        <form method="POST" action="{{ route('forms.submissions.convert-participant', [$form, $submission]) }}" class="rounded-2xl border border-slate-200 bg-white p-4" x-data="{
+                                            participantType: 'guest',
+                                            externalPrice: {{ json_encode((float) ($form->event?->price_per_person ?? 0)) }},
+                                            memberPrice: {{ json_encode((float) ($form->event?->member_price_per_person ?? 0)) }},
+                                            priceAmount: 0,
+                                            paymentRequired: false,
+                                            paymentStatus: 'not_required',
+                                            defaultPrice() {
+                                                return this.participantType === 'member' ? this.memberPrice : this.externalPrice;
+                                            },
+                                            syncPayment() {
+                                                this.priceAmount = Number(this.defaultPrice()).toFixed(2);
+                                                this.paymentRequired = Number(this.priceAmount) > 0;
+                                                this.paymentStatus = this.paymentRequired ? 'open' : 'not_required';
+                                            }
+                                        }" x-init="syncPayment()">
                                             @csrf
                                             <div class="text-sm font-semibold text-slate-950">Teilnehmer</div>
                                             <p class="mt-1 text-xs leading-5 text-slate-500">Für geprüfte Anmeldungen zur Teilnehmerliste.</p>
                                             <div class="mt-3 grid gap-2">
-                                                <select name="participant_type" x-model="participantType" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                <select name="participant_type" x-model="participantType" @change="syncPayment()" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                                                     <option value="guest">Freier Teilnehmer</option>
                                                     <option value="member">Bestehendes Mitglied</option>
                                                     <option value="contact">Bestehender Kontakt</option>
@@ -375,13 +390,13 @@
                                             </div>
                                             <div class="mt-3 grid gap-2 sm:grid-cols-2">
                                                 <label class="flex items-start gap-2 text-xs text-slate-600 sm:col-span-2">
-                                                    <input type="checkbox" name="payment_required" value="1" @checked((float) ($form->event?->price_per_person ?? 0) > 0) class="mt-0.5 rounded border-slate-300 text-slate-950 focus:ring-slate-400">
+                                                    <input type="checkbox" name="payment_required" value="1" x-model="paymentRequired" @change="if (!paymentRequired) { paymentStatus = 'not_required' } else if (paymentStatus === 'not_required') { paymentStatus = 'open' }" class="mt-0.5 rounded border-slate-300 text-slate-950 focus:ring-slate-400">
                                                     <span>Zahlungspflichtig</span>
                                                 </label>
-                                                <input type="number" step="0.01" min="0" name="price_amount" value="{{ number_format((float) ($form->event?->price_per_person ?? 0), 2, '.', '') }}" class="rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                                <select name="payment_status" class="rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                <input type="number" step="0.01" min="0" name="price_amount" x-model="priceAmount" @input="paymentRequired = Number(priceAmount) > 0; if (!paymentRequired) { paymentStatus = 'not_required' } else if (paymentStatus === 'not_required') { paymentStatus = 'open' }" class="rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                                <select name="payment_status" x-model="paymentStatus" class="rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                                                     <option value="not_required">Kostenfrei</option>
-                                                    <option value="open" @selected((float) ($form->event?->price_per_person ?? 0) > 0)>Offen</option>
+                                                    <option value="open">Offen</option>
                                                     <option value="paid">Bezahlt</option>
                                                     <option value="cancelled">Storniert</option>
                                                 </select>

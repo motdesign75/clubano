@@ -23,6 +23,7 @@ class Event extends Model
         'counts_toward_required_hours',
         'reminders_enabled',
         'price_per_person',
+        'member_price_per_person',
         'currency',
         'max_participants_per_booking',
         'image_path',
@@ -48,6 +49,7 @@ class Event extends Model
         'counts_toward_required_hours' => 'boolean',
         'reminders_enabled' => 'boolean',
         'price_per_person' => 'decimal:2',
+        'member_price_per_person' => 'decimal:2',
         'max_participants_per_booking' => 'integer',
         'recurrence_interval' => 'integer',
         'recurrence_until' => 'date',
@@ -161,7 +163,7 @@ class Event extends Model
 
     public function getIsPaidAttribute(): bool
     {
-        return (float) $this->price_per_person > 0;
+        return max((float) $this->price_per_person, (float) $this->member_price_per_person) > 0;
     }
 
     public function getPriceLabelAttribute(): string
@@ -170,7 +172,21 @@ class Event extends Model
             return 'Kostenlos';
         }
 
-        return 'Ab ' . number_format((float) $this->price_per_person, 2, ',', '.') . ' ' . strtoupper($this->currency ?: 'EUR');
+        $prices = collect([
+            (float) $this->member_price_per_person,
+            (float) $this->price_per_person,
+        ])->filter(fn (float $price) => $price > 0);
+
+        if ($prices->isEmpty()) {
+            return 'Kostenlos';
+        }
+
+        return 'Ab ' . number_format($prices->min(), 2, ',', '.') . ' ' . strtoupper($this->currency ?: 'EUR');
+    }
+
+    public function priceForParticipantType(string $participantType): float
+    {
+        return round((float) ($participantType === 'member' ? $this->member_price_per_person : $this->price_per_person), 2);
     }
 
     public function getMonthGroupLabelAttribute(): string

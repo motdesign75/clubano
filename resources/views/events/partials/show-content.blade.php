@@ -1,6 +1,9 @@
 @php
     $canManageEvents = ! $isPublicPreview && (auth()->user()?->canManageEvents() ?? false);
     $eventHasEnded = $event->end?->isPast() ?? false;
+    $externalPrice = (float) ($event->price_per_person ?? 0);
+    $memberPrice = (float) ($event->member_price_per_person ?? 0);
+    $hasMemberRate = $event->is_paid && $externalPrice > 0 && $memberPrice < $externalPrice;
 @endphp
 
 <div class="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
@@ -25,7 +28,11 @@
                         <span class="rounded-full bg-slate-100 px-3 py-1">{{ $event->location ?: 'Ort folgt' }}</span>
                         <span class="rounded-full {{ $event->is_paid ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800' }} px-3 py-1 font-medium">
                             @if($event->is_paid)
-                                {{ number_format((float) $event->price_per_person, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }} pro Person
+                                @if($hasMemberRate)
+                                    Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.strtoupper($event->currency ?: 'EUR') : 'kostenfrei' }} · Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }}
+                                @else
+                                    {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }} pro Person
+                                @endif
                             @else
                                 Kostenfrei
                             @endif
@@ -200,7 +207,12 @@
                                 <div class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Preis</div>
                                 <div class="mt-1 text-base font-semibold text-emerald-950">
                                     @if($event->is_paid)
-                                        {{ number_format((float) $event->price_per_person, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }} pro Person
+                                        @if($hasMemberRate)
+                                            Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.strtoupper($event->currency ?: 'EUR') : 'kostenfrei' }}<br>
+                                            Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }}
+                                        @else
+                                            {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }} pro Person
+                                        @endif
                                     @else
                                         Kostenfrei
                                     @endif

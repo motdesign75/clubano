@@ -3,6 +3,9 @@
         $isEventBooking = $form->form_type === 'event' && $form->event;
         $event = $form->event;
         $currency = strtoupper($event?->currency ?: 'EUR');
+        $externalPrice = (float) ($event?->price_per_person ?? 0);
+        $memberPrice = (float) ($event?->member_price_per_person ?? 0);
+        $hasMemberRate = $isEventBooking && $externalPrice > 0 && $memberPrice < $externalPrice;
         $tenant = $form->tenant;
         $tenantLogoUrl = $tenant?->logo_url;
         $participantCountOld = max(1, min((int) old('participant_count', 1), max(1, (int) ($event?->max_participants_per_booking ?: 1))));
@@ -72,9 +75,18 @@
 
                     <div class="flex flex-wrap gap-2">
                         @if($event->is_paid)
-                            <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
-                                {{ number_format((float) $event->price_per_person, 2, ',', '.') }} {{ $currency }} pro Person
-                            </span>
+                            @if($hasMemberRate)
+                                <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
+                                    Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.$currency : 'kostenfrei' }}
+                                </span>
+                                <span class="rounded-full bg-white px-3 py-1 font-semibold text-slate-800">
+                                    Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                </span>
+                            @else
+                                <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
+                                    {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }} pro Person
+                                </span>
+                            @endif
                         @else
                             <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
                                 Kostenfrei
@@ -120,12 +132,15 @@
           class="space-y-8"
           @if($isEventBooking)
               x-data="{
-                  pricePerPerson: {{ json_encode((float) ($event->price_per_person ?? 0)) }},
+                  externalPricePerPerson: {{ json_encode($externalPrice) }},
+                  memberPricePerPerson: {{ json_encode($memberPrice) }},
+                  hasMemberRate: {{ $hasMemberRate ? 'true' : 'false' }},
                   maxParticipants: {{ max(1, (int) ($event->max_participants_per_booking ?: 1)) }},
                   participantCount: {{ $participantCountOld }},
                   voucherCode: {{ json_encode(old('voucher_code', '')) }},
                   participants: {{ json_encode($participantTemplate) }},
                   useBookerAsParticipant: {{ $useBookerAsParticipantOld ? 'true' : 'false' }},
+                  bookerClaimsMembership: {{ old('booking_claims_membership') ? 'true' : 'false' }},
                   bookingMode: {{ json_encode($bookingModeOld) }},
                   organizationRequired: {{ $organizationField?->is_required ? 'true' : 'false' }},
                   booker: {
@@ -171,11 +186,18 @@
                       this.bookingMode = this.organizationRequired ? 'organization' : mode;
                       this.syncParticipants();
                   },
+                  memberRateApplies() {
+                      return this.hasMemberRate && this.bookingMode === 'person' && this.useBookerAsParticipant && this.bookerClaimsMembership;
+                  },
+                  externalParticipantCount() {
+                      return this.bookingMode === 'organization' ? 1 : Math.max(0, this.participantCount - (this.memberRateApplies() ? 1 : 0));
+                  },
                   totalAmount() {
-                      return (this.participantCount * this.pricePerPerson).toFixed(2).replace('.', ',');
+                      const memberTotal = this.memberRateApplies() ? this.memberPricePerPerson : 0;
+                      return (memberTotal + (this.externalParticipantCount() * this.externalPricePerPerson)).toFixed(2).replace('.', ',');
                   },
                   voucherHint() {
-                      return this.voucherCode && this.pricePerPerson > 0 ? 'Gutschein wird nach dem Absenden geprüft und angerechnet.' : '';
+                      return this.voucherCode && (this.externalPricePerPerson > 0 || this.memberPricePerPerson > 0) ? 'Gutschein wird nach dem Absenden geprüft und angerechnet.' : '';
                   }
               }"
               x-init="syncParticipants()"
@@ -390,23 +412,33 @@
                         <div class="text-sm font-medium text-emerald-900">Zusammenfassung</div>
                         <div class="mt-3 space-y-2 text-sm text-emerald-950">
                             <div class="flex items-center justify-between gap-4">
-                                <span>Preis pro Person</span>
+                                <span>Preis</span>
                                 <span class="font-semibold">
                                     @if($event->is_paid)
-                                        {{ number_format((float) $event->price_per_person, 2, ',', '.') }} {{ $currency }}
+                                        @if($hasMemberRate)
+                                            Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.$currency : 'frei' }} · Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                        @else
+                                            {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                        @endif
                                     @else
                                         Kostenfrei
                                     @endif
                                 </span>
                             </div>
                             <div class="flex items-center justify-between gap-4">
-                                <span>Teilnehmer</span>
-                                <span class="font-semibold" x-text="participantCount"></span>
-                            </div>
+                                    <span>Teilnehmer</span>
+                                    <span class="font-semibold" x-text="participantCount"></span>
+                                </div>
+                                @if($hasMemberRate)
+                                    <div class="flex items-center justify-between gap-4" x-show="memberRateApplies()" x-cloak>
+                                        <span>davon Mitglied</span>
+                                        <span class="font-semibold">1</span>
+                                    </div>
+                                @endif
                             <div class="border-t border-emerald-200 pt-2">
                                 <div class="flex items-center justify-between gap-4 text-base">
                                     <span class="font-semibold">Gesamt</span>
-                                    <span class="font-semibold" x-text="pricePerPerson > 0 ? `${totalAmount()} {{ $currency }}` : '0,00 {{ $currency }}'"></span>
+                                    <span class="font-semibold" x-text="`${totalAmount()} {{ $currency }}`"></span>
                                 </div>
                                 <p x-show="voucherHint()" x-cloak class="mt-2 text-xs leading-5 text-emerald-800" x-text="voucherHint()"></p>
                             </div>
@@ -453,6 +485,25 @@
                         </span>
                     </label>
                 </div>
+
+                @if($hasMemberRate)
+                    <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4" x-show="bookingMode === 'person' && useBookerAsParticipant" x-cloak>
+                        <input type="hidden" name="booking_claims_membership" value="0">
+                        <label class="flex items-start gap-3 text-sm text-emerald-950">
+                            <input type="checkbox"
+                                   name="booking_claims_membership"
+                                   value="1"
+                                   x-model="bookerClaimsMembership"
+                                   class="mt-0.5 rounded border-emerald-200 text-emerald-700 focus:ring-emerald-500">
+                            <span>
+                                <span class="block font-semibold">Ich bin Mitglied in diesem Verein</span>
+                                <span class="mt-1 block text-emerald-900/80">
+                                    Clubano prüft die Mitgliedschaft über deine E-Mail-Adresse. Nur der Ansprechpartner erhält dann den Mitgliederpreis.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+                @endif
 
                 <div x-show="bookingMode === 'person' && useBookerAsParticipant" x-cloak class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
                     <span class="font-semibold text-slate-900">Teilnehmer 1:</span>
