@@ -9,23 +9,23 @@ use Carbon\Carbon;
 
 class TemplateParser
 {
-    public static function parse(string $text, Member|Contact|array $recipient, ?Tenant $tenant = null): string
+    public static function parse(string $text, Member|Contact|array $recipient, ?Tenant $tenant = null, array $overrides = []): string
     {
         if ($recipient instanceof Member) {
             $tenant = $tenant ?: Tenant::find($recipient->tenant_id);
 
-            return self::replace($text, self::memberVariables($recipient, $tenant));
+            return self::replace($text, array_merge(self::memberVariables($recipient, $tenant), $overrides));
         }
 
         if ($recipient instanceof Contact) {
             $tenant = $tenant ?: Tenant::find($recipient->tenant_id);
 
-            return self::replace($text, self::contactVariables($recipient, $tenant));
+            return self::replace($text, array_merge(self::contactVariables($recipient, $tenant), $overrides));
         }
 
         $tenant = $tenant ?: Tenant::find($recipient['tenant_id'] ?? null);
 
-        return self::replace($text, self::arrayVariables($recipient, $tenant));
+        return self::replace($text, array_merge(self::arrayVariables($recipient, $tenant), $overrides));
     }
 
     private static function replace(string $text, array $vars): string

@@ -83,6 +83,7 @@ class MailController extends Controller
             ],
             'subject' => 'required|string|max:255',
             'body' => 'required|string',
+            'message_link' => 'nullable|url|max:2048',
             'members' => 'nullable|array',
             'members.*' => [
                 'integer',
@@ -118,6 +119,14 @@ class MailController extends Controller
         if (empty($validated['members'] ?? []) && empty($validated['contacts'] ?? []) && empty($directEmails)) {
             return back()
                 ->withErrors(['members' => 'Bitte waehle mindestens ein Mitglied, einen Kontakt oder gib mindestens eine freie E-Mail-Adresse ein.'])
+                ->withInput();
+        }
+
+        $messageLink = trim((string) ($validated['message_link'] ?? ''));
+
+        if (str_contains($validated['body'], '{link}') && $messageLink === '') {
+            return back()
+                ->withErrors(['message_link' => 'Diese Vorlage enthaelt einen Button-Link. Bitte hinterlege hier den Link, damit der Button klickbar ist.'])
                 ->withInput();
         }
 
@@ -173,6 +182,7 @@ class MailController extends Controller
                 fromAddress: $fromAddress,
                 fromName: $fromName,
                 replyToAddress: $replyToAddress,
+                messageLink: $messageLink ?: null,
                 attachments: $attachments,
                 meta: [
                     'attachment_count' => count($attachments),
@@ -206,6 +216,7 @@ class MailController extends Controller
                 fromAddress: $fromAddress,
                 fromName: $fromName,
                 replyToAddress: $replyToAddress,
+                messageLink: $messageLink ?: null,
                 attachments: $attachments,
                 meta: [
                     'attachment_count' => count($attachments),
@@ -238,6 +249,7 @@ class MailController extends Controller
                 fromAddress: $fromAddress,
                 fromName: $fromName,
                 replyToAddress: $replyToAddress,
+                messageLink: $messageLink ?: null,
                 meta: [
                     'source' => 'manual_email',
                     'attachment_count' => count($attachments),
@@ -286,11 +298,13 @@ class MailController extends Controller
         string $fromAddress,
         string $fromName,
         ?string $replyToAddress = null,
+        ?string $messageLink = null,
         array $meta = [],
         array $attachments = [],
     ): void {
-        $html = TemplateParser::parse($body, $recipient, $tenant);
-        $mailSubject = trim(strip_tags(TemplateParser::parse($subject, $recipient, $tenant)));
+        $overrides = $messageLink ? ['{link}' => $messageLink] : [];
+        $html = TemplateParser::parse($body, $recipient, $tenant, $overrides);
+        $mailSubject = trim(strip_tags(TemplateParser::parse($subject, $recipient, $tenant, $overrides)));
 
         $dispatchLog = TemplateDispatchLog::create([
             'tenant_id' => $tenant->id,

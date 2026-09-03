@@ -122,6 +122,26 @@
                     <textarea id="body" name="body" rows="16" class="w-full rounded-2xl border-slate-300 text-sm">{{ old('body') }}</textarea>
                 </div>
 
+                <div class="mt-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                    <label for="message_link" class="block text-sm font-semibold text-blue-950">Button-Link aus Vorlage</label>
+                    <p class="mt-1 text-sm leading-6 text-blue-800">
+                        Wenn die Vorlage einen Button mit <span class="font-mono">{link}</span> enthaelt, wird dieser Link beim Versand eingesetzt.
+                    </p>
+                    <input
+                        id="message_link"
+                        name="message_link"
+                        type="url"
+                        x-model="messageLink"
+                        @input="syncPreview(tinymce.get('body'))"
+                        value="{{ old('message_link') }}"
+                        class="mt-3 w-full rounded-2xl border-blue-200 bg-white text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        placeholder="https://..."
+                    >
+                    @error('message_link')
+                        <p class="mt-2 text-sm text-rose-700">{{ $message }}</p>
+                    @enderror
+                </div>
+
                 <div class="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <label for="attachments" class="block text-sm font-semibold text-slate-800">Anhänge</label>
                     <p class="mt-1 text-sm text-slate-500">Bis zu 5 Dateien, je maximal 10 MB. Erlaubt sind PDF, Office-Dateien, CSV, Text und Bilder.</p>
@@ -345,6 +365,7 @@
             memberSearch: '',
             contactSearch: '',
             directEmails: @js(old('direct_emails', $preselectedDirectEmails ?? '')),
+            messageLink: @js(old('message_link', '')),
             selectedCount: 0,
             init() {
                 this.updateTemplate();
@@ -428,6 +449,7 @@
                     '{land}': 'Deutschland',
                     '{verein}': 'Musterverein',
                     '{heute}': new Date().toLocaleDateString('de-DE'),
+                    '{link}': this.messageLink || 'https://clubano.de/beispiel-link',
                 };
 
                 return Object.entries(replacements).reduce((text, [placeholder, value]) => {
