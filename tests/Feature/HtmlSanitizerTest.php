@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\HtmlSanitizer;
+use App\Services\TemplateParser;
 use App\Models\Template;
 use App\Models\Tenant;
 
@@ -37,6 +38,31 @@ test('html sanitizer turns plain text into safe line break html', function () {
 
     expect($clean)
         ->toBe('Hallo &lt;Club&gt;<br>' . PHP_EOL . 'Neue Zeile');
+});
+
+test('html sanitizer keeps safe mail buttons with placeholder links', function () {
+    $html = '<p style="margin:24px 0;"><a href="{link}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;" onclick="alert(1)">Jetzt öffnen</a></p>';
+
+    $clean = app(HtmlSanitizer::class)->sanitize($html);
+
+    expect($clean)
+        ->toContain('href="{link}"')
+        ->toContain('style="display:inline-block; background:#0f172a; color:#ffffff; text-decoration:none; border-radius:14px; padding:14px 22px; font-weight:700"')
+        ->toContain('rel="noopener noreferrer"')
+        ->not->toContain('onclick')
+        ->not->toContain('javascript:');
+});
+
+test('template parser replaces individual link placeholder from recipient data', function () {
+    $html = '<a href="{link}">Antwort öffnen</a>';
+
+    $parsed = TemplateParser::parse($html, [
+        'tenant_id' => null,
+        'name' => 'Max Mustermann',
+        'link' => 'https://clubano.de/einladung/abc',
+    ]);
+
+    expect($parsed)->toBe('<a href="https://clubano.de/einladung/abc">Antwort öffnen</a>');
 });
 
 test('stored html sanitizer command supports dry run and apply mode', function () {

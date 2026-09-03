@@ -56,6 +56,7 @@ class TemplateParser
             '{land}' => $member->country ?? '',
             '{verein}' => $tenant->name ?? '',
             '{heute}' => Carbon::now()->format('d.m.Y'),
+            '{link}' => '',
         ];
     }
 
@@ -81,6 +82,7 @@ class TemplateParser
             '{land}' => $contact->country ?? '',
             '{verein}' => $tenant->name ?? '',
             '{heute}' => Carbon::now()->format('d.m.Y'),
+            '{link}' => '',
         ];
     }
 
@@ -107,6 +109,7 @@ class TemplateParser
             '{verein}' => $tenant->name ?? '',
             '{heute}' => Carbon::now()->format('d.m.Y'),
             '{formular}' => (string) ($recipient['form_title'] ?? ''),
+            '{link}' => (string) ($recipient['link'] ?? ($recipient['url'] ?? ($recipient['individual_link'] ?? ''))),
         ];
 
         $dynamic = collect($recipient)

@@ -14,6 +14,7 @@
         '{land}' => 'Land',
         '{verein}' => 'Verein',
         '{heute}' => 'Heutiges Datum',
+        '{link}' => 'Individueller Link',
     ];
 @endphp
 

@@ -98,6 +98,33 @@
             </section>
 
             <section class="rounded-2xl border border-slate-200 bg-white p-5">
+                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Aktion</div>
+                <h2 class="mt-2 text-xl font-semibold text-slate-950">Button einfügen</h2>
+                <p class="mt-2 text-sm leading-6 text-slate-500">
+                    Für Anmeldungen, Antworten oder persönliche Links. Der Link darf auch ein Platzhalter sein.
+                </p>
+
+                <div class="mt-4 space-y-3">
+                    <div>
+                        <label for="template-button-label" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Button-Text</label>
+                        <input id="template-button-label" type="text" value="Jetzt öffnen" class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300">
+                    </div>
+                    <div>
+                        <label for="template-button-url" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Link</label>
+                        <input id="template-button-url" type="text" value="{link}" class="mt-2 w-full rounded-2xl border-slate-200 font-mono text-sm focus:border-slate-400 focus:ring-slate-300" placeholder="https://... oder {link}">
+                    </div>
+                    <button type="button"
+                            id="template-insert-button"
+                            class="inline-flex w-full items-center justify-center rounded-full bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                        Button in Vorlage einfügen
+                    </button>
+                    <p class="text-xs leading-5 text-slate-500">
+                        Beispiel: <span class="font-mono">{link}</span> wird beim Versand durch einen individuellen Link ersetzt, wenn der Versand einen Link mitgibt.
+                    </p>
+                </div>
+            </section>
+
+            <section class="rounded-2xl border border-slate-200 bg-white p-5">
                 <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Vorschau</div>
                 <h2 class="mt-2 text-xl font-semibold text-slate-950">So wirkt die Vorlage</h2>
 
@@ -154,6 +181,7 @@
                     '{land}': 'Deutschland',
                     '{verein}': 'Musterverein',
                     '{heute}': new Date().toLocaleDateString('de-DE'),
+                    '{link}': 'https://clubano.de/persoenlicher-link',
                 };
 
                 const replacePreviewPlaceholders = (content) => {
@@ -247,6 +275,43 @@
                         editor.on('init keyup change input undo redo setcontent', () => syncPreview(editor));
                     },
                 });
+
+                const insertTemplateButton = () => {
+                    const label = (document.getElementById('template-button-label')?.value || 'Jetzt öffnen').trim();
+                    const url = (document.getElementById('template-button-url')?.value || '{link}').trim();
+                    const safeLabel = label
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;');
+                    const safeUrl = url
+                        .replace(/&/g, '&amp;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/</g, '')
+                        .replace(/>/g, '');
+                    const html = `<p style="margin:24px 0;"><a href="${safeUrl}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;">${safeLabel}</a></p>`;
+                    const editor = window.tinymce ? tinymce.get('body') : null;
+
+                    if (editor && !editor.isHidden()) {
+                        editor.focus();
+                        editor.insertContent(html);
+                        syncPreview(editor);
+                        return;
+                    }
+
+                    if (!bodyTextarea) {
+                        return;
+                    }
+
+                    const start = bodyTextarea.selectionStart ?? bodyTextarea.value.length;
+                    const end = bodyTextarea.selectionEnd ?? bodyTextarea.value.length;
+                    bodyTextarea.value = bodyTextarea.value.slice(0, start) + html + bodyTextarea.value.slice(end);
+                    bodyTextarea.focus();
+                    bodyTextarea.setSelectionRange(start + html.length, start + html.length);
+                    syncPreview();
+                };
+
+                document.getElementById('template-insert-button')?.addEventListener('click', insertTemplateButton);
 
                 const form = document.getElementById('templateForm');
                 if (form) {

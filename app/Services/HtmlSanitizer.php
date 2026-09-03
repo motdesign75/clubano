@@ -25,6 +25,7 @@ class HtmlSanitizer
         'colspan',
         'height',
         'rowspan',
+        'style',
         'title',
         'width',
     ];
@@ -140,6 +141,17 @@ class HtmlSanitizer
 
             if (in_array($name, ['href', 'src'], true) && ! $this->isSafeUrl($value, $name === 'src')) {
                 $element->removeAttributeNode($attribute);
+                continue;
+            }
+
+            if ($name === 'style') {
+                $safeStyle = $this->sanitizeStyle($value);
+
+                if ($safeStyle === '') {
+                    $element->removeAttributeNode($attribute);
+                } else {
+                    $element->setAttribute('style', $safeStyle);
+                }
             }
         }
 
@@ -156,6 +168,10 @@ class HtmlSanitizer
             return true;
         }
 
+        if (! $allowImageData && preg_match('/^\{[a-zA-Z0-9_]+\}$/', $normalized)) {
+            return true;
+        }
+
         if (preg_match('#^(https?:|mailto:|tel:)#', $normalized)) {
             return true;
         }
@@ -165,5 +181,53 @@ class HtmlSanitizer
         }
 
         return str_starts_with($normalized, '/');
+    }
+
+    private function sanitizeStyle(string $value): string
+    {
+        $allowedProperties = [
+            'background',
+            'background-color',
+            'border',
+            'border-radius',
+            'color',
+            'display',
+            'font-size',
+            'font-weight',
+            'line-height',
+            'margin',
+            'margin-bottom',
+            'margin-top',
+            'padding',
+            'text-align',
+            'text-decoration',
+        ];
+
+        $declarations = collect(explode(';', $value))
+            ->map(fn (string $declaration) => trim($declaration))
+            ->filter()
+            ->map(function (string $declaration) use ($allowedProperties): ?string {
+                if (! str_contains($declaration, ':')) {
+                    return null;
+                }
+
+                [$property, $propertyValue] = array_map('trim', explode(':', $declaration, 2));
+                $property = strtolower($property);
+                $propertyValue = trim($propertyValue);
+
+                if (! in_array($property, $allowedProperties, true)) {
+                    return null;
+                }
+
+                if (preg_match('/expression|javascript:|url\s*\(/i', $propertyValue)) {
+                    return null;
+                }
+
+                return $property . ':' . $propertyValue;
+            })
+            ->filter()
+            ->values();
+
+        return $declarations->implode('; ');
     }
 }
