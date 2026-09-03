@@ -8,6 +8,7 @@ use App\Models\Template;
 use App\Models\TemplateDispatchLog;
 use App\Services\MailTrackingService;
 use App\Services\TemplateParser;
+use App\Services\HtmlSanitizer;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
@@ -19,6 +20,7 @@ class MailController extends Controller
 {
     public function __construct(
         private readonly MailTrackingService $mailTrackingService,
+        private readonly HtmlSanitizer $htmlSanitizer,
     ) {
     }
 
@@ -303,8 +305,8 @@ class MailController extends Controller
         array $attachments = [],
     ): void {
         $overrides = $messageLink ? ['{link}' => $messageLink] : [];
-        $html = TemplateParser::parse($body, $recipient, $tenant, $overrides);
-        $mailSubject = trim(strip_tags(TemplateParser::parse($subject, $recipient, $tenant, $overrides)));
+        $html = $this->htmlSanitizer->normalize(TemplateParser::parse($body, $recipient, $tenant, $overrides));
+        $mailSubject = trim(strip_tags($this->htmlSanitizer->normalize(TemplateParser::parse($subject, $recipient, $tenant, $overrides))));
 
         $dispatchLog = TemplateDispatchLog::create([
             'tenant_id' => $tenant->id,

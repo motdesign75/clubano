@@ -77,6 +77,41 @@ test('operator can send a test announcement to their own account', function () {
 
 });
 
+test('operator test announcement keeps umlauts and clickable cta in rendered mail data', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    Mail::shouldReceive('send')
+        ->once()
+        ->with(
+            'admin.announcements.mail',
+            Mockery::on(fn (array $data) => str_contains($data['bodyHtml'], 'Die GHG lädt')
+                && ! str_contains($data['bodyHtml'], 'lÃ¤dt')
+                && ($data['ctaUrl'] ?? null) === 'https://app.clubano.de/dashboard'),
+            Mockery::type(Closure::class)
+        );
+
+    $operator = User::factory()->create([
+        'tenant_id' => null,
+        'role' => User::ROLE_SUPERADMIN,
+        'email' => 'operator@example.test',
+        'email_verified_at' => now(),
+    ]);
+
+    $this->actingAs($operator)
+        ->post(route('admin.announcements.store'), [
+            'action' => 'test',
+            'subject' => 'Clubano Update',
+            'body_markdown' => '<p>Die GHG lÃ¤dt zum **Goldenen Oktober** ein.</p>',
+            'cta_label' => 'Update öffnen',
+            'cta_url' => 'https://app.clubano.de/dashboard',
+            'test_email' => 'testziel@example.test',
+            'category' => OperatorAnnouncement::CATEGORY_PRODUCT_UPDATE,
+            'recipient_filter' => 'all_active',
+        ])
+        ->assertRedirect(route('admin.announcements.index'))
+        ->assertSessionHas('success', 'Testmail wurde an dein Betreiberkonto gesendet.');
+});
+
 test('operator test announcement failures return to editor instead of crashing', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
     Mail::shouldReceive('send')->once()->andThrow(new RuntimeException('SMTP nicht erreichbar'));

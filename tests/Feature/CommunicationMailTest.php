@@ -60,7 +60,16 @@ test('staff can send direct html mail with attachments without a template', func
 
 test('staff can fill template button link for clickable mail buttons', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
-    Mail::fake();
+
+    Mail::shouldReceive('send')
+        ->once()
+        ->with(
+            'mail.layout',
+            Mockery::on(fn (array $data) => str_contains($data['body'], 'href=')
+                && str_contains($data['body'], 'clubano.de%2Fupdate')
+                && ! str_contains($data['body'], '{link}')),
+            Mockery::type(Closure::class)
+        );
 
     $tenant = Tenant::create([
         'name' => 'Buttonverein',
@@ -109,6 +118,49 @@ test('staff can fill template button link for clickable mail buttons', function 
 
     expect($log->message_excerpt)->toContain('Jetzt oeffnen')
         ->and($log->meta['composition_mode'])->toBe('template_applied');
+});
+
+test('staff mail normalizes pasted mojibake before delivery', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    Mail::shouldReceive('send')
+        ->once()
+        ->with(
+            'mail.layout',
+            Mockery::on(fn (array $data) => str_contains($data['body'], 'Die GHG lädt')
+                && ! str_contains($data['body'], 'lÃ¤dt')),
+            Mockery::type(Closure::class)
+        );
+
+    $tenant = Tenant::create([
+        'name' => 'Umlautverein',
+        'slug' => 'umlautverein',
+        'email' => 'verein@example.test',
+        'license_mode' => 'gifted',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+        'email_verified_at' => now(),
+    ]);
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Mara',
+        'last_name' => 'Mustermann',
+        'email' => 'mara@example.test',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    $response = $this->actingAs($staff)->post(route('mail.send'), [
+        'subject' => 'Update',
+        'body' => '<p>Die GHG lÃ¤dt zum Herbstfest ein.</p>',
+        'members' => [$member->id],
+    ]);
+
+    $response->assertRedirect();
+    $response->assertSessionHas('success', '1 Serienmails gesendet');
 });
 
 test('staff must provide a button link when template contains link placeholder', function () {

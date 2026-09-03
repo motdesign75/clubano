@@ -332,9 +332,10 @@ class OperatorAnnouncementController extends Controller
 
     private function sendMail(string $email, ?string $name, ?Tenant $tenant, ?User $recipient, OperatorAnnouncement $announcement, ?OperatorAnnouncementDelivery $delivery): void
     {
+        $bodyHtml = app(HtmlSanitizer::class)->sanitize($announcement->body_html) ?? '';
         $bodyHtml = $delivery
-            ? $this->instrumentBody($announcement->body_html, $delivery)
-            : $announcement->body_html;
+            ? $this->instrumentBody($bodyHtml, $delivery)
+            : $bodyHtml;
 
         $ctaUrl = $announcement->cta_url;
 
@@ -373,6 +374,7 @@ class OperatorAnnouncementController extends Controller
 
     private function instrumentBody(string $html, OperatorAnnouncementDelivery $delivery): string
     {
+        $html = app(HtmlSanitizer::class)->normalize($html);
         $document = new DOMDocument('1.0', 'UTF-8');
         $encodedHtml = mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8');
 

@@ -37,7 +37,7 @@ class HtmlSanitizer
 
     public function sanitize(?string $value): ?string
     {
-        $value = trim($this->normalizePastedContent((string) $value));
+        $value = trim($this->normalize((string) $value));
 
         if ($value === '') {
             return null;
@@ -110,7 +110,7 @@ class HtmlSanitizer
         return (bool) preg_match('/<\s*\/?\s*(' . $allowed . ')(\s|\/?>)/i', $value);
     }
 
-    private function normalizePastedContent(string $value): string
+    public function normalize(string $value): string
     {
         $value = $this->repairMojibake($value);
         $value = str_replace("\xc2\xa0", ' ', $value);
