@@ -493,6 +493,7 @@
                 statusbar: true,
                 plugins: 'lists link image table code fullscreen autoresize',
                 toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image table | removeformat | code fullscreen',
+                extended_valid_elements: 'a[href|target|rel|style|title],p[style],span[style],div[style]',
                 block_formats: 'Absatz=p; Überschrift=h2; Zwischenüberschrift=h3',
                 image_title: true,
                 image_caption: true,

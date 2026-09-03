@@ -110,6 +110,25 @@
                         <input id="template-button-label" type="text" value="Jetzt öffnen" class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300">
                     </div>
                     <div>
+                        <label class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Farbe</label>
+                        <div class="mt-2 grid grid-cols-5 gap-2" role="group" aria-label="Button-Farbe wählen">
+                            @foreach([
+                                '#0f172a' => 'Dunkel',
+                                '#2954A3' => 'Clubano Blau',
+                                '#047857' => 'Grün',
+                                '#b45309' => 'Gold',
+                                '#be123c' => 'Rot',
+                            ] as $color => $label)
+                                <button type="button"
+                                        class="template-button-color h-10 rounded-2xl border-2 border-white shadow-sm ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                                        data-color="{{ $color }}"
+                                        title="{{ $label }}"
+                                        aria-label="{{ $label }}"
+                                        style="background: {{ $color }};"></button>
+                            @endforeach
+                        </div>
+                    </div>
+                    <div>
                         <label for="template-button-url" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Link</label>
                         <input id="template-button-url" type="text" value="{link}" class="mt-2 w-full rounded-2xl border-slate-200 font-mono text-sm focus:border-slate-400 focus:ring-slate-300" placeholder="https://... oder {link}">
                     </div>
@@ -165,6 +184,7 @@
                 const previewSubject = document.getElementById('template-preview-subject');
                 const previewBody = document.getElementById('template-preview-body');
                 const wordCount = document.getElementById('template-word-count');
+                let selectedButtonColor = '#0f172a';
 
                 const previewReplacements = {
                     '{anrede}': 'Guten Tag Max Mustermann',
@@ -235,6 +255,7 @@
                     statusbar: true,
                     plugins: 'lists link image table code fullscreen autoresize',
                     toolbar: 'undo redo | blocks | bold italic underline | alignleft aligncenter alignright | bullist numlist | link image table | removeformat | code fullscreen',
+                    extended_valid_elements: 'a[href|target|rel|style|title],p[style],span[style],div[style]',
                     block_formats: 'Absatz=p; Überschrift 2=h2; Überschrift 3=h3',
                     image_title: true,
                     image_caption: true,
@@ -289,7 +310,7 @@
                         .replace(/"/g, '&quot;')
                         .replace(/</g, '')
                         .replace(/>/g, '');
-                    const html = `<p style="margin:24px 0;"><a href="${safeUrl}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;">${safeLabel}</a></p>`;
+                    const html = `<p style="margin:24px 0;"><a href="${safeUrl}" style="display:inline-block;background:${selectedButtonColor};color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;">${safeLabel}</a></p>`;
                     const editor = window.tinymce ? tinymce.get('body') : null;
 
                     if (editor && !editor.isHidden()) {
@@ -312,6 +333,17 @@
                 };
 
                 document.getElementById('template-insert-button')?.addEventListener('click', insertTemplateButton);
+                document.querySelectorAll('.template-button-color').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        selectedButtonColor = button.dataset.color || '#0f172a';
+                        document.querySelectorAll('.template-button-color').forEach((item) => {
+                            item.classList.toggle('ring-slate-950', item === button);
+                            item.classList.toggle('ring-1', item !== button);
+                            item.classList.toggle('ring-2', item === button);
+                        });
+                    });
+                });
+                document.querySelector('.template-button-color')?.click();
 
                 const form = document.getElementById('templateForm');
                 if (form) {
