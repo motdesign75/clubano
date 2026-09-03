@@ -132,6 +132,12 @@ class MailController extends Controller
                 ->withInput();
         }
 
+        if ($this->containsUnlinkedCallToAction($validated['body']) && $messageLink === '') {
+            return back()
+                ->withErrors(['message_link' => 'Der Text enthaelt "JETZT ANMELDEN", aber keinen Link. Bitte hinterlege den Button-Link, damit der Button klickbar ist.'])
+                ->withInput();
+        }
+
         $tenant = auth()->user()->tenant;
 
         $template = null;
@@ -285,6 +291,31 @@ class MailController extends Controller
             ->all();
     }
 
+    private function containsUnlinkedCallToAction(string $body): bool
+    {
+        if (stripos($body, '<a ') !== false || str_contains($body, '{link}')) {
+            return false;
+        }
+
+        return (bool) preg_match('/(?:\*\*\s*)?JETZT\s+ANMELDEN(?:\s*\*\*)?/iu', $body);
+    }
+
+    private function promoteStandaloneCallToAction(string $html, ?string $messageLink): string
+    {
+        if (! $messageLink || stripos($html, '<a ') !== false) {
+            return $html;
+        }
+
+        $button = '<a href="' . e($messageLink) . '" style="display:inline-block;background:#2954A3;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;">JETZT ANMELDEN</a>';
+        $updated = preg_replace('/<strong>\s*JETZT\s+ANMELDEN\s*<\/strong>/iu', $button, $html, 1, $count);
+
+        if (($count ?? 0) > 0) {
+            return $updated;
+        }
+
+        return preg_replace('/(?<![\pL\pN])JETZT\s+ANMELDEN(?![\pL\pN])/iu', $button, $html, 1) ?? $html;
+    }
+
     private function sendTrackedTemplateMail(
         Member|Contact|array $recipient,
         ?Template $template,
@@ -306,6 +337,7 @@ class MailController extends Controller
     ): void {
         $overrides = $messageLink ? ['{link}' => $messageLink] : [];
         $html = $this->htmlSanitizer->normalize(TemplateParser::parse($body, $recipient, $tenant, $overrides));
+        $html = $this->promoteStandaloneCallToAction($html, $messageLink);
         $mailSubject = trim(strip_tags($this->htmlSanitizer->normalize(TemplateParser::parse($subject, $recipient, $tenant, $overrides))));
 
         $dispatchLog = TemplateDispatchLog::create([

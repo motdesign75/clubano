@@ -50,12 +50,15 @@ test('html sanitizer keeps german umlauts readable in formatted mail text', func
 });
 
 test('html sanitizer repairs mojibake and simple markdown from pasted update text', function () {
-    $clean = app(HtmlSanitizer::class)->sanitize('Die GHG lÃ¤dt zum **Goldenen Oktober mit verkaufsoffenem Sonntag** ein.');
+    $clean = app(HtmlSanitizer::class)->sanitize('Die GHG lÃ¤dt zum **Goldenen Oktober mit verkaufsoffenem Sonntag** ein. Und wir wÃ¼rden uns freuen â€“ mit schÃ¶nen GrÃ¼ÃŸen.');
 
     expect($clean)
         ->toContain('Die GHG lädt zum')
+        ->toContain('Und wir würden uns freuen – mit schönen Grüßen.')
         ->toContain('<strong>Goldenen Oktober mit verkaufsoffenem Sonntag</strong>')
         ->not->toContain('lÃ¤dt')
+        ->not->toContain('wÃ¼rden')
+        ->not->toContain('â€“')
         ->not->toContain('**Goldenen Oktober');
 });
 

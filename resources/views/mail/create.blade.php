@@ -418,7 +418,7 @@
                 const previewBody = document.getElementById('mail-preview-body');
                 const wordCount = document.getElementById('mail-word-count');
                 const rawBody = editor ? editor.getContent() : (bodyTextarea?.value || '');
-                const renderedBody = this.replacePreviewPlaceholders(rawBody);
+                const renderedBody = this.promoteCallToAction(this.replacePreviewPlaceholders(this.normalizePastedContent(rawBody)));
 
                 if (previewSubject) {
                     previewSubject.textContent = subjectInput?.value?.trim() || 'Ohne Betreff';
@@ -455,6 +455,66 @@
                 return Object.entries(replacements).reduce((text, [placeholder, value]) => {
                     return text.split(placeholder).join(value);
                 }, String(content || ''));
+            },
+            normalizePastedContent(content) {
+                const replacements = {
+                    'Ã„': 'Ä',
+                    'Ã–': 'Ö',
+                    'Ãœ': 'Ü',
+                    'Ã¤': 'ä',
+                    'Ã¶': 'ö',
+                    'Ã¼': 'ü',
+                    'ÃŸ': 'ß',
+                    'Ã©': 'é',
+                    'Ã¨': 'è',
+                    'Ã¡': 'á',
+                    'Ã ': 'à',
+                    'Ã³': 'ó',
+                    'Ã´': 'ô',
+                    'Ã§': 'ç',
+                    'â€“': '–',
+                    'â€”': '—',
+                    'â€ž': '„',
+                    'â€œ': '“',
+                    'â€': '”',
+                    'â€˜': '‘',
+                    'â€™': '’',
+                    'â€¦': '…',
+                    'Â ': ' ',
+                    'Â«': '«',
+                    'Â»': '»',
+                    'Â': '',
+                };
+
+                let normalized = String(content || '').replace(/\u00a0/g, ' ');
+
+                Object.entries(replacements).forEach(([broken, readable]) => {
+                    normalized = normalized.split(broken).join(readable);
+                });
+
+                return normalized.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+            },
+            promoteCallToAction(content) {
+                const html = String(content || '');
+
+                if (!this.messageLink || /<a\s/i.test(html)) {
+                    return html;
+                }
+
+                const safeUrl = this.escapeHtml(this.messageLink);
+                const button = `<a href="${safeUrl}" style="display:inline-block;background:#2954A3;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;">JETZT ANMELDEN</a>`;
+
+                if (/<strong>\s*JETZT\s+ANMELDEN\s*<\/strong>/i.test(html)) {
+                    return html.replace(/<strong>\s*JETZT\s+ANMELDEN\s*<\/strong>/i, button);
+                }
+
+                return html.replace(/\bJETZT\s+ANMELDEN\b/i, button);
+            },
+            escapeHtml(value) {
+                const element = document.createElement('textarea');
+                element.textContent = String(value || '');
+
+                return element.innerHTML;
             },
             countWords(content) {
                 const plainText = String(content || '')
@@ -521,6 +581,13 @@
                 image_caption: true,
                 image_advtab: true,
                 paste_data_images: true,
+                paste_preprocess: (plugin, args) => {
+                    const state = pageRoot?._x_dataStack?.[0];
+
+                    if (state) {
+                        args.content = state.normalizePastedContent(args.content);
+                    }
+                },
                 automatic_uploads: true,
                 file_picker_types: 'image',
                 file_picker_callback: (callback, value, meta) => {

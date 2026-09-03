@@ -120,20 +120,48 @@ class HtmlSanitizer
 
     private function repairMojibake(string $value): string
     {
-        if (! preg_match('/(?:Ã|Â|â[€™€œ€“€¦])/u', $value)) {
+        if (! preg_match('/(?:Ã|Â|â)/u', $value)) {
             return $value;
         }
 
-        $candidate = mb_convert_encoding($value, 'Windows-1252', 'UTF-8');
+        $candidate = strtr($value, [
+            'Ã„' => 'Ä',
+            'Ã–' => 'Ö',
+            'Ãœ' => 'Ü',
+            'Ã¤' => 'ä',
+            'Ã¶' => 'ö',
+            'Ã¼' => 'ü',
+            'ÃŸ' => 'ß',
+            'Ã©' => 'é',
+            'Ã¨' => 'è',
+            'Ã¡' => 'á',
+            'Ã ' => 'à',
+            'Ã³' => 'ó',
+            'Ã´' => 'ô',
+            'Ã§' => 'ç',
+            'â€“' => '–',
+            'â€”' => '—',
+            'â€ž' => '„',
+            'â€œ' => '“',
+            'â€' => '”',
+            'â€˜' => '‘',
+            'â€™' => '’',
+            'â€¦' => '…',
+            'Â ' => ' ',
+            'Â«' => '«',
+            'Â»' => '»',
+            'Â' => '',
+        ]);
 
-        if (! mb_check_encoding($candidate, 'UTF-8')) {
-            return $value;
-        }
-
-        $originalArtifacts = preg_match_all('/(?:Ã|Â|â[€™€œ€“€¦])/u', $value);
-        $candidateArtifacts = preg_match_all('/(?:Ã|Â|â[€™€œ€“€¦])/u', $candidate);
+        $originalArtifacts = $this->mojibakeArtifactCount($value);
+        $candidateArtifacts = $this->mojibakeArtifactCount($candidate);
 
         return $candidateArtifacts < $originalArtifacts ? $candidate : $value;
+    }
+
+    private function mojibakeArtifactCount(string $value): int
+    {
+        return preg_match_all('/(?:Ã.|Â.|â[^\s<]*)/u', $value) ?: 0;
     }
 
     private function unwrapNode(DOMElement $node): void
