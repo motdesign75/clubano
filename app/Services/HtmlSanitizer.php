@@ -37,7 +37,7 @@ class HtmlSanitizer
 
     public function sanitize(?string $value): ?string
     {
-        $value = trim((string) $value);
+        $value = trim($this->normalizePastedContent((string) $value));
 
         if ($value === '') {
             return null;
@@ -108,6 +108,32 @@ class HtmlSanitizer
         $allowed = implode('|', array_map('preg_quote', self::ALLOWED_TAGS));
 
         return (bool) preg_match('/<\s*\/?\s*(' . $allowed . ')(\s|\/?>)/i', $value);
+    }
+
+    private function normalizePastedContent(string $value): string
+    {
+        $value = $this->repairMojibake($value);
+        $value = str_replace("\xc2\xa0", ' ', $value);
+
+        return preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $value) ?? $value;
+    }
+
+    private function repairMojibake(string $value): string
+    {
+        if (! preg_match('/(?:Ã|Â|â[€™€œ€“€¦])/u', $value)) {
+            return $value;
+        }
+
+        $candidate = mb_convert_encoding($value, 'Windows-1252', 'UTF-8');
+
+        if (! mb_check_encoding($candidate, 'UTF-8')) {
+            return $value;
+        }
+
+        $originalArtifacts = preg_match_all('/(?:Ã|Â|â[€™€œ€“€¦])/u', $value);
+        $candidateArtifacts = preg_match_all('/(?:Ã|Â|â[€™€œ€“€¦])/u', $candidate);
+
+        return $candidateArtifacts < $originalArtifacts ? $candidate : $value;
     }
 
     private function unwrapNode(DOMElement $node): void

@@ -236,8 +236,32 @@ document.addEventListener('DOMContentLoaded', () => {
         return plainText === '' ? 0 : plainText.split(/\s+/).length;
     };
 
+    const mojibakePattern = /(?:Ã|Â|â[€™€œ€“€¦])/;
+
+    const repairMojibake = (content) => {
+        const value = String(content || '');
+
+        if (!mojibakePattern.test(value)) {
+            return value;
+        }
+
+        try {
+            const candidate = new TextDecoder('utf-8', { fatal: true })
+                .decode(Uint8Array.from(value, (character) => character.charCodeAt(0) & 255));
+            const artifactCount = (text) => (text.match(/(?:Ã|Â|â[€™€œ€“€¦])/g) || []).length;
+
+            return artifactCount(candidate) < artifactCount(value) ? candidate : value;
+        } catch (error) {
+            return value;
+        }
+    };
+
+    const normalizePastedContent = (content) => repairMojibake(content)
+        .replace(/\u00a0/g, ' ')
+        .replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+
     const syncPreview = (editor = null) => {
-        const body = editor ? editor.getContent() : document.getElementById('body_markdown')?.value || '';
+        const body = normalizePastedContent(editor ? editor.getContent() : document.getElementById('body_markdown')?.value || '');
         const subject = subjectInput?.value?.trim() || 'Ohne Betreff';
         const ctaLabel = ctaLabelInput?.value?.trim();
         const ctaUrl = ctaUrlInput?.value?.trim();
@@ -340,6 +364,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 .catch((error) => reject(error.message));
         }),
         content_style: 'body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:15px;line-height:1.65;color:#0f172a;} h2,h3{line-height:1.25;margin:1.2em 0 .5em;} p{margin:.7em 0;} img{max-width:100%;height:auto;border-radius:14px;}',
+        paste_preprocess: (plugin, args) => {
+            args.content = normalizePastedContent(args.content);
+        },
         setup: (editor) => {
             editor.on('init keyup change input undo redo setcontent', () => syncPreview(editor));
         },

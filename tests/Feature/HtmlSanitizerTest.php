@@ -49,6 +49,16 @@ test('html sanitizer keeps german umlauts readable in formatted mail text', func
         ->not->toContain('wÃ¼rden');
 });
 
+test('html sanitizer repairs mojibake and simple markdown from pasted update text', function () {
+    $clean = app(HtmlSanitizer::class)->sanitize('Die GHG lÃ¤dt zum **Goldenen Oktober mit verkaufsoffenem Sonntag** ein.');
+
+    expect($clean)
+        ->toContain('Die GHG lädt zum')
+        ->toContain('<strong>Goldenen Oktober mit verkaufsoffenem Sonntag</strong>')
+        ->not->toContain('lÃ¤dt')
+        ->not->toContain('**Goldenen Oktober');
+});
+
 test('html sanitizer keeps safe mail buttons with placeholder links', function () {
     $html = '<p style="margin:24px 0;"><a href="{link}" style="display:inline-block;background:#2954A3;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;" onclick="alert(1)">Jetzt öffnen</a></p>';
 
