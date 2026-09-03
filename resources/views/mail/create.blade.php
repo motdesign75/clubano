@@ -107,8 +107,13 @@
                         <h2 class="text-lg font-semibold text-slate-900">Nachricht</h2>
                         <p class="mt-1 text-sm text-slate-500">Formatiere Text, Links, Tabellen und Bilder direkt im Editor.</p>
                     </div>
-                    <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                        <span id="mail-word-count">0</span> Wörter
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" @click="cleanEditorContent()" class="inline-flex min-h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
+                            Text bereinigen
+                        </button>
+                        <div class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                            <span id="mail-word-count">0</span> Wörter
+                        </div>
                     </div>
                 </div>
 
@@ -125,7 +130,7 @@
                 <div class="mt-5 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
                     <label for="message_link" class="block text-sm font-semibold text-blue-950">Button-Link aus Vorlage</label>
                     <p class="mt-1 text-sm leading-6 text-blue-800">
-                        Wenn die Vorlage einen Button mit <span class="font-mono">{link}</span> enthaelt, wird dieser Link beim Versand eingesetzt.
+                        Wenn die Vorlage einen Button mit <span class="font-mono">{link}</span> enthaelt oder im Text <span class="font-semibold">JETZT ANMELDEN</span> steht, wird dieser Link beim Versand eingesetzt.
                     </p>
                     <input
                         id="message_link"
@@ -400,6 +405,7 @@
 
                 if (editor && !editor.isHidden()) {
                     editor.setContent(this.templateBody || '');
+                    this.cleanEditorContent(editor);
                     editor.focus();
                     this.syncPreview(editor);
                     return;
@@ -455,6 +461,24 @@
                 return Object.entries(replacements).reduce((text, [placeholder, value]) => {
                     return text.split(placeholder).join(value);
                 }, String(content || ''));
+            },
+            cleanEditorContent(editor = null) {
+                const activeEditor = editor || (window.tinymce ? tinymce.get('body') : null);
+                const bodyTextarea = document.getElementById('body');
+                const rawBody = activeEditor && !activeEditor.isHidden() ? activeEditor.getContent() : (bodyTextarea?.value || '');
+                const cleanedBody = this.promoteCallToAction(this.normalizePastedContent(rawBody));
+
+                if (activeEditor && !activeEditor.isHidden()) {
+                    activeEditor.setContent(cleanedBody);
+                    this.syncPreview(activeEditor);
+                    return;
+                }
+
+                if (bodyTextarea) {
+                    bodyTextarea.value = cleanedBody;
+                    bodyTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    this.syncPreview();
+                }
             },
             normalizePastedContent(content) {
                 const replacements = {
@@ -650,6 +674,7 @@
             });
 
             document.getElementById('mailSendForm')?.addEventListener('submit', () => {
+                pageRoot?._x_dataStack?.[0]?.cleanEditorContent(tinymce.get('body'));
                 tinymce.triggerSave();
             });
         });
