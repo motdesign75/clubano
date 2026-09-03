@@ -235,6 +235,10 @@ class HtmlSanitizer
                 continue;
             }
 
+            if ($name === 'href') {
+                $element->setAttribute($name, $this->normalizeHref($value));
+            }
+
             if ($name === 'style') {
                 $safeStyle = $this->sanitizeStyle($value);
 
@@ -253,7 +257,7 @@ class HtmlSanitizer
 
     private function isSafeUrl(string $value, bool $allowImageData): bool
     {
-        $normalized = strtolower(preg_replace('/\s+/', '', $value) ?? '');
+        $normalized = strtolower(preg_replace('/\s+/', '', $this->normalizeHref($value)) ?? '');
 
         if ($normalized === '' || str_starts_with($normalized, '#')) {
             return true;
@@ -272,6 +276,17 @@ class HtmlSanitizer
         }
 
         return str_starts_with($normalized, '/');
+    }
+
+    private function normalizeHref(string $value): string
+    {
+        $value = trim($value);
+
+        if (preg_match('/^www\.[^\s]+$/i', $value)) {
+            return 'https://' . $value;
+        }
+
+        return $value;
     }
 
     private function sanitizeStyle(string $value): string

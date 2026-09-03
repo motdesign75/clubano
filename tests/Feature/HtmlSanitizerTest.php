@@ -85,6 +85,16 @@ test('html sanitizer keeps safe mail buttons with placeholder links', function (
         ->not->toContain('javascript:');
 });
 
+test('html sanitizer normalizes www mail button links to https urls', function () {
+    $html = '<p><a href="www.ghg-sarstedt.de/anmelden" style="display:inline-block;background:#047857;color:#ffffff;">JETZT ANMELDEN</a></p>';
+
+    $clean = app(HtmlSanitizer::class)->sanitize($html);
+
+    expect($clean)
+        ->toContain('href="https://www.ghg-sarstedt.de/anmelden"')
+        ->toContain('JETZT ANMELDEN');
+});
+
 test('template parser replaces individual link placeholder from recipient data', function () {
     $html = '<a href="{link}">Antwort öffnen</a>';
 

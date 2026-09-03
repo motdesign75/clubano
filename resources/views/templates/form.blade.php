@@ -7,6 +7,8 @@
 @endphp
 
 <div class="space-y-6">
+    <input type="hidden" id="template-button-url-hidden" name="template_button_url" value="{{ old('template_button_url') }}">
+
     @if ($errors->any())
         <section class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4">
             <div class="font-semibold text-rose-950">Bitte kurz prüfen.</div>
@@ -299,7 +301,19 @@
 
                 const insertTemplateButton = () => {
                     const label = (document.getElementById('template-button-label')?.value || 'Jetzt öffnen').trim();
-                    const url = (document.getElementById('template-button-url')?.value || '{link}').trim();
+                    const urlInput = document.getElementById('template-button-url');
+                    const hiddenButtonUrl = document.getElementById('template-button-url-hidden');
+                    const rawUrl = (urlInput?.value || '{link}').trim();
+                    const url = normalizeButtonUrl(rawUrl);
+
+                    if (urlInput && url !== rawUrl) {
+                        urlInput.value = url;
+                    }
+
+                    if (hiddenButtonUrl) {
+                        hiddenButtonUrl.value = url;
+                    }
+
                     const safeLabel = label
                         .replace(/&/g, '&amp;')
                         .replace(/</g, '&lt;')
@@ -332,6 +346,20 @@
                     syncPreview();
                 };
 
+                const normalizeButtonUrl = (value) => {
+                    const url = String(value || '').trim();
+
+                    if (url === '' || url === '{link}') {
+                        return url || '{link}';
+                    }
+
+                    if (/^www\.[^\s]+$/i.test(url)) {
+                        return `https://${url}`;
+                    }
+
+                    return url;
+                };
+
                 document.getElementById('template-insert-button')?.addEventListener('click', insertTemplateButton);
                 document.querySelectorAll('.template-button-color').forEach((button) => {
                     button.addEventListener('click', () => {
@@ -348,6 +376,13 @@
                 const form = document.getElementById('templateForm');
                 if (form) {
                     form.addEventListener('submit', () => {
+                        const hiddenButtonUrl = document.getElementById('template-button-url-hidden');
+                        const urlInput = document.getElementById('template-button-url');
+
+                        if (hiddenButtonUrl && urlInput) {
+                            hiddenButtonUrl.value = normalizeButtonUrl(urlInput.value);
+                        }
+
                         tinymce.triggerSave();
                     });
                 }

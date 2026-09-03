@@ -75,9 +75,12 @@ class TemplateController extends Controller
             'subject' => ['nullable', 'string', 'max:255'],
             'body' => ['required', 'string'],
             'type' => ['required', Rule::in(array_keys(Template::typeOptions()))],
+            'template_button_url' => ['nullable', 'string', 'max:2048'],
         ]);
 
+        $data['body'] = $this->repairTemplateButtonLink($data['body'], $data['template_button_url'] ?? null);
         $data['body'] = $htmlSanitizer->sanitize($data['body']) ?? '';
+        unset($data['template_button_url']);
         $data['tenant_id'] = auth()->user()->tenant_id;
 
         Template::create($data);
@@ -106,9 +109,12 @@ class TemplateController extends Controller
             'subject' => ['nullable', 'string', 'max:255'],
             'body' => ['required', 'string'],
             'type' => ['required', Rule::in(array_keys(Template::typeOptions()))],
+            'template_button_url' => ['nullable', 'string', 'max:2048'],
         ]);
 
+        $data['body'] = $this->repairTemplateButtonLink($data['body'], $data['template_button_url'] ?? null);
         $data['body'] = $htmlSanitizer->sanitize($data['body']) ?? '';
+        unset($data['template_button_url']);
 
         $template->update($data);
 
@@ -158,5 +164,43 @@ class TemplateController extends Controller
         if ((string) $template->tenant_id !== (string) auth()->user()->tenant_id) {
             abort(403);
         }
+    }
+
+    private function repairTemplateButtonLink(string $body, ?string $buttonUrl): string
+    {
+        $buttonUrl = $this->normalizeTemplateButtonUrl($buttonUrl);
+
+        if ($buttonUrl === null || ! preg_match('/JETZT\s+ANMELDEN|Jetzt\s+öffnen|Jetzt\s+oeffnen/iu', strip_tags($body))) {
+            return $body;
+        }
+
+        if (preg_match('/<a\b[^>]*\bhref\s*=\s*["\'](?!\s*["\'])[^"\']+["\'][^>]*>/iu', $body)) {
+            return $body;
+        }
+
+        if (preg_match('/<a\b(?![^>]*\bhref\s*=)([^>]*)>/iu', $body)) {
+            return preg_replace('/<a\b(?![^>]*\bhref\s*=)([^>]*)>/iu', '<a href="' . e($buttonUrl) . '"$1>', $body, 1) ?? $body;
+        }
+
+        return $body;
+    }
+
+    private function normalizeTemplateButtonUrl(?string $buttonUrl): ?string
+    {
+        $buttonUrl = trim((string) $buttonUrl);
+
+        if ($buttonUrl === '' || $buttonUrl === '{link}') {
+            return $buttonUrl ?: null;
+        }
+
+        if (preg_match('/^www\.[^\s]+$/i', $buttonUrl)) {
+            return 'https://' . $buttonUrl;
+        }
+
+        if (filter_var($buttonUrl, FILTER_VALIDATE_URL)) {
+            return $buttonUrl;
+        }
+
+        return null;
     }
 }

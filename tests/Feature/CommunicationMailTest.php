@@ -120,6 +120,95 @@ test('staff can fill template button link for clickable mail buttons', function 
         ->and($log->meta['composition_mode'])->toBe('template_applied');
 });
 
+test('staff can send stored template button links without message link field', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    Mail::shouldReceive('send')
+        ->once()
+        ->with(
+            'mail.layout',
+            Mockery::on(fn (array $data) => str_contains($data['body'], 'href=')
+                && str_contains($data['body'], 'ghg-sarstedt.de%2Fanmelden')
+                && str_contains($data['body'], 'JETZT ANMELDEN')),
+            Mockery::type(Closure::class)
+        );
+
+    $tenant = Tenant::create([
+        'name' => 'Gespeicherter Button Verein',
+        'slug' => 'gespeicherter-button-verein',
+        'email' => 'verein@example.test',
+        'license_mode' => 'gifted',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+        'email_verified_at' => now(),
+    ]);
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Mara',
+        'last_name' => 'Mustermann',
+        'email' => 'mara@example.test',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    $template = Template::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Gespeicherter Button',
+        'subject' => 'Bitte anmelden',
+        'body' => '<p><a href="https://ghg-sarstedt.de/anmelden" style="display:inline-block;background:#047857;color:#ffffff;">JETZT ANMELDEN</a></p>',
+        'type' => Template::TYPE_MAIL,
+    ]);
+
+    $response = $this->actingAs($staff)->post(route('mail.send'), [
+        'template_id' => $template->id,
+        'subject' => $template->subject,
+        'body' => $template->body,
+        'members' => [$member->id],
+    ]);
+
+    $response->assertRedirect();
+    $response->assertSessionHas('success', '1 Serienmails gesendet');
+});
+
+test('template form keeps button link when editor submits anchor without href', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Vorlagenverein',
+        'slug' => 'vorlagenverein',
+        'email' => 'verein@example.test',
+        'license_mode' => 'gifted',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+        'email_verified_at' => now(),
+    ]);
+
+    $response = $this->actingAs($staff)->post(route('templates.store'), [
+        'name' => 'Einladung',
+        'subject' => 'Goldener Oktober',
+        'type' => Template::TYPE_MAIL,
+        'template_button_url' => 'www.ghg-sarstedt.de/anmelden',
+        'body' => '<p><a rel="noopener noreferrer" style="display:inline-block;background:#047857;color:#ffffff;">JETZT ANMELDEN</a></p>',
+    ]);
+
+    $response->assertRedirect(route('templates.index'));
+
+    $template = Template::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('name', 'Einladung')
+        ->firstOrFail();
+
+    expect($template->body)
+        ->toContain('href="https://www.ghg-sarstedt.de/anmelden"')
+        ->toContain('JETZT ANMELDEN');
+});
+
 test('staff mail normalizes pasted mojibake before delivery', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
