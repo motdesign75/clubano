@@ -465,6 +465,7 @@
                     'Ã¶': 'ö',
                     'Ã¼': 'ü',
                     'ÃŸ': 'ß',
+                    'Ã': 'ß',
                     'Ã©': 'é',
                     'Ã¨': 'è',
                     'Ã¡': 'á',
@@ -480,6 +481,14 @@
                     'â€˜': '‘',
                     'â€™': '’',
                     'â€¦': '…',
+                    'â': '–',
+                    'â': '—',
+                    'â': '„',
+                    'â': '“',
+                    'â': '”',
+                    'â': '‘',
+                    'â': '’',
+                    'â¦': '…',
                     'Â ': ' ',
                     'Â«': '«',
                     'Â»': '»',
@@ -497,12 +506,24 @@
             promoteCallToAction(content) {
                 const html = String(content || '');
 
-                if (!this.messageLink || /<a\s/i.test(html)) {
+                if (!this.messageLink || !/JETZT\s+ANMELDEN/i.test(html.replace(/<[^>]+>/g, ' '))) {
                     return html;
                 }
 
                 const safeUrl = this.escapeHtml(this.messageLink);
                 const button = `<a href="${safeUrl}" style="display:inline-block;background:#2954A3;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;">JETZT ANMELDEN</a>`;
+
+                if (/<a\b(?![^>]*\bhref\s*=)([^>]*)>\s*JETZT\s+ANMELDEN\s*<\/a>/i.test(html)) {
+                    return html.replace(/<a\b(?![^>]*\bhref\s*=)([^>]*)>(\s*JETZT\s+ANMELDEN\s*)<\/a>/i, `<a href="${safeUrl}"$1>$2</a>`);
+                }
+
+                if (/<a\b([^>]*)\bhref\s*=\s*["']\s*["']([^>]*)>\s*JETZT\s+ANMELDEN\s*<\/a>/i.test(html)) {
+                    return html.replace(/<a\b([^>]*)\bhref\s*=\s*["']\s*["']([^>]*)>(\s*JETZT\s+ANMELDEN\s*)<\/a>/i, `<a$1href="${safeUrl}"$2>$3</a>`);
+                }
+
+                if (/<a\s/i.test(html)) {
+                    return html;
+                }
 
                 if (/<strong>\s*JETZT\s+ANMELDEN\s*<\/strong>/i.test(html)) {
                     return html.replace(/<strong>\s*JETZT\s+ANMELDEN\s*<\/strong>/i, button);

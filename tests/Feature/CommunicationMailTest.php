@@ -207,7 +207,7 @@ test('staff mail turns pasted bold cta into clickable button when link is provid
         <p>am **Sonntag, 25. Oktober 2026, von 12:00 bis 17:00 Uhr** wird es wieder herbstlich und lebendig in der Sarstedter Innenstadt: Die GHG lÃ¤dt zum **Goldenen Oktober mit verkaufsoffenem Sonntag** ein.</p>
         <p>Und wir wÃ¼rden uns freuen, **Sie wieder mit dabei zu haben!**</p>
         <p>Ob mit einem Verkaufsstand oder einer guten Idee â€“ gemeinsam mÃ¶chten wir einen abwechslungsreichen Sonntag schaffen.</p>
-        <p>**JETZT ANMELDEN**</p>
+        <p style="margin: 24px 0px; text-align: center;"><a rel="noopener noreferrer" style="display: inline-block; background: #047857; color: #ffffff; text-decoration: none; border-radius: 14px; padding: 14px 22px; font-weight: bold;">JETZT ANMELDEN</a></p>
         <p>Herzliche GrÃ¼ÃŸe</p>
     HTML;
 

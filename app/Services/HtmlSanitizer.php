@@ -124,7 +124,7 @@ class HtmlSanitizer
             return $value;
         }
 
-        $candidate = strtr($value, [
+        $mapped = strtr($value, [
             'Ã„' => 'Ä',
             'Ã–' => 'Ö',
             'Ãœ' => 'Ü',
@@ -132,6 +132,7 @@ class HtmlSanitizer
             'Ã¶' => 'ö',
             'Ã¼' => 'ü',
             'ÃŸ' => 'ß',
+            'Ã' => 'ß',
             'Ã©' => 'é',
             'Ã¨' => 'è',
             'Ã¡' => 'á',
@@ -147,16 +148,40 @@ class HtmlSanitizer
             'â€˜' => '‘',
             'â€™' => '’',
             'â€¦' => '…',
+            'â' => '–',
+            'â' => '—',
+            'â' => '„',
+            'â' => '“',
+            'â' => '”',
+            'â' => '‘',
+            'â' => '’',
+            'â¦' => '…',
             'Â ' => ' ',
             'Â«' => '«',
             'Â»' => '»',
             'Â' => '',
         ]);
 
+        $latin1 = mb_convert_encoding($value, 'ISO-8859-1', 'UTF-8');
+        $candidates = [$mapped, $latin1];
         $originalArtifacts = $this->mojibakeArtifactCount($value);
-        $candidateArtifacts = $this->mojibakeArtifactCount($candidate);
+        $best = $value;
+        $bestArtifacts = $originalArtifacts;
 
-        return $candidateArtifacts < $originalArtifacts ? $candidate : $value;
+        foreach ($candidates as $candidate) {
+            if (! mb_check_encoding($candidate, 'UTF-8')) {
+                continue;
+            }
+
+            $candidateArtifacts = $this->mojibakeArtifactCount($candidate);
+
+            if ($candidateArtifacts < $bestArtifacts) {
+                $best = $candidate;
+                $bestArtifacts = $candidateArtifacts;
+            }
+        }
+
+        return $bestArtifacts < $originalArtifacts ? $best : $value;
     }
 
     private function mojibakeArtifactCount(string $value): int

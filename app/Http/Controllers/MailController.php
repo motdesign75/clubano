@@ -293,27 +293,54 @@ class MailController extends Controller
 
     private function containsUnlinkedCallToAction(string $body): bool
     {
-        if (stripos($body, '<a ') !== false || str_contains($body, '{link}')) {
+        if (str_contains($body, '{link}') || ! $this->containsCallToActionText($body)) {
             return false;
         }
 
-        return (bool) preg_match('/(?:\*\*\s*)?JETZT\s+ANMELDEN(?:\s*\*\*)?/iu', $body);
+        return ! $this->callToActionHasUsableHref($body);
     }
 
     private function promoteStandaloneCallToAction(string $html, ?string $messageLink): string
     {
-        if (! $messageLink || stripos($html, '<a ') !== false) {
+        if (! $messageLink || ! $this->containsCallToActionText($html)) {
             return $html;
         }
 
-        $button = '<a href="' . e($messageLink) . '" style="display:inline-block;background:#2954A3;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;">JETZT ANMELDEN</a>';
-        $updated = preg_replace('/<strong>\s*JETZT\s+ANMELDEN\s*<\/strong>/iu', $button, $html, 1, $count);
+        if (preg_match('/<a\b(?![^>]*\bhref\s*=)([^>]*)>\s*JETZT\s+ANMELDEN\s*<\/a>/iu', $html)) {
+            return preg_replace('/<a\b(?![^>]*\bhref\s*=)([^>]*)>(\s*JETZT\s+ANMELDEN\s*)<\/a>/iu', '<a href="' . e($messageLink) . '"$1>$2</a>', $html, 1) ?? $html;
+        }
+
+        if (preg_match('/<a\b([^>]*)\bhref\s*=\s*["\']\s*["\']([^>]*)>\s*JETZT\s+ANMELDEN\s*<\/a>/iu', $html)) {
+            return preg_replace('/<a\b([^>]*)\bhref\s*=\s*["\']\s*["\']([^>]*)>(\s*JETZT\s+ANMELDEN\s*)<\/a>/iu', '<a$1href="' . e($messageLink) . '"$2>$3</a>', $html, 1) ?? $html;
+        }
+
+        if (stripos($html, '<a ') !== false) {
+            return $html;
+        }
+
+        $button = $this->mailButtonHtml($messageLink, 'JETZT ANMELDEN');
+        $updated = preg_replace('/<strong>\s*(?:<span[^>]*>\s*)?JETZT\s+ANMELDEN(?:\s*<\/span>)?\s*<\/strong>/iu', $button, $html, 1, $count);
 
         if (($count ?? 0) > 0) {
             return $updated;
         }
 
         return preg_replace('/(?<![\pL\pN])JETZT\s+ANMELDEN(?![\pL\pN])/iu', $button, $html, 1) ?? $html;
+    }
+
+    private function containsCallToActionText(string $body): bool
+    {
+        return (bool) preg_match('/JETZT\s+ANMELDEN/iu', strip_tags($body, '<a><strong><span>'));
+    }
+
+    private function callToActionHasUsableHref(string $body): bool
+    {
+        return (bool) preg_match('/<a\b[^>]*\bhref\s*=\s*["\'](?!\s*["\'])[^"\']+["\'][^>]*>\s*JETZT\s+ANMELDEN\s*<\/a>/iu', $body);
+    }
+
+    private function mailButtonHtml(string $url, string $label): string
+    {
+        return '<a href="' . e($url) . '" style="display:inline-block;background:#2954A3;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;">' . e($label) . '</a>';
     }
 
     private function sendTrackedTemplateMail(
