@@ -377,7 +377,7 @@ class OperatorAnnouncementController extends Controller
         $encodedHtml = mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8');
 
         @$document->loadHTML(
-            '<!DOCTYPE html><html><body><div id="tracked-root">' . $encodedHtml . '</div></body></html>',
+            '<?xml encoding="utf-8" ?><!DOCTYPE html><html><head><meta charset="utf-8"></head><body><div id="tracked-root">' . $encodedHtml . '</div></body></html>',
             LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
         );
 

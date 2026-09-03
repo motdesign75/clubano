@@ -40,6 +40,15 @@ test('html sanitizer turns plain text into safe line break html', function () {
         ->toBe('Hallo &lt;Club&gt;<br>' . PHP_EOL . 'Neue Zeile');
 });
 
+test('html sanitizer keeps german umlauts readable in formatted mail text', function () {
+    $clean = app(HtmlSanitizer::class)->sanitize('Und wir würden uns freuen, <strong>Sie wieder mit dabei zu haben!</strong>');
+
+    expect($clean)
+        ->toContain('würden')
+        ->toContain('<strong>Sie wieder mit dabei zu haben!</strong>')
+        ->not->toContain('wÃ¼rden');
+});
+
 test('html sanitizer keeps safe mail buttons with placeholder links', function () {
     $html = '<p style="margin:24px 0;"><a href="{link}" style="display:inline-block;background:#2954A3;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;" onclick="alert(1)">Jetzt öffnen</a></p>';
 

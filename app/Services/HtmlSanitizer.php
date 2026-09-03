@@ -50,7 +50,7 @@ class HtmlSanitizer
         $document = new DOMDocument('1.0', 'UTF-8');
         $previous = libxml_use_internal_errors(true);
         $document->loadHTML(
-            '<!DOCTYPE html><html><body><div id="clubano-sanitize-root">' . mb_convert_encoding($value, 'HTML-ENTITIES', 'UTF-8') . '</div></body></html>',
+            '<?xml encoding="utf-8" ?><!DOCTYPE html><html><head><meta charset="utf-8"></head><body><div id="clubano-sanitize-root">' . mb_convert_encoding($value, 'HTML-ENTITIES', 'UTF-8') . '</div></body></html>',
             LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
         );
         libxml_clear_errors();
