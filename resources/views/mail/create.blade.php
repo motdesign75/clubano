@@ -490,6 +490,8 @@
                     'Ã¼': 'ü',
                     'ÃŸ': 'ß',
                     'Ã': 'ß',
+                    'Ã&#159;': 'ß',
+                    'Ã&#x9f;': 'ß',
                     'Ã©': 'é',
                     'Ã¨': 'è',
                     'Ã¡': 'á',
@@ -521,11 +523,21 @@
 
                 let normalized = String(content || '').replace(/\u00a0/g, ' ');
 
+                if (/&(?:Atilde|Acirc|acirc|curren|frac14|para|#(?:128|159));/i.test(normalized)) {
+                    normalized = this.decodeHtmlEntities(normalized);
+                }
+
                 Object.entries(replacements).forEach(([broken, readable]) => {
                     normalized = normalized.split(broken).join(readable);
                 });
 
                 return normalized.replace(/\*\*(.+?)\*\*/gs, '<strong>$1</strong>');
+            },
+            decodeHtmlEntities(content) {
+                const element = document.createElement('textarea');
+                element.innerHTML = String(content || '');
+
+                return element.value;
             },
             promoteCallToAction(content) {
                 const html = String(content || '');

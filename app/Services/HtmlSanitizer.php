@@ -112,10 +112,20 @@ class HtmlSanitizer
 
     public function normalize(string $value): string
     {
+        $value = $this->decodeMojibakeEntities($value);
         $value = $this->repairMojibake($value);
         $value = str_replace("\xc2\xa0", ' ', $value);
 
         return preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $value) ?? $value;
+    }
+
+    private function decodeMojibakeEntities(string $value): string
+    {
+        if (! preg_match('/&(?:Atilde|Acirc|acirc|curren|frac14|para|#(?:128|159));/i', $value)) {
+            return $value;
+        }
+
+        return html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     private function repairMojibake(string $value): string
@@ -133,6 +143,8 @@ class HtmlSanitizer
             'Ã¼' => 'ü',
             'ÃŸ' => 'ß',
             'Ã' => 'ß',
+            'Ã&#159;' => 'ß',
+            'Ã&#x9f;' => 'ß',
             'Ã©' => 'é',
             'Ã¨' => 'è',
             'Ã¡' => 'á',

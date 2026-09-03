@@ -62,6 +62,16 @@ test('html sanitizer repairs mojibake and simple markdown from pasted update tex
         ->not->toContain('**Goldenen Oktober');
 });
 
+test('html sanitizer repairs entity encoded mojibake from editor html', function () {
+    $clean = app(HtmlSanitizer::class)->sanitize('<p>Die GHG l&Atilde;&curren;dt ein. Herzliche Gr&Atilde;&frac14;&Atilde;&#159;e â sch&Atilde;&para;n.</p>');
+
+    expect($clean)
+        ->toContain('Die GHG lädt ein.')
+        ->toContain('Herzliche Grüße – schön.')
+        ->not->toContain('Atilde')
+        ->not->toContain('Ã');
+});
+
 test('html sanitizer keeps safe mail buttons with placeholder links', function () {
     $html = '<p style="margin:24px 0;"><a href="{link}" style="display:inline-block;background:#2954A3;color:#ffffff;text-decoration:none;border-radius:14px;padding:14px 22px;font-weight:700;" onclick="alert(1)">Jetzt öffnen</a></p>';
 
