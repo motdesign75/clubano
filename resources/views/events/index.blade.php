@@ -241,7 +241,7 @@
 
     @if($calendarView === 'month')
         <section class="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
-            <aside class="min-w-0 space-y-4 xl:sticky xl:top-6 xl:self-start">
+            <aside class="hidden min-w-0 space-y-4 xl:sticky xl:top-6 xl:block xl:self-start">
                 <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div class="flex items-center justify-between gap-3">
                         <h2 class="text-base font-semibold text-slate-950">{{ $monthContext }}</h2>
@@ -341,10 +341,10 @@
             </aside>
 
             <div class="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div class="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex flex-col gap-3 border-b border-slate-200 bg-white px-3 py-3 sm:px-4 sm:flex-row sm:items-center sm:justify-between">
                     <div class="flex min-w-0 items-center gap-3">
                         <h2 class="truncate text-lg font-semibold text-slate-950">{{ $headline }}</h2>
-                        <span class="hidden rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 sm:inline-flex">
+                        <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
                             {{ $events->count() }} Termine
                         </span>
                     </div>
@@ -356,55 +356,60 @@
                     @endif
                 </div>
 
-                <div class="overflow-x-auto">
-                    <div class="min-w-[920px]">
+                <div class="overflow-hidden">
+                    <div class="w-full md:min-w-[920px]">
                         <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
                             @foreach(['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'] as $dayName)
-                                <div class="px-3 py-3 text-center text-sm font-semibold text-slate-700">{{ $dayName }}</div>
+                                <div class="px-1 py-2 text-center text-xs font-bold text-slate-700 sm:px-3 sm:py-3 sm:text-sm">
+                                    <span class="sm:hidden">{{ mb_substr($dayName, 0, 1) }}</span>
+                                    <span class="hidden sm:inline">{{ $dayName }}</span>
+                                </div>
                             @endforeach
                         </div>
 
                         <div class="grid grid-cols-7">
                             @foreach($calendarDays as $day)
-                                <div class="min-h-[150px] border-b border-r border-slate-200 bg-white p-2 {{ ! $day['isCurrentMonth'] ? 'bg-slate-50/70' : '' }} {{ $day['isToday'] ? 'bg-blue-50/60' : '' }} xl:min-h-[170px]">
-                                    <div class="flex items-center justify-between gap-2">
+                                <div class="min-h-[104px] min-w-0 border-b border-r border-slate-200 bg-white p-1 {{ ! $day['isCurrentMonth'] ? 'bg-slate-50/70' : '' }} {{ $day['isToday'] ? 'bg-blue-50/60' : '' }} sm:min-h-[132px] sm:p-2 xl:min-h-[170px]">
+                                    <div class="flex items-center justify-between gap-1">
                                         <a href="{{ route('events.index', array_merge($baseQuery, ['view' => 'day', 'day' => $day['date']->format('Y-m-d')])) }}"
-                                           class="flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold {{ $day['isToday'] ? 'bg-blue-600 text-white' : ($day['isCurrentMonth'] ? 'text-slate-700 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100') }}">
-                                            {{ $day['date']->isSameDay($calendarMonth->copy()->startOfMonth()) || $day['date']->day === 1 ? $day['date']->translatedFormat('j. M') : $day['date']->day }}
+                                           class="flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-bold sm:h-7 sm:min-w-7 sm:text-sm {{ $day['isToday'] ? 'bg-blue-600 text-white' : ($day['isCurrentMonth'] ? 'text-slate-800 hover:bg-slate-100' : 'text-slate-400 hover:bg-slate-100') }}">
+                                            <span class="sm:hidden">{{ $day['date']->day === 1 ? $day['date']->translatedFormat('j. M') : $day['date']->day }}</span>
+                                            <span class="hidden sm:inline">{{ $day['date']->isSameDay($calendarMonth->copy()->startOfMonth()) || $day['date']->day === 1 ? $day['date']->translatedFormat('j. M') : $day['date']->day }}</span>
                                         </a>
                                         @if($day['isAvailable'] && $canManageEvents)
                                             <a href="{{ route('events.create', ['date' => $day['date']->format('Y-m-d')]) }}"
-                                               class="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-300 hover:bg-blue-50 hover:text-blue-700"
+                                               class="hidden h-7 w-7 items-center justify-center rounded-full text-slate-300 hover:bg-blue-50 hover:text-blue-700 sm:inline-flex"
                                                aria-label="Termin am {{ $day['date']->format('d.m.Y') }} planen">
                                                 <x-heroicon-o-plus class="h-4 w-4" />
                                             </a>
                                         @endif
                                     </div>
 
-                                    <div class="mt-2 space-y-1">
-                                        @foreach($day['events']->take(4) as $event)
+                                    <div class="mt-1 space-y-1 sm:mt-2">
+                                        @foreach($day['events']->take(3) as $event)
                                             <a href="{{ route('events.show', $event) }}"
-                                               class="group block rounded-md border border-transparent bg-slate-50 px-2 py-1.5 text-xs leading-snug hover:border-slate-200 hover:bg-white"
-                                               style="border-left: 4px solid {{ e($event->category?->color ?: '#2563EB') }}">
-                                                <span class="block truncate font-semibold text-slate-950">
-                                                    {{ $event->start->format('H:i') }} {{ $event->title }}
+                                               class="group block min-w-0 rounded-md border border-transparent bg-slate-50 px-1.5 py-1 text-[11px] leading-tight hover:border-slate-200 hover:bg-white sm:px-2 sm:py-1.5 sm:text-xs sm:leading-snug"
+                                               style="border-left: 3px solid {{ e($event->category?->color ?: '#2563EB') }}">
+                                                <span class="block truncate font-bold text-slate-950">
+                                                    <span class="hidden sm:inline">{{ $event->start->format('H:i') }} </span>{{ $event->title }}
                                                 </span>
-                                                <span class="block truncate text-[11px] text-slate-500">
+                                                <span class="hidden truncate text-[11px] text-slate-500 sm:block">
                                                     {{ $event->location ?: ($event->responsible_name ?: 'Details öffnen') }}
                                                 </span>
                                                 @if(($event->conflict_count ?? 0) > 0)
-                                                    <span class="mt-1 inline-flex rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">Konflikt</span>
+                                                    <span class="mt-1 hidden rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 sm:inline-flex">Konflikt</span>
                                                 @endif
                                             </a>
                                         @endforeach
 
-                                        @if($day['events']->count() > 4)
+                                        @if($day['events']->count() > 3)
                                             <a href="{{ route('events.index', array_merge($baseQuery, ['view' => 'day', 'day' => $day['date']->format('Y-m-d')])) }}"
-                                               class="block rounded-md px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">
-                                                +{{ $day['events']->count() - 4 }} weitere
+                                               class="block rounded-md px-1.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-50 sm:px-2">
+                                                +{{ $day['events']->count() - 3 }}
+                                                <span class="hidden sm:inline">weitere</span>
                                             </a>
                                         @elseif($day['isAvailable'] && ! $day['isPast'])
-                                            <div class="px-2 py-1 text-xs font-medium text-slate-300">frei</div>
+                                            <div class="hidden px-2 py-1 text-xs font-medium text-slate-300 sm:block">frei</div>
                                         @endif
                                     </div>
                                 </div>
