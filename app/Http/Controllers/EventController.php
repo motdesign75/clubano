@@ -512,7 +512,7 @@ class EventController extends Controller
 
         $validated = $request->validate($this->eventValidationRules($tenantId) + [
             'recurrence_enabled' => 'nullable|boolean',
-            'recurrence_frequency' => 'required_if:recurrence_enabled,1|nullable|in:weekly,biweekly,monthly,monthly_same_date,monthly_nth_weekday',
+            'recurrence_frequency' => 'required_if:recurrence_enabled,1|nullable|in:daily,weekly,biweekly,monthly,monthly_same_date,monthly_nth_weekday,yearly',
             'recurrence_until' => 'required_if:recurrence_enabled,1|nullable|date|after_or_equal:start',
         ]);
 
@@ -631,8 +631,10 @@ class EventController extends Controller
             $starts->push($cursor->copy());
 
             $cursor = match ($frequency) {
+                'daily' => $cursor->copy()->addDay(),
                 'monthly', 'monthly_same_date' => $cursor->copy()->addMonthNoOverflow(),
                 'monthly_nth_weekday' => $this->nextMonthlyNthWeekday($start, $cursor),
+                'yearly' => $cursor->copy()->addYearNoOverflow(),
                 'biweekly' => $cursor->copy()->addWeeks(2),
                 default => $cursor->copy()->addWeek(),
             };

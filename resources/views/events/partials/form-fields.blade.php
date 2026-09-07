@@ -7,6 +7,8 @@
     $recurrenceEnabled = (bool) old('recurrence_enabled', false);
     $recurrenceFrequency = old('recurrence_frequency', 'weekly');
     $recurrenceUntil = old('recurrence_until');
+    $recurrencePreset = $recurrenceEnabled ? $recurrenceFrequency : 'none';
+    $isAllDay = $event->start && $event->end && $event->start->format('H:i') === '00:00' && $event->end->format('H:i') === '23:59';
     $inputClass = 'mt-2 w-full min-h-14 rounded-2xl border-slate-300 px-4 text-base shadow-sm focus:border-slate-500 focus:ring-slate-300';
     $selectClass = 'mt-2 w-full min-h-14 rounded-2xl border-slate-300 px-4 text-base shadow-sm focus:border-slate-500 focus:ring-slate-300';
     $labelClass = 'text-sm font-bold text-slate-950';
@@ -40,8 +42,8 @@
                 <div>
                     <label for="title" class="{{ $labelClass }}">Name des Termins *</label>
                     <input type="text" name="title" id="title" required value="{{ old('title', $event->title) }}"
-                           class="{{ $inputClass }}"
-                           placeholder="z. B. Sommerfest">
+                           class="mt-2 w-full border-0 border-b border-slate-200 bg-transparent px-0 py-4 text-3xl font-semibold text-slate-950 placeholder:text-slate-300 focus:border-blue-500 focus:ring-0 sm:text-4xl"
+                           placeholder="Neuer Termin">
                 </div>
 
                 <div class="grid gap-4 md:grid-cols-[minmax(0,1fr),auto] md:items-end">
@@ -87,48 +89,6 @@
                     </div>
                 </div>
             </div>
-
-            @unless($isEditingEvent)
-                <div class="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-                    <label class="flex cursor-pointer items-start gap-4">
-                        <input type="checkbox" name="recurrence_enabled" value="1" class="mt-1 h-5 w-5 rounded border-amber-300 text-amber-700" @checked($recurrenceEnabled) data-recurrence-toggle>
-                        <span>
-                            <span class="block text-base font-semibold text-amber-950">Das ist ein Serientermin</span>
-                            <span class="mt-1 block text-sm leading-6 text-amber-800">Für Training, Stammtisch oder wiederkehrende Treffen erstellt Clubano mehrere Termine auf einmal.</span>
-                        </span>
-                    </label>
-
-                    <div class="mt-5 grid gap-4 md:grid-cols-2" data-recurrence-options>
-                        <div>
-                            <label for="recurrence_frequency" class="{{ $labelClass }}">Wie oft?</label>
-                            <select name="recurrence_frequency" id="recurrence_frequency" class="{{ $selectClass }}">
-                                <option value="weekly" @selected($recurrenceFrequency === 'weekly')>Jede Woche</option>
-                                <option value="biweekly" @selected($recurrenceFrequency === 'biweekly')>Alle zwei Wochen</option>
-                                <option value="monthly_same_date" @selected(in_array($recurrenceFrequency, ['monthly', 'monthly_same_date'], true))>Jeden Monat am gleichen Datum</option>
-                                <option value="monthly_nth_weekday" @selected($recurrenceFrequency === 'monthly_nth_weekday')>Jeden Monat am gleichen Wochentag</option>
-                            </select>
-                            <p class="mt-2 text-sm leading-6 text-amber-800">Beispiel: Start am ersten Freitag erzeugt jeden ersten Freitag.</p>
-                        </div>
-
-                        <div>
-                            <label for="recurrence_until" class="{{ $labelClass }}">Bis wann?</label>
-                            <input type="date" name="recurrence_until" id="recurrence_until" value="{{ $recurrenceUntil }}"
-                                   class="{{ $inputClass }}">
-                        </div>
-                    </div>
-
-                    <p class="mt-4 rounded-2xl bg-white/70 px-4 py-3 text-sm leading-6 text-amber-900 ring-1 ring-amber-100">Beim Speichern entstehen einzelne Termine im Kalender. Danach kannst du jeden Termin separat bearbeiten oder löschen.</p>
-                </div>
-            @else
-                @if($event->recurrence_group_id)
-                    <div class="mt-6 rounded-3xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-                        <div class="text-base font-semibold text-amber-950">Dieser Termin gehört zu einer Serie</div>
-                        <p class="mt-1 text-sm leading-6 text-slate-500">
-                            Dieser Termin gehört zu einer Serie. Änderungen in diesem Editor betreffen nur diesen einzelnen Termin.
-                        </p>
-                    </div>
-                @endif
-            @endunless
         </div>
 
         <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
@@ -143,20 +103,68 @@
                 </div>
             </div>
 
-            <div class="mt-6 grid gap-4 md:grid-cols-2">
-                <div>
-                    <label for="start" class="{{ $labelClass }}">Start *</label>
-                    <input type="datetime-local" name="start" id="start" required
-                           value="{{ old('start', $event->start ? $event->start->format('Y-m-d\TH:i') : '') }}"
-                           class="{{ $inputClass }}">
+            <div class="mt-6 space-y-5">
+                <label class="inline-flex cursor-pointer items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-950">
+                    <input type="checkbox" class="h-5 w-5 rounded border-blue-300 text-blue-600" data-all-day-toggle @checked($isAllDay)>
+                    Ganztägig
+                </label>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <div>
+                        <label for="start" class="{{ $labelClass }}">Start *</label>
+                        <input type="datetime-local" name="start" id="start" required
+                               value="{{ old('start', $event->start ? $event->start->format('Y-m-d\TH:i') : '') }}"
+                               class="{{ $inputClass }}">
+                    </div>
+
+                    <div>
+                        <label for="end" class="{{ $labelClass }}">Ende *</label>
+                        <input type="datetime-local" name="end" id="end" required
+                               value="{{ old('end', $event->end ? $event->end->format('Y-m-d\TH:i') : '') }}"
+                               class="{{ $inputClass }}">
+                    </div>
                 </div>
 
-                <div>
-                    <label for="end" class="{{ $labelClass }}">Ende *</label>
-                    <input type="datetime-local" name="end" id="end" required
-                           value="{{ old('end', $event->end ? $event->end->format('Y-m-d\TH:i') : '') }}"
-                           class="{{ $inputClass }}">
-                </div>
+                @unless($isEditingEvent)
+                    <div class="rounded-3xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+                        <input type="hidden" name="recurrence_enabled" value="{{ $recurrenceEnabled ? '1' : '0' }}" data-recurrence-enabled-input>
+                        <input type="hidden" name="recurrence_frequency" value="{{ $recurrenceFrequency }}" data-recurrence-frequency-input>
+
+                        <div class="grid gap-4 md:grid-cols-[minmax(0,1fr),220px]">
+                            <div>
+                                <label for="recurrence_preset" class="{{ $labelClass }}">Wiederholung</label>
+                                <select id="recurrence_preset" class="{{ $selectClass }}" data-recurrence-preset>
+                                    <option value="none" @selected($recurrencePreset === 'none')>Wiederholt sich nicht</option>
+                                    <option value="daily" @selected($recurrencePreset === 'daily')>Täglich wiederholen</option>
+                                    <option value="weekly" @selected($recurrencePreset === 'weekly')>Wöchentlich wiederholen</option>
+                                    <option value="biweekly" @selected($recurrencePreset === 'biweekly')>Alle zwei Wochen wiederholen</option>
+                                    <option value="monthly_same_date" @selected(in_array($recurrencePreset, ['monthly', 'monthly_same_date'], true))>Monatlich am gleichen Datum</option>
+                                    <option value="monthly_nth_weekday" @selected($recurrencePreset === 'monthly_nth_weekday')>Monatlich am gleichen Wochentag</option>
+                                    <option value="yearly" @selected($recurrencePreset === 'yearly')>Jährlich wiederholen</option>
+                                </select>
+                            </div>
+
+                            <div data-recurrence-until-wrap>
+                                <label for="recurrence_until" class="{{ $labelClass }}">Bis wann?</label>
+                                <input type="date" name="recurrence_until" id="recurrence_until" value="{{ $recurrenceUntil }}"
+                                       class="{{ $inputClass }}">
+                            </div>
+                        </div>
+
+                        <p class="mt-4 rounded-2xl bg-white/70 px-4 py-3 text-sm leading-6 text-amber-900 ring-1 ring-amber-100" data-recurrence-help>
+                            Beim Speichern entstehen einzelne Termine im Kalender. Danach kannst du jeden Termin separat bearbeiten oder löschen.
+                        </p>
+                    </div>
+                @else
+                    @if($event->recurrence_group_id)
+                        <div class="rounded-3xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+                            <div class="text-base font-semibold text-amber-950">Dieser Termin gehört zu einer Serie</div>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                                Änderungen in diesem Editor betreffen nur diesen einzelnen Termin.
+                            </p>
+                        </div>
+                    @endif
+                @endunless
 
                 <div>
                     <label for="location" class="{{ $labelClass }}">Ort</label>
@@ -346,22 +354,61 @@
     document.addEventListener('DOMContentLoaded', () => {
         const profiles = @json($categoryProfiles);
         const categorySelect = document.getElementById('category_id');
-        const recurrenceToggle = document.querySelector('[data-recurrence-toggle]');
-        const recurrenceOptions = document.querySelector('[data-recurrence-options]');
+        const recurrencePreset = document.querySelector('[data-recurrence-preset]');
+        const recurrenceEnabledInput = document.querySelector('[data-recurrence-enabled-input]');
+        const recurrenceFrequencyInput = document.querySelector('[data-recurrence-frequency-input]');
+        const recurrenceUntilWrap = document.querySelector('[data-recurrence-until-wrap]');
+        const recurrenceUntilInput = document.getElementById('recurrence_until');
+        const recurrenceHelp = document.querySelector('[data-recurrence-help]');
+        const allDayToggle = document.querySelector('[data-all-day-toggle]');
+        const startInput = document.getElementById('start');
+        const endInput = document.getElementById('end');
 
         const syncRecurrenceOptions = () => {
-            if (!recurrenceToggle || !recurrenceOptions) {
+            if (!recurrencePreset || !recurrenceEnabledInput || !recurrenceFrequencyInput) {
                 return;
             }
 
-            recurrenceOptions.classList.toggle('hidden', !recurrenceToggle.checked);
-            recurrenceOptions.querySelectorAll('input, select').forEach((input) => {
-                input.disabled = !recurrenceToggle.checked;
-            });
+            const repeats = recurrencePreset.value !== 'none';
+            recurrenceEnabledInput.value = repeats ? '1' : '0';
+            recurrenceFrequencyInput.value = repeats ? recurrencePreset.value : 'weekly';
+
+            recurrenceUntilWrap?.classList.toggle('hidden', !repeats);
+            if (recurrenceUntilInput) {
+                recurrenceUntilInput.disabled = !repeats;
+            }
+
+            if (recurrenceHelp) {
+                recurrenceHelp.textContent = repeats
+                    ? 'Beim Speichern entstehen einzelne Termine im Kalender. Danach kannst du jeden Termin separat bearbeiten oder löschen.'
+                    : 'Dieser Termin wird nur einmal angelegt.';
+            }
         };
 
-        recurrenceToggle?.addEventListener('change', syncRecurrenceOptions);
+        const datePart = (value) => value ? value.slice(0, 10) : '';
+        const syncAllDay = () => {
+            if (!allDayToggle || !startInput || !endInput || !allDayToggle.checked) {
+                return;
+            }
+
+            const startDate = datePart(startInput.value) || datePart(endInput.value);
+            const endDate = datePart(endInput.value) || startDate;
+
+            if (startDate) {
+                startInput.value = `${startDate}T00:00`;
+            }
+
+            if (endDate) {
+                endInput.value = `${endDate}T23:59`;
+            }
+        };
+
+        recurrencePreset?.addEventListener('change', syncRecurrenceOptions);
         syncRecurrenceOptions();
+
+        allDayToggle?.addEventListener('change', syncAllDay);
+        startInput?.addEventListener('change', syncAllDay);
+        endInput?.addEventListener('change', syncAllDay);
 
         if (!categorySelect) {
             return;
