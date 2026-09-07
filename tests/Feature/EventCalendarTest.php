@@ -936,6 +936,7 @@ test('staff can create real recurring calendar events', function () {
         'booking_enabled' => 0,
         'recurrence_enabled' => 1,
         'recurrence_frequency' => 'weekly',
+        'recurrence_end_mode' => 'date',
         'recurrence_until' => $start->copy()->addWeeks(2)->toDateString(),
     ]);
 
@@ -954,6 +955,107 @@ test('staff can create real recurring calendar events', function () {
         $start->copy()->addWeek()->toDateString(),
         $start->copy()->addWeeks(2)->toDateString(),
     ]);
+});
+
+test('staff can create recurring events on multiple weekdays', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Wochenverein',
+        'slug' => 'wochenverein',
+        'email' => 'wochenserie@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+    ]);
+
+    $start = now()->setDate(2026, 9, 7)->setTime(18, 0);
+
+    $response = $this->actingAs($staff)->post(route('events.store'), [
+        'title' => 'Training und Treff',
+        'description' => 'Zweimal pro Woche',
+        'location' => 'Sportplatz',
+        'start' => $start->format('Y-m-d H:i:s'),
+        'end' => $start->copy()->addHours(2)->format('Y-m-d H:i:s'),
+        'is_public' => 0,
+        'booking_enabled' => 0,
+        'recurrence_enabled' => 1,
+        'recurrence_frequency' => 'weekly',
+        'recurrence_interval' => 1,
+        'recurrence_end_mode' => 'date',
+        'recurrence_until' => '2026-09-18',
+        'recurrence_weekdays' => [1, 4],
+    ]);
+
+    $response->assertRedirect();
+
+    $events = Event::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('title', 'Training und Treff')
+        ->orderBy('start')
+        ->get();
+
+    expect($events)->toHaveCount(4);
+    expect($events->pluck('start')->map->format('Y-m-d')->all())->toBe([
+        '2026-09-07',
+        '2026-09-10',
+        '2026-09-14',
+        '2026-09-17',
+    ]);
+    expect($events->pluck('recurrence_interval')->unique()->all())->toBe([1]);
+});
+
+test('staff can create recurring events by count and interval', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Intervallverein',
+        'slug' => 'intervallverein',
+        'email' => 'intervallserie@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+    ]);
+
+    $start = now()->setDate(2026, 9, 7)->setTime(18, 0);
+
+    $response = $this->actingAs($staff)->post(route('events.store'), [
+        'title' => 'Zweiwochenrunde',
+        'description' => 'Jede zweite Woche',
+        'location' => 'Vereinsheim',
+        'start' => $start->format('Y-m-d H:i:s'),
+        'end' => $start->copy()->addHour()->format('Y-m-d H:i:s'),
+        'is_public' => 0,
+        'booking_enabled' => 0,
+        'recurrence_enabled' => 1,
+        'recurrence_frequency' => 'weekly',
+        'recurrence_interval' => 2,
+        'recurrence_end_mode' => 'count',
+        'recurrence_count' => 4,
+        'recurrence_weekdays' => [1],
+    ]);
+
+    $response->assertRedirect();
+
+    $events = Event::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('title', 'Zweiwochenrunde')
+        ->orderBy('start')
+        ->get();
+
+    expect($events)->toHaveCount(4);
+    expect($events->pluck('start')->map->format('Y-m-d')->all())->toBe([
+        '2026-09-07',
+        '2026-09-21',
+        '2026-10-05',
+        '2026-10-19',
+    ]);
+    expect($events->pluck('recurrence_until')->unique()->first()->toDateString())->toBe('2026-10-19');
+    expect($events->pluck('recurrence_interval')->unique()->all())->toBe([2]);
 });
 
 test('staff can create monthly events on the same weekday position', function () {
@@ -982,6 +1084,7 @@ test('staff can create monthly events on the same weekday position', function ()
         'booking_enabled' => 0,
         'recurrence_enabled' => 1,
         'recurrence_frequency' => 'monthly_nth_weekday',
+        'recurrence_end_mode' => 'date',
         'recurrence_until' => '2026-10-31',
     ]);
 

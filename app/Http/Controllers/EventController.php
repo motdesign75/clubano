@@ -513,7 +513,17 @@ class EventController extends Controller
         $validated = $request->validate($this->eventValidationRules($tenantId) + [
             'recurrence_enabled' => 'nullable|boolean',
             'recurrence_frequency' => 'required_if:recurrence_enabled,1|nullable|in:daily,weekly,biweekly,monthly,monthly_same_date,monthly_nth_weekday,yearly',
-            'recurrence_until' => 'required_if:recurrence_enabled,1|nullable|date|after_or_equal:start',
+            'recurrence_interval' => 'exclude_unless:recurrence_enabled,1|nullable|integer|min:1|max:52',
+            'recurrence_end_mode' => 'exclude_unless:recurrence_enabled,1|nullable|in:date,count',
+            'recurrence_until' => [
+                'nullable',
+                Rule::requiredIf(fn () => $request->boolean('recurrence_enabled') && $request->input('recurrence_end_mode', 'date') !== 'count'),
+                'date',
+                'after_or_equal:start',
+            ],
+            'recurrence_count' => 'exclude_unless:recurrence_end_mode,count|required|integer|min:1|max:80',
+            'recurrence_weekdays' => 'exclude_unless:recurrence_frequency,weekly|nullable|array',
+            'recurrence_weekdays.*' => 'integer|min:1|max:7',
         ]);
 
         if ($request->hasFile('image')) {
@@ -525,7 +535,16 @@ class EventController extends Controller
         $baseData['created_by'] = Auth::id();
         $baseData['updated_by'] = Auth::id();
 
-        $events = $this->createEventsFromSeries($baseData, $request->boolean('recurrence_enabled'), $validated['recurrence_frequency'] ?? null, $validated['recurrence_until'] ?? null);
+        $events = $this->createEventsFromSeries(
+            $baseData,
+            $request->boolean('recurrence_enabled'),
+            $validated['recurrence_frequency'] ?? null,
+            $validated['recurrence_until'] ?? null,
+            (int) ($validated['recurrence_interval'] ?? 1),
+            $validated['recurrence_end_mode'] ?? 'date',
+            isset($validated['recurrence_count']) ? (int) $validated['recurrence_count'] : null,
+            $validated['recurrence_weekdays'] ?? [],
+        );
         $event = $events->first();
 
         $events->each(function (Event $seriesEvent) use ($validated) {
@@ -593,20 +612,38 @@ class EventController extends Controller
         ];
     }
 
-    private function createEventsFromSeries(array $baseData, bool $recurrenceEnabled, ?string $frequency, ?string $until)
+    private function createEventsFromSeries(
+        array $baseData,
+        bool $recurrenceEnabled,
+        ?string $frequency,
+        ?string $until,
+        int $interval = 1,
+        string $endMode = 'date',
+        ?int $count = null,
+        array $weekdays = [],
+    )
     {
         if (! $recurrenceEnabled) {
             return collect([Event::create($baseData)]);
         }
 
+        $frequency = $frequency === 'monthly' ? 'monthly_same_date' : ($frequency ?: 'weekly');
+        if ($frequency === 'biweekly') {
+            $frequency = 'weekly';
+            $interval = max(2, $interval);
+        }
+        $interval = max(1, min(52, $interval));
+        $count = $endMode === 'count' ? max(1, min(80, (int) $count)) : null;
         $start = Carbon::parse($baseData['start']);
         $end = Carbon::parse($baseData['end']);
-        $untilDate = Carbon::parse($until)->endOfDay();
+        $untilDate = $endMode === 'date' && $until ? Carbon::parse($until)->endOfDay() : null;
         $groupId = (string) Str::uuid();
         $durationInSeconds = $start->diffInSeconds($end);
         $events = collect();
+        $starts = $this->recurringEventStarts($start, $untilDate, $frequency, $interval, $count, $weekdays);
+        $seriesUntil = $untilDate?->toDateString() ?? $starts->last()?->toDateString();
 
-        foreach ($this->recurringEventStarts($start, $untilDate, $frequency) as $occurrenceStart) {
+        foreach ($starts as $occurrenceStart) {
             $occurrenceEnd = $occurrenceStart->copy()->addSeconds($durationInSeconds);
 
             $events->push(Event::create(array_merge($baseData, [
@@ -614,38 +651,67 @@ class EventController extends Controller
                 'end' => $occurrenceEnd->toDateTimeString(),
                 'recurrence_group_id' => $groupId,
                 'recurrence_frequency' => $frequency,
-                'recurrence_interval' => $frequency === 'biweekly' ? 2 : 1,
-                'recurrence_until' => $untilDate->toDateString(),
+                'recurrence_interval' => $interval,
+                'recurrence_until' => $seriesUntil,
             ])));
         }
 
         return $events;
     }
 
-    private function recurringEventStarts(Carbon $start, Carbon $untilDate, ?string $frequency)
+    private function recurringEventStarts(Carbon $start, ?Carbon $untilDate, ?string $frequency, int $interval = 1, ?int $count = null, array $weekdays = [])
     {
         $starts = collect();
         $cursor = $start->copy();
+        $limit = $count ? min(80, $count) : 80;
+        $interval = max(1, min(52, $interval));
 
-        while ($cursor->lte($untilDate) && $starts->count() < 80) {
+        if ($frequency === 'weekly') {
+            $selectedWeekdays = collect($weekdays)
+                ->map(fn ($day) => (int) $day)
+                ->filter(fn ($day) => $day >= 1 && $day <= 7)
+                ->unique()
+                ->values();
+
+            if ($selectedWeekdays->isEmpty()) {
+                $selectedWeekdays = collect([$start->dayOfWeekIso]);
+            }
+
+            $seriesWeekStart = $start->copy()->startOfWeek(Carbon::MONDAY)->startOfDay();
+            $guardUntil = $untilDate ?: $start->copy()->addYears(3)->endOfDay();
+
+            while ($cursor->lte($guardUntil) && $starts->count() < $limit) {
+                $currentWeekStart = $cursor->copy()->startOfWeek(Carbon::MONDAY)->startOfDay();
+                $weekDiff = (int) $seriesWeekStart->diffInWeeks($currentWeekStart);
+
+                if ($weekDiff % $interval === 0 && $selectedWeekdays->contains($cursor->dayOfWeekIso)) {
+                    $starts->push($cursor->copy());
+                }
+
+                $cursor = $cursor->copy()->addDay();
+            }
+
+            return $starts;
+        }
+
+        while (($untilDate === null || $cursor->lte($untilDate)) && $starts->count() < $limit) {
             $starts->push($cursor->copy());
 
             $cursor = match ($frequency) {
-                'daily' => $cursor->copy()->addDay(),
-                'monthly', 'monthly_same_date' => $cursor->copy()->addMonthNoOverflow(),
-                'monthly_nth_weekday' => $this->nextMonthlyNthWeekday($start, $cursor),
-                'yearly' => $cursor->copy()->addYearNoOverflow(),
-                'biweekly' => $cursor->copy()->addWeeks(2),
-                default => $cursor->copy()->addWeek(),
+                'daily' => $cursor->copy()->addDays($interval),
+                'monthly', 'monthly_same_date' => $cursor->copy()->addMonthsNoOverflow($interval),
+                'monthly_nth_weekday' => $this->nextMonthlyNthWeekday($start, $cursor, $interval),
+                'yearly' => $cursor->copy()->addYearsNoOverflow($interval),
+                default => $cursor->copy()->addWeeks($interval),
             };
         }
 
         return $starts;
     }
 
-    private function nextMonthlyNthWeekday(Carbon $seriesStart, Carbon $currentOccurrence): Carbon
+    private function nextMonthlyNthWeekday(Carbon $seriesStart, Carbon $currentOccurrence, int $interval = 1): Carbon
     {
-        $monthCursor = $currentOccurrence->copy()->firstOfMonth()->addMonth();
+        $monthCursor = $currentOccurrence->copy()->firstOfMonth()->addMonths($interval);
         $weekday = $seriesStart->dayOfWeek;
         $time = [
             $seriesStart->hour,

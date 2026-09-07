@@ -8,6 +8,19 @@
     $recurrenceFrequency = old('recurrence_frequency', 'weekly');
     $recurrenceUntil = old('recurrence_until');
     $recurrencePreset = $recurrenceEnabled ? $recurrenceFrequency : 'none';
+    $recurrenceInterval = max(1, min(52, (int) old('recurrence_interval', $recurrencePreset === 'biweekly' ? 2 : 1)));
+    $recurrencePreset = $recurrencePreset === 'biweekly' ? 'weekly' : $recurrencePreset;
+    $recurrenceEndMode = old('recurrence_end_mode', 'date');
+    $recurrenceCount = max(1, min(80, (int) old('recurrence_count', 12)));
+    $recurrenceWeekdays = collect(old('recurrence_weekdays', []))
+        ->map(fn ($day) => (int) $day)
+        ->filter(fn ($day) => $day >= 1 && $day <= 7)
+        ->values()
+        ->all();
+    if ($event->start && empty($recurrenceWeekdays)) {
+        $recurrenceWeekdays = [$event->start->dayOfWeekIso];
+    }
+    $weekdayOptions = [1 => 'Mo', 2 => 'Di', 3 => 'Mi', 4 => 'Do', 5 => 'Fr', 6 => 'Sa', 7 => 'So'];
     $isAllDay = $event->start && $event->end && $event->start->format('H:i') === '00:00' && $event->end->format('H:i') === '23:59';
     $inputClass = 'mt-2 w-full min-h-14 rounded-2xl border-slate-300 px-4 text-base shadow-sm focus:border-slate-500 focus:ring-slate-300';
     $selectClass = 'mt-2 w-full min-h-14 rounded-2xl border-slate-300 px-4 text-base shadow-sm focus:border-slate-500 focus:ring-slate-300';
@@ -137,23 +150,62 @@
                                     <option value="none" @selected($recurrencePreset === 'none')>Wiederholt sich nicht</option>
                                     <option value="daily" @selected($recurrencePreset === 'daily')>Täglich wiederholen</option>
                                     <option value="weekly" @selected($recurrencePreset === 'weekly')>Wöchentlich wiederholen</option>
-                                    <option value="biweekly" @selected($recurrencePreset === 'biweekly')>Alle zwei Wochen wiederholen</option>
                                     <option value="monthly_same_date" @selected(in_array($recurrencePreset, ['monthly', 'monthly_same_date'], true))>Monatlich am gleichen Datum</option>
                                     <option value="monthly_nth_weekday" @selected($recurrencePreset === 'monthly_nth_weekday')>Monatlich am gleichen Wochentag</option>
                                     <option value="yearly" @selected($recurrencePreset === 'yearly')>Jährlich wiederholen</option>
                                 </select>
                             </div>
 
-                            <div data-recurrence-until-wrap>
-                                <label for="recurrence_until" class="{{ $labelClass }}">Bis wann?</label>
-                                <input type="date" name="recurrence_until" id="recurrence_until" value="{{ $recurrenceUntil }}"
-                                       class="{{ $inputClass }}">
+                            <div data-recurrence-interval-wrap>
+                                <label for="recurrence_interval" class="{{ $labelClass }}">Alle</label>
+                                <div class="mt-2 flex min-h-14 items-center overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm focus-within:border-slate-500 focus-within:ring-1 focus-within:ring-slate-300">
+                                    <input type="number" name="recurrence_interval" id="recurrence_interval" min="1" max="52" value="{{ $recurrenceInterval }}"
+                                           class="w-24 border-0 px-4 text-base focus:ring-0" data-recurrence-interval>
+                                    <span class="min-w-0 flex-1 px-4 text-sm font-semibold text-slate-600" data-recurrence-unit>Woche(n)</span>
+                                </div>
                             </div>
                         </div>
 
-                        <p class="mt-4 rounded-2xl bg-white/70 px-4 py-3 text-sm leading-6 text-amber-900 ring-1 ring-amber-100" data-recurrence-help>
-                            Beim Speichern entstehen einzelne Termine im Kalender. Danach kannst du jeden Termin separat bearbeiten oder löschen.
-                        </p>
+                        <div class="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr),minmax(0,1fr)]">
+                            <div class="rounded-2xl bg-white/70 p-4 ring-1 ring-amber-100" data-recurrence-weekdays-wrap>
+                                <div class="{{ $labelClass }}">An diesen Tagen</div>
+                                <div class="mt-3 grid grid-cols-7 gap-2">
+                                    @foreach($weekdayOptions as $weekdayValue => $weekdayLabel)
+                                        <label class="cursor-pointer">
+                                            <input type="checkbox" name="recurrence_weekdays[]" value="{{ $weekdayValue }}" class="peer sr-only" data-recurrence-weekday @checked(in_array($weekdayValue, $recurrenceWeekdays, true))>
+                                            <span class="flex h-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-500 peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white">
+                                                {{ $weekdayLabel }}
+                                            </span>
+                                        </label>
+                                    @endforeach
+                                </div>
+                            </div>
+
+                            <div class="rounded-2xl bg-white/70 p-4 ring-1 ring-amber-100">
+                                <label for="recurrence_end_mode" class="{{ $labelClass }}">Ende</label>
+                                <select name="recurrence_end_mode" id="recurrence_end_mode" class="{{ $selectClass }}" data-recurrence-end-mode>
+                                    <option value="date" @selected($recurrenceEndMode === 'date')>bis zu diesem Datum</option>
+                                    <option value="count" @selected($recurrenceEndMode === 'count')>nach einer Anzahl Termine</option>
+                                </select>
+
+                                <div class="mt-4" data-recurrence-until-wrap>
+                                    <label for="recurrence_until" class="{{ $labelClass }}">Bis Datum</label>
+                                    <input type="date" name="recurrence_until" id="recurrence_until" value="{{ $recurrenceUntil }}"
+                                           class="{{ $inputClass }}" data-recurrence-until>
+                                </div>
+
+                                <div class="mt-4" data-recurrence-count-wrap>
+                                    <label for="recurrence_count" class="{{ $labelClass }}">Anzahl Termine</label>
+                                    <input type="number" name="recurrence_count" id="recurrence_count" min="1" max="80" value="{{ $recurrenceCount }}"
+                                           class="{{ $inputClass }}" data-recurrence-count>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 rounded-2xl bg-white/70 px-4 py-3 text-sm leading-6 text-amber-900 ring-1 ring-amber-100">
+                            <p class="font-semibold" data-recurrence-preview>Dieser Termin wird nur einmal angelegt.</p>
+                            <p class="mt-1 text-amber-800" data-recurrence-help>Serien sind auf 80 Termine begrenzt. Danach kannst du jeden Termin separat bearbeiten oder löschen.</p>
+                        </div>
                     </div>
                 @else
                     @if($event->recurrence_group_id)
@@ -357,12 +409,139 @@
         const recurrencePreset = document.querySelector('[data-recurrence-preset]');
         const recurrenceEnabledInput = document.querySelector('[data-recurrence-enabled-input]');
         const recurrenceFrequencyInput = document.querySelector('[data-recurrence-frequency-input]');
+        const recurrenceIntervalWrap = document.querySelector('[data-recurrence-interval-wrap]');
+        const recurrenceIntervalInput = document.querySelector('[data-recurrence-interval]');
+        const recurrenceUnit = document.querySelector('[data-recurrence-unit]');
+        const recurrenceWeekdaysWrap = document.querySelector('[data-recurrence-weekdays-wrap]');
+        const recurrenceWeekdayInputs = Array.from(document.querySelectorAll('[data-recurrence-weekday]'));
+        const recurrenceEndMode = document.querySelector('[data-recurrence-end-mode]');
         const recurrenceUntilWrap = document.querySelector('[data-recurrence-until-wrap]');
         const recurrenceUntilInput = document.getElementById('recurrence_until');
+        const recurrenceCountWrap = document.querySelector('[data-recurrence-count-wrap]');
+        const recurrenceCountInput = document.querySelector('[data-recurrence-count]');
+        const recurrencePreview = document.querySelector('[data-recurrence-preview]');
         const recurrenceHelp = document.querySelector('[data-recurrence-help]');
         const allDayToggle = document.querySelector('[data-all-day-toggle]');
         const startInput = document.getElementById('start');
         const endInput = document.getElementById('end');
+
+        const frequencyLabels = {
+            daily: 'Tag(e)',
+            weekly: 'Woche(n)',
+            monthly_same_date: 'Monat(e)',
+            monthly_nth_weekday: 'Monat(e)',
+            yearly: 'Jahr(e)',
+        };
+
+        const frequencyFromPreset = (preset) => preset === 'monthly' ? 'monthly_same_date' : preset;
+
+        const parseLocalDate = (value) => {
+            if (!value) {
+                return null;
+            }
+
+            const parsed = new Date(value);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        };
+
+        const isoWeekday = (date) => {
+            const day = date.getDay();
+            return day === 0 ? 7 : day;
+        };
+
+        const startOfIsoWeek = (date) => {
+            const clone = new Date(date);
+            clone.setHours(0, 0, 0, 0);
+            clone.setDate(clone.getDate() - isoWeekday(clone) + 1);
+            return clone;
+        };
+
+        const selectedWeekdays = () => recurrenceWeekdayInputs
+            .filter((input) => input.checked)
+            .map((input) => Number(input.value));
+
+        const ensureStartWeekdaySelected = () => {
+            if (!startInput || selectedWeekdays().length > 0) {
+                return;
+            }
+
+            const startDate = parseLocalDate(startInput.value);
+            const weekday = startDate ? isoWeekday(startDate) : 1;
+            const input = recurrenceWeekdayInputs.find((candidate) => Number(candidate.value) === weekday);
+
+            if (input) {
+                input.checked = true;
+            }
+        };
+
+        const addPeriod = (date, frequency, interval) => {
+            const next = new Date(date);
+
+            if (frequency === 'daily') {
+                next.setDate(next.getDate() + interval);
+            } else if (frequency === 'weekly') {
+                next.setDate(next.getDate() + (7 * interval));
+            } else if (frequency === 'yearly') {
+                next.setFullYear(next.getFullYear() + interval);
+            } else {
+                next.setMonth(next.getMonth() + interval);
+            }
+
+            return next;
+        };
+
+        const estimateOccurrences = () => {
+            if (!recurrencePreset || recurrencePreset.value === 'none') {
+                return 1;
+            }
+
+            const startDate = parseLocalDate(startInput?.value);
+            if (!startDate) {
+                return 0;
+            }
+
+            const frequency = frequencyFromPreset(recurrencePreset.value);
+            const interval = Math.max(1, Math.min(52, Number(recurrenceIntervalInput?.value || 1)));
+
+            if (recurrenceEndMode?.value === 'count') {
+                return Math.max(1, Math.min(80, Number(recurrenceCountInput?.value || 1)));
+            }
+
+            const untilDate = parseLocalDate(recurrenceUntilInput?.value);
+            if (!untilDate) {
+                return 0;
+            }
+            untilDate.setHours(23, 59, 59, 999);
+
+            let count = 0;
+            if (frequency === 'weekly') {
+                ensureStartWeekdaySelected();
+                const weekdays = selectedWeekdays();
+                const seriesWeekStart = startOfIsoWeek(startDate).getTime();
+                const cursor = new Date(startDate);
+
+                while (cursor <= untilDate && count < 80) {
+                    const currentWeekStart = startOfIsoWeek(cursor).getTime();
+                    const weekDiff = Math.floor((currentWeekStart - seriesWeekStart) / (7 * 24 * 60 * 60 * 1000));
+
+                    if (weekDiff >= 0 && weekDiff % interval === 0 && weekdays.includes(isoWeekday(cursor))) {
+                        count += 1;
+                    }
+
+                    cursor.setDate(cursor.getDate() + 1);
+                }
+
+                return count;
+            }
+
+            let cursor = new Date(startDate);
+            while (cursor <= untilDate && count < 80) {
+                count += 1;
+                cursor = addPeriod(cursor, frequency, interval);
+            }
+
+            return count;
+        };
 
         const syncRecurrenceOptions = () => {
             if (!recurrencePreset || !recurrenceEnabledInput || !recurrenceFrequencyInput) {
@@ -370,17 +549,55 @@
             }
 
             const repeats = recurrencePreset.value !== 'none';
+            const frequency = frequencyFromPreset(recurrencePreset.value);
+            const usesCount = recurrenceEndMode?.value === 'count';
             recurrenceEnabledInput.value = repeats ? '1' : '0';
-            recurrenceFrequencyInput.value = repeats ? recurrencePreset.value : 'weekly';
+            recurrenceFrequencyInput.value = repeats ? frequency : 'weekly';
 
+            recurrenceIntervalWrap?.classList.toggle('hidden', !repeats);
+            recurrenceWeekdaysWrap?.classList.toggle('hidden', !repeats || frequency !== 'weekly');
+            recurrenceCountWrap?.classList.toggle('hidden', !repeats || !usesCount);
             recurrenceUntilWrap?.classList.toggle('hidden', !repeats);
+            recurrenceUntilWrap?.classList.toggle('hidden', !repeats || usesCount);
+
+            if (recurrenceIntervalInput) {
+                recurrenceIntervalInput.disabled = !repeats;
+            }
+
+            recurrenceWeekdayInputs.forEach((input) => {
+                input.disabled = !repeats || frequency !== 'weekly';
+            });
+
+            if (recurrenceEndMode) {
+                recurrenceEndMode.disabled = !repeats;
+            }
+
             if (recurrenceUntilInput) {
-                recurrenceUntilInput.disabled = !repeats;
+                recurrenceUntilInput.disabled = !repeats || usesCount;
+            }
+
+            if (recurrenceCountInput) {
+                recurrenceCountInput.disabled = !repeats || !usesCount;
+            }
+
+            if (recurrenceUnit) {
+                recurrenceUnit.textContent = frequencyLabels[frequency] || 'Woche(n)';
+            }
+
+            if (repeats && frequency === 'weekly') {
+                ensureStartWeekdaySelected();
+            }
+
+            const estimated = estimateOccurrences();
+            if (recurrencePreview) {
+                recurrencePreview.textContent = repeats
+                    ? (estimated > 0 ? `Es werden voraussichtlich ${estimated} Termine angelegt.` : 'Wähle Start und Ende, dann zeigt Clubano die Anzahl der Termine.')
+                    : 'Dieser Termin wird nur einmal angelegt.';
             }
 
             if (recurrenceHelp) {
                 recurrenceHelp.textContent = repeats
-                    ? 'Beim Speichern entstehen einzelne Termine im Kalender. Danach kannst du jeden Termin separat bearbeiten oder löschen.'
+                    ? 'Beim Speichern entstehen einzelne Termine im Kalender. Serien sind auf 80 Termine begrenzt.'
                     : 'Dieser Termin wird nur einmal angelegt.';
             }
         };
@@ -404,10 +621,18 @@
         };
 
         recurrencePreset?.addEventListener('change', syncRecurrenceOptions);
+        recurrenceIntervalInput?.addEventListener('input', syncRecurrenceOptions);
+        recurrenceEndMode?.addEventListener('change', syncRecurrenceOptions);
+        recurrenceUntilInput?.addEventListener('change', syncRecurrenceOptions);
+        recurrenceCountInput?.addEventListener('input', syncRecurrenceOptions);
+        recurrenceWeekdayInputs.forEach((input) => input.addEventListener('change', syncRecurrenceOptions));
         syncRecurrenceOptions();
 
         allDayToggle?.addEventListener('change', syncAllDay);
-        startInput?.addEventListener('change', syncAllDay);
+        startInput?.addEventListener('change', () => {
+            syncAllDay();
+            syncRecurrenceOptions();
+        });
         endInput?.addEventListener('change', syncAllDay);
 
         if (!categorySelect) {
