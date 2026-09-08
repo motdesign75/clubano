@@ -1460,6 +1460,7 @@ class EventController extends Controller
             ->where('id', $eventId)
             ->where('is_public', true)
             ->firstOrFail();
+        $event = $this->resolveEmbeddedPublicEvent($event);
 
         return response()
             ->view('events.public-show', [
@@ -2701,6 +2702,7 @@ class EventController extends Controller
             ->with('category')
             ->where('tenant_id', $tenant->id)
             ->where('is_public', true)
+            ->where('start', '>=', now()->subYear()->startOfDay())
             ->where('end', '>=', now()->startOfDay())
             ->when($selectedCategory, fn ($query) => $query->where('category_id', $selectedCategory->id))
             ->orderBy('start')
@@ -2716,6 +2718,40 @@ class EventController extends Controller
             'embedUrl' => route('events.public.embed', ['tenantSlug' => $tenant->slug]),
             'publicListUrl' => route('events.public.index', ['tenantSlug' => $tenant->slug]),
         ];
+    }
+
+    private function resolveEmbeddedPublicEvent(Event $event): Event
+    {
+        if ($this->eventHasPublicDetails($event) || $event->start?->year >= now()->subYear()->year) {
+            return $event;
+        }
+
+        $sameSlot = $event->start?->format('m-d H:i');
+        $possibleReplacements = Event::withoutGlobalScopes()
+            ->with(['tenant', 'activeBookingForm', 'category'])
+            ->where('tenant_id', $event->tenant_id)
+            ->where('is_public', true)
+            ->where('id', '!=', $event->id)
+            ->where('title', $event->title)
+            ->where('start', '>=', now()->startOfDay())
+            ->whereNotNull('description')
+            ->orderBy('start')
+            ->get();
+
+        $replacement = $sameSlot
+            ? $possibleReplacements->first(fn (Event $candidate) => $candidate->start?->format('m-d H:i') === $sameSlot)
+            : null;
+
+        if (! $replacement) {
+            $replacement = $possibleReplacements->first();
+        }
+
+        return $replacement ?: $event;
+    }
+
+    private function eventHasPublicDetails(Event $event): bool
+    {
+        return trim(strip_tags((string) $event->description)) !== '';
     }
 
     private function shiftViewData(Event $event): array

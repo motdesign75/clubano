@@ -332,6 +332,22 @@ test('embedded public event list opens event details inside the website embed', 
         'color' => '#0f766e',
     ]);
 
+    $staleEvent = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Brauen wie vor 350 Jahren',
+        'description' => null,
+        'location' => 'Vereinsheim',
+        'category_id' => $category->id,
+        'start' => '0026-09-09 18:00:00',
+        'end' => now()->addWeek()->setTime(21, 0),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 79,
+        'currency' => 'EUR',
+        'created_by' => $eventManager->id,
+        'updated_by' => $eventManager->id,
+    ]);
+
     $event = Event::withoutGlobalScopes()->create([
         'tenant_id' => $tenant->id,
         'title' => 'Brauen wie vor 350 Jahren',
@@ -368,6 +384,10 @@ test('embedded public event list opens event details inside the website embed', 
 
     $listResponse->assertOk();
     $listResponse->assertSee($embedDetailUrl, false);
+    $listResponse->assertDontSee(route('events.public.embed.show', [
+        'tenantSlug' => $tenant->slug,
+        'eventId' => $staleEvent->id,
+    ]), false);
     $listResponse->assertDontSee('target="_blank"', false);
 
     $detailResponse = $this->get($embedDetailUrl);
@@ -378,6 +398,14 @@ test('embedded public event list opens event details inside the website embed', 
     $detailResponse->assertSee('Gemeinsam brauen, probieren und lernen.');
     $detailResponse->assertSee('Zurück zu allen Veranstaltungen');
     $detailResponse->assertSee(route('forms.public.embed', $form->slug), false);
+
+    $staleDetailResponse = $this->get(route('events.public.embed.show', [
+        'tenantSlug' => $tenant->slug,
+        'eventId' => $staleEvent->id,
+    ]));
+
+    $staleDetailResponse->assertOk();
+    $staleDetailResponse->assertSee('Gemeinsam brauen, probieren und lernen.');
 });
 
 test('event bookings can make external club registrations free without making businesses free', function () {
