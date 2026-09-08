@@ -31,8 +31,7 @@
                     <h2 class="text-2xl font-bold text-slate-900 sm:text-3xl">{{ \Illuminate\Support\Str::headline($month) }}</h2>
                     <div class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-3xl border border-slate-200 bg-white/80 shadow-sm backdrop-blur">
                         @foreach($monthEvents as $event)
-                            <a href="{{ route('events.public.show', $event->id) }}"
-                               @if($isEmbed) target="_blank" rel="noopener noreferrer" @endif
+                            <a href="{{ $isEmbed ? route('events.public.embed.show', ['tenantSlug' => $tenant->slug, 'eventId' => $event->id]) : route('events.public.show', $event->id) }}"
                                class="group grid gap-4 px-4 py-5 transition hover:bg-white sm:grid-cols-[110px_180px_minmax(0,1fr)_220px_28px] sm:items-center sm:px-6">
                                 <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                                     <div class="h-5 w-full" style="background-color: {{ $event->date_accent_color }}"></div>
@@ -76,7 +75,7 @@
 
                                 <div class="flex flex-col items-start gap-3 sm:items-end">
                                     <span class="inline-flex rounded-full px-4 py-2 text-sm font-semibold {{ $event->booking_enabled && $event->activeBookingForm ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-700' }}">
-                                        {{ $event->booking_enabled && $event->activeBookingForm ? 'Anmeldung geöffnet' : 'Details verfügbar' }}
+                                        {{ $event->booking_enabled && $event->activeBookingForm ? 'Anmeldung geöffnet' : 'Details ansehen' }}
                                     </span>
 
                                     <div class="text-left sm:text-right">

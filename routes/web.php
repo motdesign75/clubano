@@ -69,6 +69,9 @@ Route::get('/vereine/{tenantSlug}/veranstaltungen', [EventController::class, 'pu
     ->name('events.public.index');
 Route::get('/vereine/{tenantSlug}/veranstaltungen/embed', [EventController::class, 'publicEmbed'])
     ->name('events.public.embed');
+Route::get('/vereine/{tenantSlug}/veranstaltungen/{eventId}/embed', [EventController::class, 'publicEmbedShow'])
+    ->whereNumber('eventId')
+    ->name('events.public.embed.show');
 Route::get('/einladungen/{token}', [EventController::class, 'invitationResponse'])
     ->name('events.invitations.public.show');
 Route::post('/einladungen/{token}', [EventController::class, 'storeInvitationResponse'])

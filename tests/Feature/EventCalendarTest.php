@@ -311,6 +311,75 @@ test('event booking form can use formal address tone for public copy', function 
         ->and($form->success_message)->toContain('Danke für Ihre Anmeldung.');
 });
 
+test('embedded public event list opens event details inside the website embed', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Einbettungsverein',
+        'slug' => 'einbettungsverein',
+        'email' => 'embed@example.test',
+    ]);
+
+    $eventManager = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_EVENT_MANAGER,
+    ]);
+
+    $category = EventCategory::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Braukurs',
+        'slug' => 'braukurs',
+        'color' => '#0f766e',
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Brauen wie vor 350 Jahren',
+        'description' => '<p>Gemeinsam brauen, probieren und lernen.</p>',
+        'location' => 'Vereinsheim',
+        'category_id' => $category->id,
+        'start' => now()->addWeek()->setTime(18, 0),
+        'end' => now()->addWeek()->setTime(21, 0),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 79,
+        'currency' => 'EUR',
+        'created_by' => $eventManager->id,
+        'updated_by' => $eventManager->id,
+    ]);
+
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'title' => 'Anmeldung: Brauen wie vor 350 Jahren',
+        'slug' => 'brauen-wie-vor-350-jahren',
+        'description' => 'Melde dich an.',
+        'form_type' => 'event',
+        'success_message' => 'Danke.',
+        'is_active' => true,
+    ]);
+
+    $embedDetailUrl = route('events.public.embed.show', [
+        'tenantSlug' => $tenant->slug,
+        'eventId' => $event->id,
+    ]);
+
+    $listResponse = $this->get(route('events.public.embed', $tenant->slug));
+
+    $listResponse->assertOk();
+    $listResponse->assertSee($embedDetailUrl, false);
+    $listResponse->assertDontSee('target="_blank"', false);
+
+    $detailResponse = $this->get($embedDetailUrl);
+
+    $detailResponse->assertOk();
+    $detailResponse->assertHeader('X-Robots-Tag', 'noindex, nofollow');
+    $detailResponse->assertSee('Brauen wie vor 350 Jahren');
+    $detailResponse->assertSee('Gemeinsam brauen, probieren und lernen.');
+    $detailResponse->assertSee('Zurück zu allen Veranstaltungen');
+    $detailResponse->assertSee(route('forms.public.embed', $form->slug), false);
+});
+
 test('event bookings can make external club registrations free without making businesses free', function () {
     Mail::fake();
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);

@@ -4,9 +4,21 @@
     $externalPrice = (float) ($event->price_per_person ?? 0);
     $memberPrice = (float) ($event->member_price_per_person ?? 0);
     $hasMemberRate = $event->is_paid && $externalPrice > 0 && $memberPrice < $externalPrice;
+    $isEmbed = $isEmbed ?? false;
+    $bookingUrl = $event->activeBookingForm
+        ? ($isEmbed ? route('forms.public.embed', $event->activeBookingForm->slug) : route('forms.public.show', $event->activeBookingForm->slug))
+        : null;
 @endphp
 
-<div class="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
+<div class="mx-auto max-w-5xl px-4 py-6 sm:px-6 {{ $isEmbed ? 'lg:px-6' : 'lg:px-8 lg:py-10' }}">
+    @if($isEmbed && $publicListUrl)
+        <a href="{{ $publicListUrl }}"
+           class="mb-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
+            <span aria-hidden="true">←</span>
+            Zurück zu allen Veranstaltungen
+        </a>
+    @endif
+
     <div class="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200">
         @if($event->image_url)
             <img src="{{ $event->image_url }}" alt="{{ $event->title }}" class="h-72 w-full object-cover sm:h-96">
@@ -17,30 +29,53 @@
                 <div>
                     <div class="text-sm font-medium text-indigo-600">{{ $event->tenant->name ?? 'Clubano' }}</div>
                     <h1 class="mt-2 text-3xl font-semibold text-slate-900">{{ $event->title }}</h1>
-                    <div class="mt-4 flex flex-wrap gap-3 text-sm text-slate-600">
+                    <div class="mt-5 grid gap-3 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
                         @if($event->category)
-                            <span class="rounded-full px-3 py-1 font-medium text-slate-800" style="background-color: {{ $event->category->color }}22;">
-                                {{ $event->category->name }}
-                            </span>
+                            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Kategorie</div>
+                                <div class="mt-1 flex items-center gap-2 font-semibold text-slate-950">
+                                    <span class="h-2.5 w-2.5 rounded-full" style="background-color: {{ $event->category->color }}"></span>
+                                    {{ $event->category->name }}
+                                </div>
+                            </div>
                         @endif
-                        <span class="rounded-full bg-slate-100 px-3 py-1">{{ $event->start->format('d.m.Y H:i') }} Uhr</span>
-                        <span class="rounded-full bg-slate-100 px-3 py-1">bis {{ $event->end->format('d.m.Y H:i') }} Uhr</span>
-                        <span class="rounded-full bg-slate-100 px-3 py-1">{{ $event->location ?: 'Ort folgt' }}</span>
-                        <span class="rounded-full {{ $event->is_paid ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800' }} px-3 py-1 font-medium">
-                            @if($event->is_paid)
-                                @if($hasMemberRate)
-                                    Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.strtoupper($event->currency ?: 'EUR') : 'kostenfrei' }} · Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }}
+
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Datum</div>
+                            <div class="mt-1 font-semibold text-slate-950">{{ $event->start->translatedFormat('D., d. F Y') }}</div>
+                        </div>
+
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Uhrzeit</div>
+                            <div class="mt-1 font-semibold text-slate-950">{{ $event->start->format('H:i') }} - {{ $event->end->format('H:i') }} Uhr</div>
+                        </div>
+
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ort</div>
+                            <div class="mt-1 font-semibold text-slate-950">{{ $event->location ?: 'Ort folgt' }}</div>
+                        </div>
+
+                        <div class="rounded-2xl border {{ $event->is_paid ? 'border-emerald-200 bg-emerald-50' : 'border-blue-200 bg-blue-50' }} px-4 py-3">
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] {{ $event->is_paid ? 'text-emerald-700' : 'text-blue-700' }}">Teilnahme</div>
+                            <div class="mt-1 font-semibold {{ $event->is_paid ? 'text-emerald-950' : 'text-blue-950' }}">
+                                @if($event->is_paid)
+                                    @if($hasMemberRate)
+                                        Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.strtoupper($event->currency ?: 'EUR') : 'kostenfrei' }}<br>
+                                        Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }}
+                                    @else
+                                        {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }} pro Person
+                                    @endif
                                 @else
-                                    {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }} pro Person
+                                    Kostenfrei
                                 @endif
-                            @else
-                                Kostenfrei
-                            @endif
-                        </span>
+                            </div>
+                        </div>
+
                         @if($event->responsible_name)
-                            <span class="rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-800">
-                                Verantwortlich: {{ $event->responsible_name }}
-                            </span>
+                            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Ansprechpartner</div>
+                                <div class="mt-1 font-semibold text-amber-950">{{ $event->responsible_name }}</div>
+                            </div>
                         @endif
                         @if(($event->conflict_count ?? 0) > 0)
                             <span class="rounded-full bg-rose-100 px-3 py-1 font-medium text-rose-800">
@@ -51,8 +86,8 @@
                 </div>
 
                 <div class="flex flex-col gap-2 sm:items-end">
-                    @if($event->booking_enabled && $event->activeBookingForm)
-                        <a href="{{ route('forms.public.show', $event->activeBookingForm->slug) }}"
+                    @if($event->booking_enabled && $bookingUrl)
+                        <a href="{{ $bookingUrl }}"
                            class="inline-flex rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow hover:bg-emerald-700">
                             Jetzt anmelden
                         </a>
@@ -97,9 +132,17 @@
             @endif
 
             @if($event->description)
-                <div class="mt-8 prose max-w-none prose-slate">
+                <section class="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Details</div>
+                    <div class="prose prose-slate mt-3 max-w-none">
                     {!! $event->description !!}
-                </div>
+                    </div>
+                </section>
+            @elseif($isPublicPreview)
+                <section class="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Details</div>
+                    <p class="mt-3 text-sm leading-6 text-slate-600">Weitere Informationen folgen.</p>
+                </section>
             @endif
 
             @if(!$isPublicPreview && ($event->conflict_count ?? 0) > 0)
@@ -235,7 +278,7 @@
                         </div>
 
                         <div class="mt-4 flex flex-wrap gap-3">
-                            <a href="{{ route('forms.public.show', $event->activeBookingForm->slug) }}"
+                            <a href="{{ $bookingUrl }}"
                                class="inline-flex rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
                                 Zum Buchungsformular
                             </a>

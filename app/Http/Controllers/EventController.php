@@ -1448,6 +1448,30 @@ class EventController extends Controller
         ]);
     }
 
+    public function publicEmbedShow(string $tenantSlug, int $eventId)
+    {
+        $tenant = Tenant::query()
+            ->where('slug', $tenantSlug)
+            ->firstOrFail();
+
+        $event = Event::withoutGlobalScopes()
+            ->with(['tenant', 'activeBookingForm', 'category'])
+            ->where('tenant_id', $tenant->id)
+            ->where('id', $eventId)
+            ->where('is_public', true)
+            ->firstOrFail();
+
+        return response()
+            ->view('events.public-show', [
+                'event' => $event,
+                'isPublicPreview' => true,
+                'isEmbed' => true,
+                'publicListUrl' => route('events.public.embed', ['tenantSlug' => $tenant->slug]),
+            ])
+            ->header('Content-Security-Policy', "frame-ancestors *")
+            ->header('X-Robots-Tag', 'noindex, nofollow');
+    }
+
     public function publicList(string $tenantSlug, Request $request)
     {
         $data = $this->publicListData($tenantSlug, $request);

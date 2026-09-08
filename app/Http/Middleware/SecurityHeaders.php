@@ -31,6 +31,8 @@ class SecurityHeaders
 
     private function isPublicEmbed(Request $request): bool
     {
-        return $request->is('f/*/embed') || $request->is('vereine/*/veranstaltungen/embed');
+        return $request->is('f/*/embed')
+            || $request->is('vereine/*/veranstaltungen/embed')
+            || $request->is('vereine/*/veranstaltungen/*/embed');
     }
 }
