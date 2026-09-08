@@ -87,21 +87,21 @@
             <div class="max-w-3xl">
                 <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Protokolle</div>
                 <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-                    {{ $editing ? 'Protokoll fertigstellen' : 'Sitzung vorbereiten' }}
+                    {{ $editing ? 'Protokoll bearbeiten' : 'Protokoll schreiben' }}
                 </h1>
                 <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
                     {{ $editing
-                        ? 'Prüfe die Mitschrift, schärfe Beschlüsse und bringe alles in eine Form, die später sofort verständlich ist.'
-                        : 'Starte mit der Tagesordnung. Während der Sitzung schreibst du nur mit, Clubano formt daraus Protokollpunkte, Aufgaben und Beschlüsse.' }}
+                        ? 'Prüfe kurz die wichtigsten Angaben, den Text und die nächsten Schritte.'
+                        : 'Halte ohne Umwege fest, wer dabei war, was besprochen wurde und was als Nächstes zu tun ist.' }}
                 </p>
             </div>
 
             <div class="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-slate-200">
-                <div class="font-semibold">Empfohlener Ablauf</div>
+                <div class="font-semibold">Einfacher Ablauf</div>
                 <div class="mt-3 grid gap-2 text-slate-300 sm:grid-cols-2 lg:grid-cols-1">
-                    <div>1. Agenda einfügen</div>
-                    <div>2. Sitzung mitschreiben</div>
-                    <div>3. Ergebnisse prüfen</div>
+                    <div>1. Rahmen ausfüllen</div>
+                    <div>2. Teilnehmer wählen</div>
+                    <div>3. Protokoll schreiben</div>
                     <div>4. Speichern und versenden</div>
                 </div>
             </div>
@@ -130,7 +130,7 @@
             <div class="mt-3 flex flex-wrap gap-2">
                 <a href="#protocol-basics" class="rounded-full bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white">Rahmen</a>
                 <a href="#protocol-people" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Teilnehmer</a>
-                <a href="#protocol-content" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Agenda & Mitschrift</a>
+                <a href="#protocol-content" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Protokoll</a>
                 <a href="#protocol-files" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Anhänge</a>
             </div>
         </nav>
@@ -238,13 +238,72 @@
             <div class="grid gap-6 xl:grid-cols-4">
                 <div>
                     <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protokoll</div>
-                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Dein roter Faden</h2>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Was soll festgehalten werden?</h2>
                     <p class="mt-2 text-sm leading-6 text-slate-600">
-                        Folge den vier Schritten. Jeder Schritt zeigt nur das, was gerade wichtig ist.
+                        Schreibe zuerst ganz normal. Die Tagesordnung ist nur eine Hilfe, wenn du sie wirklich brauchst.
                     </p>
                 </div>
 
                 <div class="space-y-6 xl:col-span-3">
+                    <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Standard</div>
+                                <h3 class="mt-2 text-xl font-semibold tracking-tight text-slate-950">Protokolltext</h3>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">Hier reicht normaler Text. Beschlüsse und Aufgaben kannst du darunter separat hervorheben.</p>
+                            </div>
+                            <div class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                                schnellster Weg
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <label for="content" class="sr-only">Protokolltext</label>
+                            <input id="content" type="hidden" name="content" value="{{ $contentValue }}">
+                            <trix-editor input="content" class="min-h-[280px] rounded-2xl border border-slate-200 bg-white"></trix-editor>
+                            @error('content')
+                                <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <div class="grid gap-4 lg:grid-cols-2">
+                        <div class="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 sm:p-5">
+                            <label for="resolutions" class="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-800">Beschlüsse</label>
+                            <textarea id="resolutions" name="resolutions" rows="6"
+                                      class="mt-3 w-full rounded-2xl border-emerald-200 bg-white text-sm leading-6 focus:border-emerald-400 focus:ring-emerald-200"
+                                      placeholder="Was wurde verbindlich entschieden?">{{ $resolutionsValue }}</textarea>
+                            <p class="mt-2 text-xs leading-5 text-emerald-800">Kurz und eindeutig. Diese Punkte müssen später wiedergefunden werden.</p>
+                            @error('resolutions')
+                                <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div class="rounded-3xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
+                            <label for="next_meeting" class="text-xs font-semibold uppercase tracking-[0.24em] text-amber-800">Aufgaben / Nächstes</label>
+                            <textarea id="next_meeting" name="next_meeting" rows="6"
+                                      class="mt-3 w-full rounded-2xl border-amber-200 bg-white text-sm leading-6 focus:border-amber-400 focus:ring-amber-200"
+                                      placeholder="Wer macht was bis wann? Oder wann wird das Thema wieder aufgenommen?">{{ $nextMeetingValue }}</textarea>
+                            <p class="mt-2 text-xs leading-5 text-amber-800">Für alles, was nach der Sitzung nicht liegen bleiben darf.</p>
+                            @error('next_meeting')
+                                <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <details class="rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
+                        <summary class="cursor-pointer list-none">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Optional</div>
+                                    <h3 class="mt-1 text-lg font-semibold text-slate-950">Mit Tagesordnung arbeiten</h3>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">Nur öffnen, wenn du TOPs vorbereiten und daraus strukturierte Protokollpunkte erzeugen möchtest.</p>
+                                </div>
+                                <span class="inline-flex w-fit items-center justify-center rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">Agenda öffnen</span>
+                            </div>
+                        </summary>
+
+                        <div class="mt-5 space-y-6">
                     <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <button type="button"
                                 class="rounded-2xl border px-4 py-3 text-left text-sm transition"
@@ -623,43 +682,13 @@
                             </div>
                         </div>
 
-                        <details class="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
-                            <summary class="cursor-pointer text-sm font-semibold text-slate-800">Zusätzliche Zusammenfassung ergänzen</summary>
-                            <div class="mt-4 grid gap-5 lg:grid-cols-2">
-                                <div>
-                                    <label for="resolutions" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Kurzfassung Beschlüsse</label>
-                                    <textarea id="resolutions" name="resolutions" rows="5"
-                                              class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
-                                              placeholder="Nur wenn du eine zusätzliche Kurzfassung brauchst.">{{ $resolutionsValue }}</textarea>
-                                    @error('resolutions')
-                                        <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
-                                    @enderror
-                                </div>
-
-                                <div>
-                                    <label for="next_meeting" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Nächstes Treffen / Hinweis</label>
-                                    <textarea id="next_meeting" name="next_meeting" rows="5"
-                                              class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
-                                              placeholder="Optionaler Hinweis für das nächste Treffen.">{{ $nextMeetingValue }}</textarea>
-                                    @error('next_meeting')
-                                        <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
-                                    @enderror
-                                </div>
-                            </div>
-                        </details>
-
-                        <details class="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
-                            <summary class="cursor-pointer text-sm font-semibold text-slate-800">Fertigen Protokolltext manuell nachziehen</summary>
-                            <div class="mt-4">
-                                <label for="content" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protokolltext</label>
-                                <input id="content" type="hidden" name="content" value="{{ $contentValue }}">
-                                <trix-editor input="content" class="mt-2 min-h-[240px] rounded-2xl border border-slate-200 bg-white"></trix-editor>
-                                @error('content')
-                                    <p class="mt-2 text-sm text-rose-600">{{ $message }}</p>
-                                @enderror
-                            </div>
-                        </details>
+                        <div class="mt-5 rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600">
+                            Beschlüsse und Aufgaben pflegst du im einfachen Standardbereich oberhalb der Agenda-Hilfe.
+                        </div>
                     </div>
+
+                        </div>
+                    </details>
                 </div>
             </div>
         </section>
