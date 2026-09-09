@@ -112,6 +112,34 @@ test('members index search finds organization members without searching their co
     $response->assertDontSee('Sarstedter Wohnkultur');
 });
 
+test('members index shows family billing payer for billed family members', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'members-family-billing-list');
+
+    $payer = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Max',
+        'last_name' => 'Zahler',
+        'email' => 'max@example.test',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Mia',
+        'last_name' => 'Familie',
+        'entry_date' => now()->subMonth()->toDateString(),
+        'family_payer_id' => $payer->id,
+    ]);
+
+    $response = $this->actingAs($staff)->get(route('members.index'));
+
+    $response->assertOk();
+    $response->assertSee('Abrechnung');
+    $response->assertSee('wird über Max Zahler abgerechnet');
+});
+
 test('member detail hides sensitive finance data for viewers and shows it for admins', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

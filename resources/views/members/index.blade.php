@@ -54,6 +54,13 @@
             'secondary' => $organization !== '' && $fullName !== '' ? $fullName : null,
         ];
     };
+    $familyPayerLabel = function ($member) use ($memberDisplay) {
+        if (! $member->familyPayer) {
+            return null;
+        }
+
+        return $memberDisplay($member->familyPayer)['primary'];
+    };
 @endphp
 
 <div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -380,6 +387,7 @@
                 @foreach($members as $member)
                     @php
                         $memberDisplayData = $memberDisplay($member);
+                        $familyPayerName = $familyPayerLabel($member);
                         $statusBadgeClass = match($member->status){
                             'aktiv' => 'bg-green-100 text-green-800',
                             'ehemalig' => 'bg-slate-100 text-slate-700',
@@ -416,6 +424,12 @@
                                     <div>
                                         <dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Mitgliedschaft</dt>
                                         <dd class="mt-1 text-slate-800">{{ $member->membership?->name ?? '—' }}</dd>
+                                        @if($familyPayerName)
+                                            <dd class="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                                                <span class="block font-semibold uppercase tracking-[0.14em] text-amber-700">Abrechnung</span>
+                                                <span class="mt-0.5 block">wird über {{ $familyPayerName }} abgerechnet</span>
+                                            </dd>
+                                        @endif
                                     </div>
 
                                     <div>
@@ -488,6 +502,7 @@
                     @foreach($members as $member)
                         @php
                             $memberDisplayData = $memberDisplay($member);
+                            $familyPayerName = $familyPayerLabel($member);
                             $statusBadgeClass = match($member->status){
                                 'aktiv' => 'bg-green-100 text-green-800',
                                 'ehemalig' => 'bg-slate-100 text-slate-700',
@@ -547,6 +562,12 @@
                                 <div>
                                     <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Mitgliedschaft</div>
                                     <div class="mt-0.5 text-sm text-slate-800">{{ $member->membership?->name ?? '—' }}</div>
+                                    @if($familyPayerName)
+                                        <div class="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+                                            <div class="font-semibold uppercase tracking-[0.14em] text-amber-700">Abrechnung</div>
+                                            <div>wird über {{ $familyPayerName }} abgerechnet</div>
+                                        </div>
+                                    @endif
                                     @if($member->membership_amount)
                                         <div class="mt-0.5 text-xs text-slate-500">
                                             {{ number_format((float) $member->membership_amount, 2, ',', '.') }} €
