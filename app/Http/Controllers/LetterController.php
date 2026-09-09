@@ -159,19 +159,20 @@ class LetterController extends Controller
     private function letterPayloadFromMember(Member $member, $tenant, Template $template): array
     {
         $body = TemplateParser::parse($template->body, $member, $tenant);
+        $addressLines = $this->normalizeAddressLines([
+            $member->full_name,
+            trim((string) ($member->care_of ?? '')) ?: null,
+            trim((string) ($member->street ?? '')),
+            trim((string) (($member->zip ?? '') . ' ' . ($member->city ?? ''))),
+            trim((string) ($member->country ?? '')),
+        ]);
 
         return [
             'display_name' => $member->full_name,
             'recipient_type' => 'member',
             'member_id' => $member->id,
             'contact_id' => null,
-            'address_lines' => array_values(array_filter([
-                $member->full_name,
-                trim((string) ($member->care_of ?? '')) ?: null,
-                trim((string) ($member->street ?? '')),
-                trim((string) (($member->zip ?? '') . ' ' . ($member->city ?? ''))),
-                trim((string) ($member->country ?? '')),
-            ])),
+            'address_lines' => $addressLines,
             'body' => $body,
         ];
     }
@@ -181,20 +182,21 @@ class LetterController extends Controller
         $body = TemplateParser::parse($template->body, $contact, $tenant);
         $nameLine = $contact->organization ?: $contact->company ?: $contact->full_name;
         $personLine = $contact->organization && $contact->full_name ? $contact->full_name : null;
+        $addressLines = $this->normalizeAddressLines([
+            $nameLine,
+            $personLine,
+            trim((string) ($contact->care_of ?? '')) ?: null,
+            trim((string) ($contact->street ?? '')),
+            trim((string) (($contact->zip ?? '') . ' ' . ($contact->city ?? ''))),
+            trim((string) ($contact->country ?? '')),
+        ]);
 
         return [
             'display_name' => $contact->display_name,
             'recipient_type' => 'contact',
             'member_id' => null,
             'contact_id' => $contact->id,
-            'address_lines' => array_values(array_filter([
-                $nameLine,
-                $personLine,
-                trim((string) ($contact->care_of ?? '')) ?: null,
-                trim((string) ($contact->street ?? '')),
-                trim((string) (($contact->zip ?? '') . ' ' . ($contact->city ?? ''))),
-                trim((string) ($contact->country ?? '')),
-            ])),
+            'address_lines' => $addressLines,
             'body' => $body,
         ];
     }
@@ -204,21 +206,45 @@ class LetterController extends Controller
         $body = TemplateParser::parse($template->body, $recipient, $tenant);
         $headline = trim((string) ($recipient['organization'] ?? '')) ?: trim((string) ($recipient['name'] ?? ''));
         $nameLine = !empty($recipient['organization']) && !empty($recipient['name']) ? $recipient['name'] : null;
+        $addressLines = $this->normalizeAddressLines([
+            $headline,
+            $nameLine,
+            trim((string) ($recipient['street'] ?? '')),
+            trim((string) (($recipient['zip'] ?? '') . ' ' . ($recipient['city'] ?? ''))),
+            trim((string) ($recipient['country'] ?? '')),
+        ]);
 
         return [
             'display_name' => $headline,
             'recipient_type' => 'free',
             'member_id' => null,
             'contact_id' => null,
-            'address_lines' => array_values(array_filter([
-                $headline,
-                $nameLine,
-                trim((string) ($recipient['street'] ?? '')),
-                trim((string) (($recipient['zip'] ?? '') . ' ' . ($recipient['city'] ?? ''))),
-                trim((string) ($recipient['country'] ?? '')),
-            ])),
+            'address_lines' => $addressLines,
             'body' => $body,
         ];
+    }
+
+    private function normalizeAddressLines(array $lines): array
+    {
+        return collect($lines)
+            ->map(fn ($line) => trim(preg_replace('/\s+/', ' ', (string) $line) ?? ''))
+            ->filter()
+            ->reject(fn ($line) => in_array(mb_strtolower($line), ['deutschland', 'germany'], true))
+            ->take(6)
+            ->values()
+            ->all();
+    }
+
+    private function senderLine($tenant): string
+    {
+        return collect([
+            $tenant->name,
+            $tenant->address,
+            trim((string) (($tenant->zip ?? '') . ' ' . ($tenant->city ?? ''))),
+        ])
+            ->map(fn ($part) => trim((string) $part))
+            ->filter()
+            ->implode(' · ');
     }
 
     private function renderPdf(array $letters, $tenant, Template $template): string
@@ -271,6 +297,7 @@ class LetterController extends Controller
                 'tenant' => $tenant,
                 'template' => $template,
                 'letter' => $letter,
+                'senderLine' => $this->senderLine($tenant),
                 'letterheadImagePath' => $letterheadImagePath,
                 'showLetterheadImage' => ! $letterheadPdfTemplateId && ! empty($letterheadImagePath),
             ])->render();
