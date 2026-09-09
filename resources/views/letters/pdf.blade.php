@@ -34,7 +34,7 @@
             height: 5mm;
             overflow: hidden;
             white-space: nowrap;
-            font-size: 7pt;
+            font-size: 7.5pt;
             line-height: 5mm;
             color: #64748b;
         }
@@ -44,7 +44,7 @@
             width: 80mm;
             height: 27.3mm;
             overflow: hidden;
-            font-size: 10pt;
+            font-size: 11pt;
             line-height: 4.55mm;
             color: #111827;
         }

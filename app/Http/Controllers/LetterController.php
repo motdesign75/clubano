@@ -229,7 +229,7 @@ class LetterController extends Controller
         return collect($lines)
             ->map(fn ($line) => trim(preg_replace('/\s+/', ' ', (string) $line) ?? ''))
             ->filter()
-            ->reject(fn ($line) => in_array(mb_strtolower($line), ['deutschland', 'germany'], true))
+            ->reject(fn ($line) => in_array(mb_strtolower($line), ['de', 'deutschland', 'germany'], true))
             ->take(6)
             ->values()
             ->all();

@@ -39,10 +39,11 @@ test('letter pdfs are generated with printable window envelope layout', function
         'free_street' => 'Empfaengerweg 4',
         'free_zip' => '54321',
         'free_city' => 'Beispielstadt',
-        'free_country' => 'Deutschland',
+        'free_country' => 'DE',
     ]);
 
     $response->assertOk();
     $response->assertHeader('Content-Type', 'application/pdf');
     expect($response->getContent())->toContain('%PDF');
+    expect($response->getContent())->not->toContain('>DE<');
 });
