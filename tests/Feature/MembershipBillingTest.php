@@ -189,6 +189,108 @@ test('membership billing cockpit shows due members and stores dunning settings',
         ->and($tenant->dunning_final_after_days)->toBe(35);
 });
 
+test('membership billing cockpit assigns membership and invoice payment method in bulk', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Sammelabrechnung',
+        'slug' => 'sammelabrechnung',
+        'email' => 'sammelabrechnung@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $membership = Membership::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Aktiv',
+        'amount' => 96,
+        'interval' => 'jährlich',
+    ]);
+
+    $first = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Erstes',
+        'last_name' => 'Mitglied',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    $second = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Zweites',
+        'last_name' => 'Mitglied',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    $nextInvoiceOn = now()->addWeek()->toDateString();
+
+    $this->actingAs($admin)
+        ->post(route('membership-billing.assign-members'), [
+            'member_ids' => [$first->id, $second->id],
+            'membership_id' => $membership->id,
+            'payment_method' => 'ueberweisung',
+            'next_membership_invoice_on' => $nextInvoiceOn,
+        ])
+        ->assertRedirect(route('membership-billing.index'));
+
+    foreach ([$first, $second] as $member) {
+        $member->refresh();
+
+        expect($member->membership_id)->toBe($membership->id)
+            ->and((float) $member->membership_amount)->toBe(96.0)
+            ->and($member->membership_interval)->toBe('jährlich')
+            ->and($member->payment_method)->toBe('ueberweisung')
+            ->and($member->next_membership_invoice_on?->toDateString())->toBe($nextInvoiceOn);
+    }
+});
+
+test('membership billing cockpit assigns invoice payment method without changing membership', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Zahlungsartverein',
+        'slug' => 'zahlungsartverein',
+        'email' => 'zahlungsart@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $membership = Membership::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Foerdermitglied',
+        'amount' => 48,
+        'interval' => 'jährlich',
+    ]);
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Ohne',
+        'last_name' => 'Zahlungsart',
+        'entry_date' => now()->subYear()->toDateString(),
+        'membership_id' => $membership->id,
+        'membership_amount' => 48,
+        'membership_interval' => 'jährlich',
+        'next_membership_invoice_on' => now()->addMonth()->toDateString(),
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('membership-billing.assign-members'), [
+            'member_ids' => [$member->id],
+            'payment_method' => 'ueberweisung',
+        ])
+        ->assertRedirect(route('membership-billing.index'));
+
+    $member->refresh();
+
+    expect($member->membership_id)->toBe($membership->id)
+        ->and($member->payment_method)->toBe('ueberweisung');
+});
+
 test('invoice reminders are blocked until dunning is enabled for the tenant', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

@@ -7,6 +7,7 @@ use App\Models\Member;
 use App\Models\Membership;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class MembershipBillingController extends Controller
 {
@@ -52,6 +53,10 @@ class MembershipBillingController extends Controller
             ->where('missing_membership', true)
             ->values();
 
+        $missingPaymentRows = $billingRows
+            ->filter(fn (array $row) => blank($row['member']->payment_method))
+            ->values();
+
         $openMembershipInvoices = Invoice::query()
             ->where('tenant_id', $tenantId)
             ->where('document_type', 'invoice')
@@ -78,6 +83,7 @@ class MembershipBillingController extends Controller
         $stats = [
             'due_members' => $dueRows->count(),
             'missing_membership' => $missingRows->count(),
+            'missing_payment_method' => $missingPaymentRows->count(),
             'drafts' => $draftMembershipInvoices->count(),
             'overdue_invoices' => $overdueInvoices->count(),
             'overdue_total' => $overdueInvoices->sum(fn (Invoice $invoice) => $invoice->getRemainingAmount()),
@@ -88,6 +94,7 @@ class MembershipBillingController extends Controller
             'memberships',
             'dueRows',
             'missingRows',
+            'missingPaymentRows',
             'openMembershipInvoices',
             'overdueInvoices',
             'draftMembershipInvoices',
@@ -118,6 +125,63 @@ class MembershipBillingController extends Controller
         return redirect()
             ->route('membership-billing.index')
             ->with('success', 'Einstellungen zur Mitgliederabrechnung wurden gespeichert.');
+    }
+
+    public function assignMembers(Request $request)
+    {
+        $tenantId = auth()->user()->tenant_id;
+
+        $validated = $request->validate([
+            'member_ids' => ['required', 'array', 'min:1'],
+            'member_ids.*' => [
+                'integer',
+                Rule::exists('members', 'id')->where(fn ($query) => $query->where('tenant_id', $tenantId)),
+            ],
+            'membership_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('memberships', 'id')->where(fn ($query) => $query->where('tenant_id', $tenantId)),
+            ],
+            'payment_method' => ['nullable', Rule::in(['ueberweisung', 'bar'])],
+            'next_membership_invoice_on' => ['nullable', 'date'],
+        ], [
+            'member_ids.required' => 'Bitte wähle mindestens ein Mitglied aus.',
+        ]);
+
+        if (blank($validated['membership_id'] ?? null) && blank($validated['payment_method'] ?? null)) {
+            return back()
+                ->withInput()
+                ->withErrors(['membership_id' => 'Bitte wähle ein Beitragsmodell oder eine Zahlungsart aus.']);
+        }
+
+        $updates = [];
+
+        if (filled($validated['membership_id'] ?? null)) {
+            $membership = Membership::query()
+                ->where('tenant_id', $tenantId)
+                ->findOrFail($validated['membership_id']);
+
+            $updates['membership_id'] = $membership->id;
+            $updates['membership_amount'] = $membership->amount;
+            $updates['membership_interval'] = $membership->interval;
+            $updates['next_membership_invoice_on'] = $request->filled('next_membership_invoice_on')
+                ? $request->date('next_membership_invoice_on')->toDateString()
+                : now()->toDateString();
+        }
+
+        if (filled($validated['payment_method'] ?? null)) {
+            $updates['payment_method'] = $validated['payment_method'];
+        }
+
+        $updated = Member::query()
+            ->where('tenant_id', $tenantId)
+            ->notArchived()
+            ->whereIn('id', $validated['member_ids'])
+            ->update($updates);
+
+        return redirect()
+            ->route('membership-billing.index')
+            ->with('success', $updated . ' Mitglied' . ($updated === 1 ? '' : 'er') . ' wurde' . ($updated === 1 ? '' : 'n') . ' aktualisiert.');
     }
 
     private function nextBillingDateFor(Member $member): ?CarbonInterface

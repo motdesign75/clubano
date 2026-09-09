@@ -518,6 +518,8 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     Route::middleware('tenant.role:finance')->group(function () {
         Route::get('/mitgliederabrechnung', [MembershipBillingController::class, 'index'])
             ->name('membership-billing.index');
+        Route::post('/mitgliederabrechnung/zuweisen', [MembershipBillingController::class, 'assignMembers'])
+            ->name('membership-billing.assign-members');
         Route::patch('/mitgliederabrechnung/einstellungen', [MembershipBillingController::class, 'updateSettings'])
             ->name('membership-billing.settings');
     });
