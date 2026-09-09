@@ -53,7 +53,7 @@ class DashboardMemberStats extends Component
                 }
 
                 $member->next_birthday_date = $nextBirthday;
-                $member->next_birthday_age = $today->year - $member->birthday->year;
+                $member->next_birthday_age = (int) Carbon::parse($member->birthday)->diffInYears($nextBirthday);
 
                 return $member;
             })
@@ -74,7 +74,7 @@ class DashboardMemberStats extends Component
                     return null;
                 }
 
-                $years = $today->year - $entryDate->year;
+                $years = (int) $entryDate->diffInYears($anniversaryDate);
 
                 if ($years <= 0 || $years % 5 !== 0) {
                     return null;
