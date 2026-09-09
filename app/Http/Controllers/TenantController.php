@@ -47,6 +47,10 @@ class TenantController extends Controller
             'bic' => 'nullable|string|max:255',
             'bank_name' => 'nullable|string|max:255',
             'chairman_name' => 'nullable|string|max:255',
+            'board_signatories' => 'nullable|array|max:6',
+            'board_signatories.*.name' => 'nullable|string|max:255',
+            'board_signatories.*.role' => 'nullable|string|max:255',
+            'board_signatories.*.enabled' => 'nullable|boolean',
             'pdf_template' => 'nullable|mimes:pdf,jpg,jpeg,png|max:2048',
             'use_letterhead' => 'nullable|boolean',
             'letter_bottom_margin_mm' => 'required|integer|min:15|max:80',
@@ -80,6 +84,16 @@ class TenantController extends Controller
 
         $validated['member_exit_mail_subject'] = trim((string) ($validated['member_exit_mail_subject'] ?? ''));
         $validated['member_exit_mail_body'] = trim((string) ($validated['member_exit_mail_body'] ?? ''));
+        $validated['board_signatories'] = collect($validated['board_signatories'] ?? [])
+            ->map(fn (array $row) => [
+                'name' => trim((string) ($row['name'] ?? '')),
+                'role' => trim((string) ($row['role'] ?? '')),
+                'enabled' => (bool) ($row['enabled'] ?? false),
+            ])
+            ->filter(fn (array $row) => $row['name'] !== '' || $row['role'] !== '')
+            ->take(6)
+            ->values()
+            ->all();
 
         if (! $validated['member_exit_mail_enabled']) {
             $validated['member_exit_mail_subject'] = null;

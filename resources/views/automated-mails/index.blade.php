@@ -77,7 +77,7 @@
                     </div>
                     <div class="md:col-span-2">
                         <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
-                            Platzhalter: <span class="font-mono">@{{ vorname }}</span>, <span class="font-mono">@{{ name }}</span>, <span class="font-mono">@{{ alter }}</span>, <span class="font-mono">@{{ geburtstag }}</span>, <span class="font-mono">@{{ verein }}</span>
+                            Platzhalter: <span class="font-mono">@{{ vorname }}</span>, <span class="font-mono">@{{ name }}</span>, <span class="font-mono">@{{ alter }}</span>, <span class="font-mono">@{{ geburtstag }}</span>, <span class="font-mono">@{{ verein }}</span>, <span class="font-mono">@{{ vorstand_unterschriften }}</span>
                         </div>
                     </div>
                 </div>

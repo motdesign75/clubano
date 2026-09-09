@@ -200,6 +200,7 @@ class AutomatedMailService
             'verein' => e($tenant->name ?: 'dein Verein'),
             'geburtstag' => e($birthdayDate->format('d.m.Y')),
             'alter' => e($age !== null ? (string) $age : ''),
+            'vorstand_unterschriften' => TemplateParser::parse('{vorstand_unterschriften}', $member, $tenant),
         ];
         $subject = $this->replacePlaceholders($this->htmlSanitizer->normalize($subject), $replacements);
         $body = $this->replacePlaceholders($body, $replacements);

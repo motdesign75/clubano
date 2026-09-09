@@ -43,6 +43,75 @@
             </div>
         </section>
 
+        {{-- Vorstandsunterschriften --}}
+        @php
+            $signatoryRows = old('board_signatories', $tenant->board_signatories ?? []);
+            $defaultSignatoryRows = [
+                ['name' => $tenant->chairman_name ?: '', 'role' => '1. Vorsitz', 'enabled' => filled($tenant->chairman_name)],
+                ['name' => '', 'role' => '2. Vorsitz', 'enabled' => false],
+                ['name' => '', 'role' => 'Kasse', 'enabled' => false],
+                ['name' => '', 'role' => 'Schriftführung', 'enabled' => false],
+            ];
+            $signatoryRows = collect($signatoryRows ?: $defaultSignatoryRows)
+                ->pad(4, ['name' => '', 'role' => '', 'enabled' => false])
+                ->take(6)
+                ->values();
+        @endphp
+
+        <section>
+            <div class="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-800">✍️ Geschäftsführender Vorstand & Unterschriften</h2>
+                        <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                            Markiere hier, welche Namen in Briefen und E-Mails als Unterschriftenzeile erscheinen sollen. Bei einem Vorstandswechsel änderst du nur diese Liste.
+                        </p>
+                    </div>
+                    <span class="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                        Platzhalter: {vorstand_unterschriften}
+                    </span>
+                </div>
+
+                <div class="mt-5 space-y-3">
+                    @foreach($signatoryRows as $index => $signatory)
+                        <div class="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-[minmax(0,1fr),minmax(0,220px),auto] md:items-end">
+                            <div>
+                                <label for="board_signatories_{{ $index }}_name" class="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Name</label>
+                                <input id="board_signatories_{{ $index }}_name"
+                                       type="text"
+                                       name="board_signatories[{{ $index }}][name]"
+                                       value="{{ $signatory['name'] ?? '' }}"
+                                       class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
+                                       placeholder="z. B. Olli Towet">
+                            </div>
+                            <div>
+                                <label for="board_signatories_{{ $index }}_role" class="block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Funktion</label>
+                                <input id="board_signatories_{{ $index }}_role"
+                                       type="text"
+                                       name="board_signatories[{{ $index }}][role]"
+                                       value="{{ $signatory['role'] ?? '' }}"
+                                       class="mt-2 w-full rounded-2xl border-slate-200 text-sm focus:border-slate-400 focus:ring-slate-300"
+                                       placeholder="z. B. 1. Vorsitz">
+                            </div>
+                            <label class="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
+                                <input type="hidden" name="board_signatories[{{ $index }}][enabled]" value="0">
+                                <input type="checkbox"
+                                       name="board_signatories[{{ $index }}][enabled]"
+                                       value="1"
+                                       @checked((bool) ($signatory['enabled'] ?? false))
+                                       class="rounded border-slate-300 text-slate-950 focus:ring-slate-500">
+                                Verwenden
+                            </label>
+                        </div>
+                    @endforeach
+                </div>
+
+                <p class="mt-4 text-xs leading-5 text-slate-500">
+                    Hinweis: Die Schreibschrift ist eine optische Gruß- und Abschlusszeile, keine rechtssichere digitale Signatur.
+                </p>
+            </div>
+        </section>
+
         {{-- Adresse --}}
         <section>
             <h2 class="text-xl font-semibold text-gray-700 mb-4">📍 Adresse</h2>

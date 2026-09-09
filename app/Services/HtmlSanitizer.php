@@ -298,6 +298,7 @@ class HtmlSanitizer
             'border-radius',
             'color',
             'display',
+            'font-family',
             'font-size',
             'font-weight',
             'line-height',
@@ -305,8 +306,10 @@ class HtmlSanitizer
             'margin-bottom',
             'margin-top',
             'padding',
+            'padding-top',
             'text-align',
             'text-decoration',
+            'vertical-align',
         ];
 
         $declarations = collect(explode(';', $value))

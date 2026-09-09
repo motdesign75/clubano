@@ -12,6 +12,9 @@
     $hasAddress = filled($addressLine);
     $hasBankDetails = filled($tenant->iban) || filled($tenant->bic) || filled($tenant->bank_name) || filled($tenant->creditor_identifier);
     $hasLetterhead = filled($tenant->pdf_template);
+    $activeBoardSignatories = collect($tenant->board_signatories ?? [])
+        ->filter(fn ($row) => ($row['enabled'] ?? false) && filled($row['name'] ?? null))
+        ->values();
     $letterheadExtension = $hasLetterhead ? strtolower(pathinfo($tenant->pdf_template, PATHINFO_EXTENSION)) : null;
     $licenseLabel = match (true) {
         $tenant->hasComplimentaryAccess() => $tenant->license_mode_label,
@@ -48,6 +51,13 @@
             'active' => $tenant->member_exit_mail_enabled,
             'hint' => 'Automatische Bestätigung',
             'icon' => 'mail',
+        ],
+        [
+            'label' => 'Unterschriften',
+            'value' => $activeBoardSignatories->isNotEmpty() ? $activeBoardSignatories->count() . ' aktiv' : 'fehlt',
+            'active' => $activeBoardSignatories->isNotEmpty(),
+            'hint' => 'Geschäftsführender Vorstand',
+            'icon' => 'signature',
         ],
     ];
 
@@ -114,9 +124,11 @@
                                     <x-heroicon-o-banknotes class="h-5 w-5" />
                                 @elseif($item['icon'] === 'document')
                                     <x-heroicon-o-document-text class="h-5 w-5" />
-                                @elseif($item['icon'] === 'mail')
-                                    <x-heroicon-o-envelope class="h-5 w-5" />
-                                @else
+                @elseif($item['icon'] === 'mail')
+                    <x-heroicon-o-envelope class="h-5 w-5" />
+                @elseif($item['icon'] === 'signature')
+                    <x-heroicon-o-pencil class="h-5 w-5" />
+                @else
                                     <x-heroicon-o-building-office class="h-5 w-5" />
                                 @endif
                             </span>
@@ -179,6 +191,40 @@
             </div>
 
             <div class="grid gap-6 lg:grid-cols-2">
+                <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div class="flex items-start gap-3">
+                        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                            <x-heroicon-o-pencil class="h-5 w-5" />
+                        </span>
+                        <div>
+                            <h2 class="text-lg font-semibold text-slate-950">Geschäftsführender Vorstand</h2>
+                            <p class="mt-1 text-sm leading-6 text-slate-500">Diese aktivierten Namen können in Briefen und Mails als Unterschriftenzeile erscheinen.</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 space-y-3">
+                        @forelse($activeBoardSignatories as $signatory)
+                            <div class="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                                <div class="font-[cursive] text-2xl leading-tight text-slate-950">{{ $signatory['name'] }}</div>
+                                <div class="mt-2 border-t border-slate-200 pt-2 text-sm">
+                                    <div class="font-semibold text-slate-950">{{ $signatory['name'] }}</div>
+                                    @if(filled($signatory['role'] ?? null))
+                                        <div class="text-slate-500">{{ $signatory['role'] }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                        @empty
+                            <div class="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-sm leading-6 text-slate-500">
+                                Noch keine aktive Unterschrift hinterlegt.
+                            </div>
+                        @endforelse
+                    </div>
+
+                    <div class="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
+                        Platzhalter für Vorlagen: <span class="font-mono">{vorstand_unterschriften}</span>
+                    </div>
+                </section>
+
                 <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div class="flex items-start gap-3">
                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">

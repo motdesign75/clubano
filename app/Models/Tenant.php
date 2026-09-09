@@ -35,6 +35,7 @@ class Tenant extends Model
         'letterhead',
         'pdf_template',
         'chairman_name',
+        'board_signatories',
         'use_letterhead',
         'letter_bottom_margin_mm',
 
@@ -97,6 +98,7 @@ class Tenant extends Model
         'is_demo' => 'boolean',
         'verified_at' => 'datetime',
         'use_letterhead'  => 'boolean',
+        'board_signatories' => 'array',
         'letter_bottom_margin_mm' => 'integer',
         'member_exit_mail_enabled' => 'boolean',
         'donation_certificates_enabled' => 'boolean',

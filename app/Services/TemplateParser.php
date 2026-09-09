@@ -55,6 +55,7 @@ class TemplateParser
             '{ort}' => $member->city ?? '',
             '{land}' => $member->country ?? '',
             '{verein}' => $tenant->name ?? '',
+            '{vorstand_unterschriften}' => self::boardSignaturesHtml($tenant),
             '{heute}' => Carbon::now()->format('d.m.Y'),
             '{link}' => '',
         ];
@@ -81,6 +82,7 @@ class TemplateParser
             '{ort}' => $contact->city ?? '',
             '{land}' => $contact->country ?? '',
             '{verein}' => $tenant->name ?? '',
+            '{vorstand_unterschriften}' => self::boardSignaturesHtml($tenant),
             '{heute}' => Carbon::now()->format('d.m.Y'),
             '{link}' => '',
         ];
@@ -107,6 +109,7 @@ class TemplateParser
             '{ort}' => (string) ($recipient['city'] ?? ''),
             '{land}' => (string) ($recipient['country'] ?? ''),
             '{verein}' => $tenant->name ?? '',
+            '{vorstand_unterschriften}' => self::boardSignaturesHtml($tenant),
             '{heute}' => Carbon::now()->format('d.m.Y'),
             '{formular}' => (string) ($recipient['form_title'] ?? ''),
             '{link}' => (string) ($recipient['link'] ?? ($recipient['url'] ?? ($recipient['individual_link'] ?? ''))),
@@ -148,5 +151,40 @@ class TemplateParser
         }
 
         return $fallback !== '' ? 'Hallo ' . $fallback : 'Guten Tag';
+    }
+
+    private static function boardSignaturesHtml(?Tenant $tenant): string
+    {
+        $signatories = collect($tenant?->board_signatories ?? [])
+            ->filter(fn (array $row) => ($row['enabled'] ?? false) && filled($row['name'] ?? null))
+            ->values();
+
+        if ($signatories->isEmpty() && filled($tenant?->chairman_name)) {
+            $signatories = collect([[
+                'name' => $tenant->chairman_name,
+                'role' => 'Vorsitz',
+            ]]);
+        }
+
+        if ($signatories->isEmpty()) {
+            return '';
+        }
+
+        $cells = $signatories
+            ->map(function (array $row) {
+                $name = e((string) ($row['name'] ?? ''));
+                $role = e((string) ($row['role'] ?? ''));
+
+                return '<td style="padding:18px 24px 0 0;vertical-align:top;min-width:150px;">'
+                    . '<div style="font-family:cursive;font-size:24px;line-height:1.1;color:#111827;">' . $name . '</div>'
+                    . '<div style="margin-top:6px;border-top:1px solid #cbd5e1;padding-top:5px;font-size:12px;line-height:1.35;color:#475569;">'
+                    . '<strong style="color:#111827;">' . $name . '</strong>'
+                    . ($role !== '' ? '<br>' . $role : '')
+                    . '</div>'
+                    . '</td>';
+            })
+            ->implode('');
+
+        return '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;border-collapse:collapse;"><tr>' . $cells . '</tr></table>';
     }
 }

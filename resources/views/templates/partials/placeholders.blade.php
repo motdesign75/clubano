@@ -13,6 +13,7 @@
         '{ort}' => 'Ort',
         '{land}' => 'Land',
         '{verein}' => 'Verein',
+        '{vorstand_unterschriften}' => 'Vorstandsunterschriften',
         '{heute}' => 'Heutiges Datum',
         '{link}' => 'Individueller Link',
     ];
