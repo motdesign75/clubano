@@ -2,6 +2,24 @@
     $lastTotal = collect($totalMembers)->last() ?? 0;
     $firstTotal = collect($totalMembers)->first() ?? 0;
     $netGrowth = $lastTotal - $firstTotal;
+    $entrySeries = collect($entries);
+    $exitSeries = collect($exits);
+    $totalSeries = collect($totalMembers);
+    $movementMax = max(1, (int) $entrySeries->merge($exitSeries)->max());
+    $totalMin = (int) $totalSeries->min();
+    $totalMax = (int) $totalSeries->max();
+    $totalRange = max(1, $totalMax - $totalMin);
+    $pointCount = max(1, $totalSeries->count() - 1);
+    $sparkPoints = $totalSeries
+        ->values()
+        ->map(function ($value, $index) use ($pointCount, $totalMin, $totalRange) {
+            $x = $pointCount === 0 ? 50 : round(($index / $pointCount) * 100, 2);
+            $y = round(88 - (((int) $value - $totalMin) / $totalRange * 68), 2);
+
+            return $x . ',' . $y;
+        })
+        ->implode(' ');
+    $areaPoints = $sparkPoints ? '0,100 ' . $sparkPoints . ' 100,100' : '';
 @endphp
 
 <div class="space-y-5">
@@ -47,20 +65,54 @@
                 </p>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2 text-sm">
-                <span class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 font-medium text-emerald-800 ring-1 ring-emerald-200">
+            <div class="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                <span class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800 ring-1 ring-emerald-200">
                     <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
                     Eintritte
                 </span>
-                <span class="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1.5 font-medium text-rose-800 ring-1 ring-rose-200">
+                <span class="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1.5 text-rose-800 ring-1 ring-rose-200">
                     <span class="h-2 w-2 rounded-full bg-rose-500"></span>
                     Austritte
                 </span>
             </div>
         </div>
 
-        <div class="mt-6 h-[260px] sm:h-[300px]">
-            <canvas id="memberBarChart" class="h-full w-full"></canvas>
+        <div class="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            @foreach($months as $index => $month)
+                @php
+                    $entryValue = (int) ($entries[$index] ?? 0);
+                    $exitValue = (int) ($exits[$index] ?? 0);
+                    $entryHeight = max($entryValue > 0 ? 14 : 3, round(($entryValue / $movementMax) * 56));
+                    $exitHeight = max($exitValue > 0 ? 14 : 3, round(($exitValue / $movementMax) * 56));
+                    $hasMovement = $entryValue > 0 || $exitValue > 0;
+                @endphp
+                <div class="rounded-xl border {{ $hasMovement ? 'border-slate-200 bg-slate-50' : 'border-slate-100 bg-white' }} p-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="text-sm font-semibold text-slate-900">{{ $month }}</div>
+                        @if($hasMovement)
+                            <div class="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+                                {{ $entryValue - $exitValue >= 0 ? '+' : '' }}{{ $entryValue - $exitValue }}
+                            </div>
+                        @else
+                            <div class="text-xs text-slate-400">ruhig</div>
+                        @endif
+                    </div>
+
+                    <div class="mt-4 flex h-20 items-end justify-center gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-slate-100">
+                        <div class="flex h-full flex-1 items-end justify-center">
+                            <div class="w-full max-w-8 rounded-t-lg bg-emerald-500/80" style="height: {{ $entryHeight }}px"></div>
+                        </div>
+                        <div class="flex h-full flex-1 items-end justify-center">
+                            <div class="w-full max-w-8 rounded-t-lg bg-rose-400/80" style="height: {{ $exitHeight }}px"></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-2 gap-2 text-center text-xs">
+                        <div class="rounded-lg bg-emerald-50 px-2 py-1 font-semibold text-emerald-800">{{ $entryValue }} rein</div>
+                        <div class="rounded-lg bg-rose-50 px-2 py-1 font-semibold text-rose-800">{{ $exitValue }} raus</div>
+                    </div>
+                </div>
+            @endforeach
         </div>
     </div>
 
@@ -82,173 +134,37 @@
             </div>
         </div>
 
-        <div class="mt-6 h-[260px] sm:h-[300px]">
-            <canvas id="memberLineChart" class="h-full w-full"></canvas>
+        <div class="mt-6 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-100">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="h-56 w-full overflow-visible">
+                <polygon points="{{ $areaPoints }}" fill="rgba(15, 118, 110, 0.12)"></polygon>
+                <polyline points="{{ $sparkPoints }}" fill="none" stroke="#0f766e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
+                @foreach($totalSeries->values() as $index => $value)
+                    @php
+                        $x = $pointCount === 0 ? 50 : round(($index / $pointCount) * 100, 2);
+                        $y = round(88 - (((int) $value - $totalMin) / $totalRange * 68), 2);
+                    @endphp
+                    <circle cx="{{ $x }}" cy="{{ $y }}" r="1.5" fill="#0f766e" vector-effect="non-scaling-stroke"></circle>
+                @endforeach
+            </svg>
+
+            <div class="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div class="rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200">
+                    <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Start</div>
+                    <div class="mt-1 text-lg font-semibold text-slate-950">{{ $firstTotal }}</div>
+                </div>
+                <div class="rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200">
+                    <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Heute</div>
+                    <div class="mt-1 text-lg font-semibold text-slate-950">{{ $lastTotal }}</div>
+                </div>
+                <div class="rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200">
+                    <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Minimum</div>
+                    <div class="mt-1 text-lg font-semibold text-slate-950">{{ $totalMin }}</div>
+                </div>
+                <div class="rounded-xl bg-white px-4 py-3 ring-1 ring-slate-200">
+                    <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Maximum</div>
+                    <div class="mt-1 text-lg font-semibold text-slate-950">{{ $totalMax }}</div>
+                </div>
+            </div>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script>
-        let barChartInstance = null;
-        let lineChartInstance = null;
-
-        function clubanoNumber(value) {
-            return new Intl.NumberFormat('de-DE').format(value);
-        }
-
-        function renderMemberCharts() {
-            const barCanvas = document.getElementById('memberBarChart');
-            const lineCanvas = document.getElementById('memberLineChart');
-
-            if (!barCanvas || !lineCanvas || typeof Chart === 'undefined') {
-                return;
-            }
-
-            const barCtx = barCanvas.getContext('2d');
-            const lineCtx = lineCanvas.getContext('2d');
-
-            if (barChartInstance) barChartInstance.destroy();
-            if (lineChartInstance) lineChartInstance.destroy();
-
-            const gridColor = 'rgba(148, 163, 184, 0.18)';
-            const tickColor = '#64748b';
-            const titleColor = '#0f172a';
-
-            const entriesGradient = barCtx.createLinearGradient(0, 0, 0, 280);
-            entriesGradient.addColorStop(0, 'rgba(16, 185, 129, 0.95)');
-            entriesGradient.addColorStop(1, 'rgba(16, 185, 129, 0.25)');
-
-            const exitsGradient = barCtx.createLinearGradient(0, 0, 0, 280);
-            exitsGradient.addColorStop(0, 'rgba(244, 63, 94, 0.95)');
-            exitsGradient.addColorStop(1, 'rgba(244, 63, 94, 0.22)');
-
-            barChartInstance = new Chart(barCtx, {
-                type: 'bar',
-                data: {
-                    labels: @json($months),
-                    datasets: [
-                        {
-                            label: 'Eintritte',
-                            data: @json($entries),
-                            backgroundColor: entriesGradient,
-                            borderRadius: 10,
-                            borderSkipped: false,
-                            maxBarThickness: 28,
-                        },
-                        {
-                            label: 'Austritte',
-                            data: @json($exits),
-                            backgroundColor: exitsGradient,
-                            borderRadius: 10,
-                            borderSkipped: false,
-                            maxBarThickness: 28,
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(15, 23, 42, 0.94)',
-                            titleColor: '#fff',
-                            bodyColor: '#e2e8f0',
-                            padding: 14,
-                            displayColors: true,
-                            callbacks: {
-                                label: function(context) {
-                                    return `${context.dataset.label}: ${clubanoNumber(context.parsed.y)}`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: { precision: 0, stepSize: 1, color: tickColor },
-                            grid: { color: gridColor, drawBorder: false }
-                        },
-                        x: {
-                            ticks: { color: tickColor },
-                            grid: { display: false, drawBorder: false }
-                        }
-                    }
-                }
-            });
-
-            const lineGradient = lineCtx.createLinearGradient(0, 0, 0, 300);
-            lineGradient.addColorStop(0, 'rgba(79, 70, 229, 0.30)');
-            lineGradient.addColorStop(1, 'rgba(79, 70, 229, 0.02)');
-
-            lineChartInstance = new Chart(lineCtx, {
-                type: 'line',
-                data: {
-                    labels: @json($months),
-                    datasets: [{
-                        label: 'Mitglieder gesamt',
-                        data: @json($totalMembers),
-                        borderColor: '#312e81',
-                        borderWidth: 3,
-                        pointRadius: 0,
-                        pointHoverRadius: 5,
-                        pointHoverBackgroundColor: '#312e81',
-                        pointHoverBorderColor: '#fff',
-                        pointHoverBorderWidth: 2,
-                        fill: true,
-                        backgroundColor: lineGradient,
-                        tension: 0.38
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(15, 23, 42, 0.94)',
-                            titleColor: '#fff',
-                            bodyColor: '#e2e8f0',
-                            padding: 14,
-                            displayColors: false,
-                            callbacks: {
-                                label: function(context) {
-                                    return `Mitglieder: ${clubanoNumber(context.parsed.y)}`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: false,
-                            ticks: { stepSize: 1, color: tickColor },
-                            grid: { color: gridColor, drawBorder: false }
-                        },
-                        x: {
-                            ticks: { color: tickColor },
-                            grid: { display: false, drawBorder: false }
-                        }
-                    }
-                }
-            });
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            setTimeout(renderMemberCharts, 120);
-        });
-
-        if (window.Livewire) {
-            Livewire.hook('message.processed', () => {
-                setTimeout(renderMemberCharts, 120);
-            });
-        }
-    </script>
 </div>
