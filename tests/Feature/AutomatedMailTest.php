@@ -68,7 +68,7 @@ test('birthday automation sends once and ignores archived members', function () 
         'occasion' => AutomatedMailSetting::OCCASION_BIRTHDAY,
         'enabled' => true,
         'subject' => 'Herzlichen Glückwunsch, {{ vorname }}',
-        'body_html' => '<p><strong>Hallo {{ vorname }}</strong>, du wirst {{ alter }}.</p>',
+        'body_html' => '<p><strong>Hallo {{vorname}}</strong>, du wirst {{alter}}.</p>',
         'days_before' => 0,
         'send_time' => '09:00',
     ]);

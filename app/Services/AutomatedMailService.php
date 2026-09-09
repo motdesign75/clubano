@@ -194,18 +194,29 @@ class AutomatedMailService
         $body = $setting->body_html ?: '<p>Liebe/r {{ vorname }},</p><p>wir wünschen dir alles Gute zum Geburtstag.</p><p>Viele Grüße<br>{{ verein }}</p>';
         $age = $member->birthday ? Carbon::parse($member->birthday)->diffInYears($birthdayDate) : null;
         $replacements = [
-            '{{ name }}' => e($member->full_name),
-            '{{ vorname }}' => e($member->first_name ?: $member->full_name),
-            '{{ nachname }}' => e($member->last_name ?: ''),
-            '{{ verein }}' => e($tenant->name ?: 'dein Verein'),
-            '{{ geburtstag }}' => e($birthdayDate->format('d.m.Y')),
-            '{{ alter }}' => e($age !== null ? (string) $age : ''),
+            'name' => e($member->full_name),
+            'vorname' => e($member->first_name ?: $member->full_name),
+            'nachname' => e($member->last_name ?: ''),
+            'verein' => e($tenant->name ?: 'dein Verein'),
+            'geburtstag' => e($birthdayDate->format('d.m.Y')),
+            'alter' => e($age !== null ? (string) $age : ''),
         ];
+        $subject = $this->replacePlaceholders($this->htmlSanitizer->normalize($subject), $replacements);
+        $body = $this->replacePlaceholders($body, $replacements);
 
         return [
-            trim(strip_tags(strtr($this->htmlSanitizer->normalize($subject), $replacements))) ?: 'Alles Gute zum Geburtstag',
-            $this->htmlSanitizer->sanitize(strtr($body, $replacements)) ?: '',
+            trim(strip_tags($subject)) ?: 'Alles Gute zum Geburtstag',
+            $this->htmlSanitizer->sanitize($body) ?: '',
         ];
+    }
+
+    private function replacePlaceholders(string $value, array $replacements): string
+    {
+        foreach ($replacements as $key => $replacement) {
+            $value = preg_replace('/\{\{\s*' . preg_quote((string) $key, '/') . '\s*\}\}/u', (string) $replacement, $value) ?? $value;
+        }
+
+        return $value;
     }
 
     private function isDueNow(AutomatedMailSetting $setting, Carbon $now): bool
