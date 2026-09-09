@@ -49,6 +49,7 @@ class TenantController extends Controller
             'chairman_name' => 'nullable|string|max:255',
             'pdf_template' => 'nullable|mimes:pdf,jpg,jpeg,png|max:2048',
             'use_letterhead' => 'nullable|boolean',
+            'letter_bottom_margin_mm' => 'required|integer|min:15|max:80',
             'member_exit_mail_enabled' => 'nullable|boolean',
             'member_exit_mail_subject' => 'nullable|string|max:255',
             'member_exit_mail_body' => 'nullable|string',
@@ -74,6 +75,7 @@ class TenantController extends Controller
 
         // Checkbox-Wert setzen
         $validated['use_letterhead'] = $request->has('use_letterhead');
+        $validated['letter_bottom_margin_mm'] = (int) $validated['letter_bottom_margin_mm'];
         $validated['member_exit_mail_enabled'] = $request->boolean('member_exit_mail_enabled');
 
         $validated['member_exit_mail_subject'] = trim((string) ($validated['member_exit_mail_subject'] ?? ''));

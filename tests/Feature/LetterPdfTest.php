@@ -16,6 +16,7 @@ test('letter pdfs are generated with printable window envelope layout', function
         'zip' => '12345',
         'city' => 'Musterstadt',
         'phone' => '01234 5678',
+        'letter_bottom_margin_mm' => 45,
     ]);
 
     $user = User::factory()->create([

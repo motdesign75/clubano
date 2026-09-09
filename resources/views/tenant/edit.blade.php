@@ -91,6 +91,30 @@
                     <span class="ml-2 text-sm text-gray-700">Briefbogen in PDFs als Hintergrund verwenden</span>
                 </label>
             </div>
+            <div class="mt-5 max-w-xs">
+                <label for="letter_bottom_margin_mm" class="block text-sm font-medium text-gray-700">
+                    Abstand zur Fußzeile
+                </label>
+                <div class="mt-1 flex rounded-xl shadow-sm">
+                    <input
+                        type="number"
+                        min="15"
+                        max="80"
+                        step="1"
+                        name="letter_bottom_margin_mm"
+                        id="letter_bottom_margin_mm"
+                        value="{{ old('letter_bottom_margin_mm', $tenant->letter_bottom_margin_mm ?? 30) }}"
+                        class="block w-full rounded-l-xl border-gray-300 focus:border-[#2954A3] focus:ring-[#2954A3]"
+                    >
+                    <span class="inline-flex items-center rounded-r-xl border border-l-0 border-gray-300 bg-gray-50 px-4 text-sm text-gray-600">mm</span>
+                </div>
+                <p class="mt-2 text-sm text-gray-500">
+                    Mehr Abstand hilft, wenn dein Briefbogen unten eine hohe Fußzeile hat.
+                </p>
+                @error('letter_bottom_margin_mm')
+                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                @enderror
+            </div>
         </section>
 
         <section x-data="{ exitMailEnabled: {{ old('member_exit_mail_enabled', $tenant->member_exit_mail_enabled) ? 'true' : 'false' }} }">

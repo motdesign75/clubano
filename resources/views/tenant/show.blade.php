@@ -235,6 +235,13 @@
                                 {{ $tenant->use_letterhead ? 'Ja, Briefbogen wird verwendet' : 'Nein, aktuell nicht aktiv' }}
                             </div>
                         </div>
+
+                        <div class="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                            <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Abstand zur Fußzeile</div>
+                            <div class="mt-1 text-sm font-semibold text-slate-900">
+                                {{ $tenant->letter_bottom_margin_mm ?? 30 }} mm
+                            </div>
+                        </div>
                     </div>
                 </section>
             </div>

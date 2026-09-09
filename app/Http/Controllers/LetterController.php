@@ -249,19 +249,21 @@ class LetterController extends Controller
 
     private function renderPdf(array $letters, $tenant, Template $template): string
     {
+        $bottomMargin = max(15, min(80, (int) ($tenant->letter_bottom_margin_mm ?? 30)));
+
         $mpdf = new Mpdf([
             'format' => 'A4',
             'margin_left' => 20,
             'margin_right' => 20,
             'margin_top' => 22,
-            'margin_bottom' => 20,
+            'margin_bottom' => $bottomMargin,
             'margin_header' => 0,
             'margin_footer' => 0,
         ]);
 
         $mpdf->SetTitle('Serienbrief ' . ($template->name ?: 'Vorlage'));
         $mpdf->SetAuthor($tenant->name ?? 'Clubano');
-        $mpdf->SetAutoPageBreak(true, 20);
+        $mpdf->SetAutoPageBreak(true, $bottomMargin);
 
         $letterheadPdfTemplateId = null;
         $letterheadImagePath = null;
@@ -298,6 +300,7 @@ class LetterController extends Controller
                 'template' => $template,
                 'letter' => $letter,
                 'senderLine' => $this->senderLine($tenant),
+                'bottomMargin' => $bottomMargin,
                 'letterheadImagePath' => $letterheadImagePath,
                 'showLetterheadImage' => ! $letterheadPdfTemplateId && ! empty($letterheadImagePath),
             ])->render();

@@ -60,7 +60,7 @@
         .meta-label { display: block; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; }
         .meta-value { display: block; color: #172033; }
         .content {
-            margin: 26mm 20mm 22mm 25mm;
+            margin: 26mm 20mm {{ $bottomMargin ?? 30 }}mm 25mm;
             box-sizing: border-box;
         }
         .subject { margin: 0 0 8mm 0; font-size: 12pt; font-weight: bold; line-height: 1.3; }

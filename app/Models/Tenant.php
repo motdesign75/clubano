@@ -36,6 +36,7 @@ class Tenant extends Model
         'pdf_template',
         'chairman_name',
         'use_letterhead',
+        'letter_bottom_margin_mm',
 
         // ➕ SMTP Felder
         'mail_mailer',
@@ -96,6 +97,7 @@ class Tenant extends Model
         'is_demo' => 'boolean',
         'verified_at' => 'datetime',
         'use_letterhead'  => 'boolean',
+        'letter_bottom_margin_mm' => 'integer',
         'member_exit_mail_enabled' => 'boolean',
         'donation_certificates_enabled' => 'boolean',
         'donation_certificates_send_enabled' => 'boolean',
