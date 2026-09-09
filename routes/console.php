@@ -11,6 +11,7 @@ use App\Models\Template;
 use App\Models\Tenant;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\AutomatedMailService;
 use App\Services\HtmlSanitizer;
 use App\Services\ReceiptStorage;
 use Database\Seeders\DemoVereinSeeder;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Str;
 
 Artisan::command('inspire', function () {
@@ -71,6 +73,27 @@ Artisan::command('clubano:make-superadmin {email} {--name=Clubano Admin} {--pass
         $this->line($password);
     }
 })->purpose('Erzeugt oder aktualisiert ein Clubano-Betreiberkonto ohne Vereinszuordnung');
+
+Artisan::command('clubano:send-automated-mails {--tenant= : Optional nur einen Verein prüfen} {--dry-run : Nur zählen, nicht versenden}', function (AutomatedMailService $automatedMailService) {
+    $tenantId = $this->option('tenant') ? (int) $this->option('tenant') : null;
+    $summary = $automatedMailService->sendDueBirthdays($tenantId, (bool) $this->option('dry-run'));
+
+    $this->components->info('Automatische Mails geprüft.');
+    $this->table(
+        ['Geprüft', 'Gesendet', 'Übersprungen', 'Fehler', 'Trockenlauf'],
+        [[
+            $summary['checked'],
+            $summary['sent'],
+            $summary['skipped'],
+            $summary['failed'],
+            $summary['dry_run'],
+        ]]
+    );
+})->purpose('Versendet fällige Clubano-Automatikmails wie Geburtstagsgrüße');
+
+Schedule::command('clubano:send-automated-mails')
+    ->hourly()
+    ->withoutOverlapping();
 
 Artisan::command('clubano:security-check {--json : Gibt das Ergebnis als JSON aus}', function () {
     $checks = [];

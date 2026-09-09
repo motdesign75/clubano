@@ -106,6 +106,14 @@
             'minRole' => 'Mitarbeiter',
         ],
         [
+            'label' => 'Automatische Mails',
+            'hint' => 'Geburtstage und Anlässe automatisch senden',
+            'route' => route('automated-mails.index'),
+            'active' => request()->routeIs('automated-mails.*'),
+            'icon' => 'envelope',
+            'minRole' => 'Mitarbeiter',
+        ],
+        [
             'label' => 'Vorlagen',
             'hint' => 'Wiederverwendbare Texte gestalten',
             'route' => route('templates.index'),
@@ -413,11 +421,13 @@
                     || request()->routeIs('protocols.*')
                     || request()->routeIs('templates.*')
                     || request()->routeIs('mail.*')
+                    || request()->routeIs('automated-mails.*')
                     || request()->routeIs('letters.*'),
                 'children' => collect([
                     collect($workNav)->firstWhere('label', 'Formulare'),
                     collect($workNav)->firstWhere('label', 'Protokolle'),
                     collect($workNav)->firstWhere('label', 'E-Mail schreiben'),
+                    collect($workNav)->firstWhere('label', 'Automatische Mails'),
                     collect($workNav)->firstWhere('label', 'Vorlagen'),
                 ])->filter()->values()->all(),
             ],
