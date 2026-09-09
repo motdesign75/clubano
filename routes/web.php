@@ -7,6 +7,7 @@ use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\TemplateController;
 use App\Http\Controllers\TemplateDispatchLogController;
 use App\Http\Controllers\MailController;
+use App\Http\Controllers\MembershipBillingController;
 use App\Http\Controllers\AutomatedMailController;
 use App\Http\Controllers\MailTrackingController;
 use App\Http\Controllers\LetterController;
@@ -512,6 +513,13 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             Route::post('/members/{member}/membership-invoice', [$cls, 'storeMembershipInvoiceForMember'])
                 ->name('members.membership-invoice.store');
         });
+    });
+
+    Route::middleware('tenant.role:finance')->group(function () {
+        Route::get('/mitgliederabrechnung', [MembershipBillingController::class, 'index'])
+            ->name('membership-billing.index');
+        Route::patch('/mitgliederabrechnung/einstellungen', [MembershipBillingController::class, 'updateSettings'])
+            ->name('membership-billing.settings');
     });
 
     $when($C.'BudgetPlanController', function($cls){

@@ -38,6 +38,11 @@ class Tenant extends Model
         'board_signatories',
         'use_letterhead',
         'letter_bottom_margin_mm',
+        'membership_billing_reminders_enabled',
+        'dunning_enabled',
+        'dunning_first_after_days',
+        'dunning_second_after_days',
+        'dunning_final_after_days',
 
         // ➕ SMTP Felder
         'mail_mailer',
@@ -100,6 +105,11 @@ class Tenant extends Model
         'use_letterhead'  => 'boolean',
         'board_signatories' => 'array',
         'letter_bottom_margin_mm' => 'integer',
+        'membership_billing_reminders_enabled' => 'boolean',
+        'dunning_enabled' => 'boolean',
+        'dunning_first_after_days' => 'integer',
+        'dunning_second_after_days' => 'integer',
+        'dunning_final_after_days' => 'integer',
         'member_exit_mail_enabled' => 'boolean',
         'donation_certificates_enabled' => 'boolean',
         'donation_certificates_send_enabled' => 'boolean',

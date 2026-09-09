@@ -1,6 +1,25 @@
 @php
     $tenant = app('currentTenant') ?? auth()->user()?->tenant;
     $user = auth()->user();
+    $membershipBillingReminderCount = 0;
+
+    if ($tenant && ($user?->hasPermission('finance') ?? false) && ($tenant->membership_billing_reminders_enabled ?? true)) {
+        $membershipBillingReminderCount = \App\Models\Member::query()
+            ->where('tenant_id', $tenant->id)
+            ->notArchived()
+            ->whereNull('family_payer_id')
+            ->where(function ($query) {
+                $query->whereNull('membership_id')
+                    ->orWhere(function ($inner) {
+                        $inner->whereNotNull('membership_id')
+                            ->where(function ($dateQuery) {
+                                $dateQuery->whereNull('next_membership_invoice_on')
+                                    ->orWhereDate('next_membership_invoice_on', '<=', now()->toDateString());
+                            });
+                    });
+            })
+            ->count();
+    }
 
     $primaryNav = [
         [
@@ -46,7 +65,22 @@
             'icon' => 'banknotes',
             'minRole' => 'finance',
         ],
+        [
+            'label' => 'Mitgliederabrechnung',
+            'hint' => 'Beiträge, Fälligkeiten und Mahnungen',
+            'route' => route('membership-billing.index'),
+            'active' => request()->routeIs('membership-billing.*'),
+            'icon' => 'receipt-percent',
+            'minRole' => 'finance',
+            'badge' => $membershipBillingReminderCount,
+        ],
     ];
+
+    $membershipBillingNav = collect($primaryNav)
+        ->where('label', 'Mitgliederabrechnung')
+        ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
+        ->values()
+        ->all();
 
     $workNav = [
         [
@@ -399,6 +433,15 @@
                 'children' => $calendarNav,
             ],
             [
+                'label' => 'Mitgliederabrechnung',
+                'hint' => 'Beiträge, Fälligkeiten, Mahnungen',
+                'icon' => 'receipt-percent',
+                'route' => route('membership-billing.index'),
+                'active' => request()->routeIs('membership-billing.*'),
+                'badge' => $membershipBillingReminderCount,
+                'children' => $membershipBillingNav,
+            ],
+            [
                 'label' => 'Geld & Rechnungen',
                 'hint' => 'Konten, Buchungen, Spenden',
                 'icon' => 'banknotes',
@@ -616,7 +659,14 @@
                                 @endif
                             </span>
                         </span>
-                        <x-heroicon-o-chevron-down class="h-4 w-4 shrink-0 text-slate-400 transition" x-bind:class="open ? 'rotate-180' : ''" />
+                        <span class="flex shrink-0 items-center gap-2">
+                            @if(($group['badge'] ?? 0) > 0)
+                                <span class="inline-flex min-w-6 items-center justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                    {{ $group['badge'] }}
+                                </span>
+                            @endif
+                            <x-heroicon-o-chevron-down class="h-4 w-4 text-slate-400 transition" x-bind:class="open ? 'rotate-180' : ''" />
+                        </span>
                     </button>
 
                     <div x-show="open" class="pb-2">
@@ -634,6 +684,11 @@
                                             </span>
                                         @endif
                                     </span>
+                                    @if(($child['badge'] ?? 0) > 0)
+                                        <span class="ml-auto inline-flex min-w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                            {{ $child['badge'] }}
+                                        </span>
+                                    @endif
                                 </a>
                             @endforeach
                         </div>
@@ -650,6 +705,11 @@
                            title="{{ $group['label'] }}"
                            class="group flex justify-center rounded-2xl px-2 py-2.5 transition {{ $group['active'] ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700' }}">
                             <x-dynamic-component :component="$iconComponent($group['icon'])" class="h-5 w-5" />
+                            @if(($group['badge'] ?? 0) > 0)
+                                <span class="absolute ml-7 mt-[-0.4rem] inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white">
+                                    {{ $group['badge'] > 99 ? '99+' : $group['badge'] }}
+                                </span>
+                            @endif
                         </a>
                     </li>
                 @endforeach

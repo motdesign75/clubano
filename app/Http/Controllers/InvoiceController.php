@@ -295,6 +295,7 @@ class InvoiceController extends Controller
 
         $validated = $request->validate([
             'membership_id' => ['nullable', Rule::exists('memberships', 'id')->where('tenant_id', $tenantId)],
+            'redirect_to' => ['nullable', Rule::in(['membership_billing'])],
         ]);
 
         $members = Member::where('tenant_id', $tenantId)
@@ -321,7 +322,7 @@ class InvoiceController extends Controller
         }
 
         return redirect()
-            ->route('invoices.index')
+            ->route(($validated['redirect_to'] ?? null) === 'membership_billing' ? 'membership-billing.index' : 'invoices.index')
             ->with('success', $message);
     }
 
@@ -972,6 +973,16 @@ class InvoiceController extends Controller
             return redirect()
                 ->route('invoices.show', $invoice)
                 ->with('error', 'Fuer Angebote gibt es kein Mahnwesen.');
+        }
+
+        $tenant = $invoice->relationLoaded('tenant')
+            ? $invoice->tenant
+            : $invoice->tenant()->first();
+
+        if (! ($tenant?->dunning_enabled ?? false)) {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with('error', 'Das Mahnwesen ist für diesen Verein noch nicht aktiviert.');
         }
 
         if ($invoice->status !== 'open') {

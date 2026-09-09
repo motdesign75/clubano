@@ -123,6 +123,124 @@ test('membership overview shows members without model and saves next billing dat
     expect($withModel->refresh()->next_membership_invoice_on?->toDateString())->toBe(now()->addMonth()->toDateString());
 });
 
+test('membership billing cockpit shows due members and stores dunning settings', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Abrechnungsverein',
+        'slug' => 'abrechnungsverein',
+        'email' => 'abrechnung@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $membership = Membership::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Familie',
+        'amount' => 120,
+        'interval' => 'jährlich',
+    ]);
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Fälliges',
+        'last_name' => 'Mitglied',
+        'entry_date' => now()->subYear()->toDateString(),
+        'membership_id' => $membership->id,
+        'membership_amount' => 120,
+        'membership_interval' => 'jährlich',
+        'next_membership_invoice_on' => now()->subDay()->toDateString(),
+    ]);
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Ohne',
+        'last_name' => 'Beitrag',
+        'entry_date' => now()->subYear()->toDateString(),
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('membership-billing.index'))
+        ->assertOk()
+        ->assertSee('Mitgliederabrechnung')
+        ->assertSee('Fälliges Mitglied')
+        ->assertSee('Ohne Beitrag')
+        ->assertSee('Mahnwesen');
+
+    $this->actingAs($admin)
+        ->patch(route('membership-billing.settings'), [
+            'membership_billing_reminders_enabled' => '1',
+            'dunning_enabled' => '1',
+            'dunning_first_after_days' => 7,
+            'dunning_second_after_days' => 21,
+            'dunning_final_after_days' => 35,
+        ])
+        ->assertRedirect(route('membership-billing.index'));
+
+    $tenant->refresh();
+
+    expect($tenant->membership_billing_reminders_enabled)->toBeTrue()
+        ->and($tenant->dunning_enabled)->toBeTrue()
+        ->and($tenant->dunning_first_after_days)->toBe(7)
+        ->and($tenant->dunning_second_after_days)->toBe(21)
+        ->and($tenant->dunning_final_after_days)->toBe(35);
+});
+
+test('invoice reminders are blocked until dunning is enabled for the tenant', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Mahnverein',
+        'slug' => 'mahnverein',
+        'email' => 'mahnung@example.test',
+        'dunning_enabled' => false,
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'recipient_type' => 'free',
+        'recipient_name' => 'Max Muster',
+        'recipient_email' => 'max@example.test',
+        'invoice_number' => 'R-MAHN-' . uniqid(),
+        'invoice_date' => now()->subMonth()->toDateString(),
+        'due_date' => now()->subDay()->toDateString(),
+        'period_from' => now()->startOfYear()->toDateString(),
+        'period_to' => now()->endOfYear()->toDateString(),
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Mitgliedsbeitrag',
+        'quantity' => 1,
+        'unit' => 'Jahr',
+        'unit_price' => 60,
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('invoices.reminder.preview', $invoice))
+        ->assertRedirect(route('invoices.show', $invoice))
+        ->assertSessionHas('error', 'Das Mahnwesen ist für diesen Verein noch nicht aktiviert.');
+
+    $tenant->forceFill(['dunning_enabled' => true])->save();
+
+    $this->actingAs($admin)
+        ->get(route('invoices.reminder.preview', $invoice))
+        ->assertOk()
+        ->assertSee('Mahnung');
+});
+
 test('future next billing date blocks membership invoice generation', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
