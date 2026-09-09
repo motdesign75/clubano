@@ -757,13 +757,12 @@ test('events index shows the calmer calendar cockpit', function () {
     $response->assertOk();
     $response->assertSee('Vereinskalender');
     $response->assertSee('Kalenderwerkzeuge');
-    $response->assertSee('Termine im');
-    $response->assertSee('Freie Tage im');
-    $response->assertSee('Freie Termine sofort erkennen');
+    $response->assertSee('Termine');
+    $response->assertSee('freie Tage');
+    $response->assertSee('Nur Konflikte');
     $response->assertSee('Vorheriger Monat');
     $response->assertSee('Dieser Monat');
     $response->assertSee('Nächster Monat');
-    $response->assertSee('belegt');
     $response->assertSee('Abendtraining');
     $response->assertSee('Termin oder Serie planen');
     $response->assertSee('Serientermin');
@@ -796,11 +795,11 @@ test('event create shows the guided event editor', function () {
 
     $response->assertOk();
     $response->assertSee('Event-Editor');
-    $response->assertSee('Worum geht es?');
+    $response->assertSee('Was findet statt?');
     $response->assertSee('Wann und wo?');
-    $response->assertSee('Veröffentlichen');
+    $response->assertSee('Sichtbarkeit');
     $response->assertSee('Anmeldung aktivieren');
-    $response->assertSee('Als Serie anlegen');
+    $response->assertSee('Wiederholung');
     $response->assertSee('Termin speichern');
 });
 

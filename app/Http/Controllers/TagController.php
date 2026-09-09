@@ -10,7 +10,7 @@ class TagController extends Controller
     public function index()
     {
         $tags = Tag::where('tenant_id', app('currentTenant')->id)
-                   ->withCount('members')
+                   ->withCount(['members' => fn ($query) => $query->notArchived()])
                    ->orderBy('name')
                    ->get();
 

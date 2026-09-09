@@ -22,7 +22,7 @@ class OnboardingService
 
         $teamCount = $tenant->users()->count();
         $membershipCount = Membership::query()->where('tenant_id', $tenant->id)->count();
-        $memberCount = Member::query()->where('tenant_id', $tenant->id)->count();
+        $memberCount = Member::query()->where('tenant_id', $tenant->id)->notArchived()->count();
         $accountCount = Account::query()->where('tenant_id', $tenant->id)->count();
         $eventCount = Event::query()->where('tenant_id', $tenant->id)->count();
         $formCount = PublicForm::query()->where('tenant_id', $tenant->id)->count();

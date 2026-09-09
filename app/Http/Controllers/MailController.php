@@ -46,6 +46,7 @@ class MailController extends Controller
             ->get();
 
         $members = Member::where('tenant_id', $tenantId)
+            ->notArchived()
             ->whereNull('exit_date')
             ->orderBy('last_name')
             ->get();
@@ -168,7 +169,7 @@ class MailController extends Controller
         $skippedCount = 0;
 
         foreach (($validated['members'] ?? []) as $memberId) {
-            $member = Member::where('tenant_id', $tenant->id)->find($memberId);
+            $member = Member::where('tenant_id', $tenant->id)->notArchived()->find($memberId);
 
             if (! $member || ! $member->email) {
                 $skippedCount++;

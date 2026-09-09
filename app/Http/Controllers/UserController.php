@@ -66,7 +66,7 @@ class UserController extends Controller
 
         $allMembers = Member::query()
             ->where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
@@ -150,7 +150,7 @@ class UserController extends Controller
         $role = User::normalizeRole($validated['role']);
         $members = Member::query()
             ->where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->whereIn('id', $validated['member_ids'])
             ->get();
 

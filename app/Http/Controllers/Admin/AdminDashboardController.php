@@ -39,7 +39,7 @@ class AdminDashboardController extends Controller
         ];
 
         $tenantMetrics = [
-            'members' => $this->countByTenant('members'),
+            'members' => $this->countByTenant('members', fn ($query) => $query->whereNull('archived_at')),
             'active_members' => $this->countByTenant('members', fn ($query) => $query->whereNull('archived_at')),
             'users' => $this->countByTenant('users'),
             'events' => $this->countByTenant('events'),
@@ -263,7 +263,7 @@ class AdminDashboardController extends Controller
         $tenant->load(['users' => fn ($query) => $query->latest()]);
 
         $stats = [
-            'members' => $this->tenantCount('members', $tenant),
+            'members' => $this->tenantCount('members', $tenant, fn ($query) => $query->whereNull('archived_at')),
             'active_members' => $this->tenantCount('members', $tenant, fn ($query) => $query->whereNull('archived_at')),
             'archived_members' => $this->tenantCount('members', $tenant, fn ($query) => $query->whereNotNull('archived_at')),
             'users' => $tenant->users->count(),

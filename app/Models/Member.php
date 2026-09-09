@@ -169,7 +169,7 @@ class Member extends Model
     public function familyMembers()
     {
         return $this->hasMany(Member::class, 'family_payer_id')
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->orderBy('first_name');
     }
@@ -203,6 +203,16 @@ class Member extends Model
     public function scopeForCurrentTenant($query)
     {
         return $query->where('tenant_id', auth()->user()->tenant_id);
+    }
+
+    public function scopeNotArchived($query)
+    {
+        return $query->whereNull('archived_at');
+    }
+
+    public function scopeArchived($query)
+    {
+        return $query->whereNotNull('archived_at');
     }
 
     // Accessor: Vollständiger Name

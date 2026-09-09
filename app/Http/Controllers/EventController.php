@@ -86,7 +86,7 @@ class EventController extends Controller
         });
 
         $membersBaseQuery = Member::where('tenant_id', $tenantId)
-            ->whereNull('archived_at');
+            ->notArchived();
 
         // Mitgliederzahl
         $membersCount = (clone $membersBaseQuery)->count();
@@ -177,7 +177,7 @@ class EventController extends Controller
             ->count();
 
         $documentsCount = Document::where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->count();
 
         $documentAttentionCount = Document::where('tenant_id', $tenantId)
@@ -1360,7 +1360,7 @@ class EventController extends Controller
 
         $members = Member::query()
             ->where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
@@ -2101,6 +2101,7 @@ class EventController extends Controller
         if ($memberIds->isNotEmpty()) {
             $members = Member::query()
                 ->where('tenant_id', $event->tenant_id)
+                ->notArchived()
                 ->whereIn('id', $memberIds)
                 ->pluck('id');
 
@@ -2514,7 +2515,7 @@ class EventController extends Controller
             ],
             'manualParticipantMembers' => Member::query()
                 ->where('tenant_id', $event->tenant_id)
-                ->whereNull('archived_at')
+                ->notArchived()
                 ->orderBy('last_name')
                 ->orderBy('first_name')
                 ->get(['id', 'first_name', 'last_name', 'organization', 'email', 'mobile', 'landline']),
@@ -2765,7 +2766,7 @@ class EventController extends Controller
 
         $assignableMembers = Member::query()
             ->where('tenant_id', $event->tenant_id)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
@@ -2848,7 +2849,7 @@ class EventController extends Controller
     {
         return Member::query()
             ->where('tenant_id', $event->tenant_id)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->when($event->target_tag_id, fn ($query) => $query->whereHas('tags', fn ($tagQuery) => $tagQuery->where('tags.id', $event->target_tag_id)))
             ->orderBy('last_name')
             ->orderBy('first_name')

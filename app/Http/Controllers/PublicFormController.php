@@ -119,7 +119,7 @@ class PublicFormController extends Controller
         if (auth()->user()?->canManageForms()) {
             $manualParticipantMembers = Member::query()
                 ->where('tenant_id', auth()->user()->tenant_id)
-                ->whereNull('archived_at')
+                ->notArchived()
                 ->orderBy('last_name')
                 ->orderBy('first_name')
                 ->get(['id', 'first_name', 'last_name', 'organization', 'email', 'mobile', 'landline']);
@@ -1164,6 +1164,7 @@ class PublicFormController extends Controller
         if (($validated['participant_type'] ?? null) === 'member') {
             $member = Member::query()
                 ->where('tenant_id', $submission->tenant_id)
+                ->notArchived()
                 ->findOrFail($validated['member_id']);
 
             return [
@@ -1231,6 +1232,7 @@ class PublicFormController extends Controller
         if (filled($payload['email'] ?? null)) {
             $member = Member::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
+                ->notArchived()
                 ->whereRaw('LOWER(email) = ?', [mb_strtolower($payload['email'])])
                 ->first();
 
@@ -1242,6 +1244,7 @@ class PublicFormController extends Controller
         if (filled($payload['first_name'] ?? null) && filled($payload['last_name'] ?? null)) {
             $member = Member::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
+                ->notArchived()
                 ->whereRaw('LOWER(first_name) = ?', [mb_strtolower($payload['first_name'])])
                 ->whereRaw('LOWER(last_name) = ?', [mb_strtolower($payload['last_name'])])
                 ->when(filled($payload['birthday'] ?? null), fn ($query) => $query->where('birthday', $payload['birthday']))
@@ -1258,6 +1261,7 @@ class PublicFormController extends Controller
         if (filled($payload['organization'] ?? null)) {
             $member = Member::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
+                ->notArchived()
                 ->whereRaw('LOWER(organization) = ?', [mb_strtolower($payload['organization'])])
                 ->when(filled($payload['city'] ?? null), fn ($query) => $query->whereRaw('LOWER(city) = ?', [mb_strtolower($payload['city'])]))
                 ->first();
@@ -1547,7 +1551,7 @@ class PublicFormController extends Controller
     {
         $members = Member::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->get(['id', 'first_name', 'last_name', 'organization', 'email', 'tenant_id']);
 
         if ($bookingMode === 'organization') {

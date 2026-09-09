@@ -16,13 +16,13 @@ class MembershipController extends Controller
 
         $memberships = Membership::query()
             ->where('tenant_id', $tenantId)
-            ->withCount('members')
+            ->withCount(['members' => fn ($query) => $query->notArchived()])
             ->orderBy('name')
             ->get();
 
         $membersWithoutMembership = Member::query()
             ->where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->whereNull('membership_id')
             ->whereNull('family_payer_id')
             ->orderBy('last_name')
@@ -31,7 +31,7 @@ class MembershipController extends Controller
 
         $billingMembers = Member::query()
             ->where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->with(['membership', 'latestMembershipInvoice', 'familyPayer'])
             ->orderBy('last_name')
             ->orderBy('first_name')
@@ -174,7 +174,7 @@ class MembershipController extends Controller
 
         $updated = Member::query()
             ->where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->whereIn('id', $validated['member_ids'])
             ->update([
                 'membership_id' => $membership->id,

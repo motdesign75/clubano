@@ -28,11 +28,13 @@ class DashboardMemberChart extends Component
         $end = $today->copy()->endOfMonth();
 
         $this->entriesThisYear = Member::where('tenant_id', $tenantId)
+            ->notArchived()
             ->whereNotNull('entry_date')
             ->whereBetween('entry_date', [$yearStart, $yearEnd])
             ->count();
 
         $this->exitsThisYear = Member::where('tenant_id', $tenantId)
+            ->notArchived()
             ->whereNotNull('exit_date')
             ->whereBetween('exit_date', [$yearStart, $yearEnd])
             ->count();
@@ -50,6 +52,7 @@ class DashboardMemberChart extends Component
             // ✅ Eintritte nur in diesem Monat
 
             $entries = Member::where('tenant_id', $tenantId)
+                ->notArchived()
                 ->whereNotNull('entry_date')
                 ->whereBetween('entry_date', [$monthStart, $monthEnd])
                 ->count();
@@ -61,6 +64,7 @@ class DashboardMemberChart extends Component
             // ✅ Austritte nur in diesem Monat
 
             $exits = Member::where('tenant_id', $tenantId)
+                ->notArchived()
                 ->whereNotNull('exit_date')
                 ->whereBetween('exit_date', [$monthStart, $monthEnd])
                 ->count();
@@ -72,6 +76,7 @@ class DashboardMemberChart extends Component
             // ✅ Mitgliederbestand bis Monatsende
 
             $total = Member::where('tenant_id', $tenantId)
+                ->notArchived()
                 ->whereNotNull('entry_date')
                 ->whereDate('entry_date', '<=', $monthEnd)
                 ->where(function ($q) use ($monthEnd) {

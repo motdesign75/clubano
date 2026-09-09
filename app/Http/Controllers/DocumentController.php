@@ -36,11 +36,11 @@ class DocumentController extends Controller
             ->when($category, fn ($query) => $query->where('category', $category))
             ->when($status, function ($query) use ($status) {
                 if ($status === Document::STATUS_ARCHIVED) {
-                    $query->whereNotNull('archived_at');
+                    $query->archived();
                 } else {
-                    $query->whereNull('archived_at')->where('status', $status);
+                    $query->notArchived()->where('status', $status);
                 }
-            }, fn ($query) => $query->whereNull('archived_at'))
+            }, fn ($query) => $query->notArchived())
             ->when($due === 'soon', fn ($query) => $query->whereDate('expires_at', '<=', now()->addDays(30)))
             ->latest('updated_at')
             ->paginate(15)
@@ -50,7 +50,7 @@ class DocumentController extends Controller
         $receiptInbox = Document::query()
             ->where('tenant_id', $tenantId)
             ->where('is_booking_receipt', true)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->whereIn('receipt_status', [Document::RECEIPT_NEEDS_REVIEW, Document::RECEIPT_READY])
             ->latest('updated_at')
             ->limit(8)
@@ -65,10 +65,10 @@ class DocumentController extends Controller
             'due' => $due,
             'categories' => Document::categories(),
             'statuses' => Document::statuses(),
-            'documentTotalCount' => (clone $baseQuery)->whereNull('archived_at')->count(),
+            'documentTotalCount' => (clone $baseQuery)->notArchived()->count(),
             'attentionCount' => (clone $baseQuery)->needsAttention()->count(),
-            'expiringCount' => (clone $baseQuery)->whereNull('archived_at')->whereDate('expires_at', '<=', now()->addDays(30))->count(),
-            'archivedCount' => (clone $baseQuery)->whereNotNull('archived_at')->count(),
+            'expiringCount' => (clone $baseQuery)->notArchived()->whereDate('expires_at', '<=', now()->addDays(30))->count(),
+            'archivedCount' => (clone $baseQuery)->archived()->count(),
             'receiptOpenCount' => (clone $baseQuery)->where('is_booking_receipt', true)->whereIn('receipt_status', [Document::RECEIPT_NEEDS_REVIEW, Document::RECEIPT_READY])->count(),
         ]);
     }
@@ -244,7 +244,7 @@ class DocumentController extends Controller
             'receiptMode' => $receiptMode,
             'categories' => Document::categories(),
             'statuses' => collect(Document::statuses())->except(Document::STATUS_ARCHIVED)->all(),
-            'members' => Member::where('tenant_id', $tenantId)->whereNull('archived_at')->orderBy('last_name')->orderBy('first_name')->get(),
+            'members' => Member::where('tenant_id', $tenantId)->notArchived()->orderBy('last_name')->orderBy('first_name')->get(),
             'projects' => Project::where('tenant_id', $tenantId)->orderBy('name')->get(),
             'events' => Event::where('tenant_id', $tenantId)->orderByDesc('start')->take(80)->get(),
             'protocols' => Protocol::where('tenant_id', $tenantId)->orderByDesc('created_at')->take(80)->get(),

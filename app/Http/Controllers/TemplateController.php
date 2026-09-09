@@ -137,7 +137,7 @@ class TemplateController extends Controller
         $this->checkTenant($template);
 
         $tenantId = auth()->user()->tenant_id;
-        $recipient = Member::where('tenant_id', $tenantId)->first()
+        $recipient = Member::where('tenant_id', $tenantId)->notArchived()->first()
             ?? Contact::where('tenant_id', $tenantId)->first()
             ?? [
                 'tenant_id' => $tenantId,

@@ -24,6 +24,7 @@ class DashboardMemberStats extends Component
 
         $this->entries = Member::query()
             ->where('tenant_id', $tenantId)
+            ->notArchived()
             ->whereNotNull('entry_date')
             ->whereBetween('entry_date', [$yearStart, $yearEnd])
             ->orderBy('entry_date', 'desc')
@@ -32,6 +33,7 @@ class DashboardMemberStats extends Component
 
         $this->exits = Member::query()
             ->where('tenant_id', $tenantId)
+            ->notArchived()
             ->whereNotNull('exit_date')
             ->whereBetween('exit_date', [$yearStart, $yearEnd])
             ->orderBy('exit_date', 'desc')
@@ -40,6 +42,7 @@ class DashboardMemberStats extends Component
 
         $this->birthdays = Member::query()
             ->where('tenant_id', $tenantId)
+            ->notArchived()
             ->whereNotNull('birthday')
             ->get()
             ->map(function ($member) use ($today) {
@@ -60,6 +63,7 @@ class DashboardMemberStats extends Component
 
         $this->anniversaries = Member::query()
             ->where('tenant_id', $tenantId)
+            ->notArchived()
             ->whereNotNull('entry_date')
             ->get()
             ->map(function ($member) use ($today, $yearEnd) {

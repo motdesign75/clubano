@@ -39,6 +39,7 @@ class EnsureMemberLimitNotExceeded
         // Fallback zusätzlich tenant_id filtern (falls Scope irgendwann deaktiviert wird)
         $membersCount = Member::query()
             ->where('tenant_id', $user->tenant_id)
+            ->notArchived()
             ->count();
 
         if ($membersCount >= $limit) {

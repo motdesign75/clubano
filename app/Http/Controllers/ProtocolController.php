@@ -385,7 +385,7 @@ class ProtocolController extends Controller
         $status = trim((string) request('status', ''));
 
         $baseQuery = Protocol::where('tenant_id', $tenantId)
-            ->whereNull('archived_at');
+            ->notArchived();
 
         $typeOptions = (clone $baseQuery)
             ->whereNotNull('type')
@@ -471,7 +471,7 @@ class ProtocolController extends Controller
     public function create()
     {
         $members = Member::forCurrentTenant()
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->get();
 
@@ -576,7 +576,7 @@ class ProtocolController extends Controller
             ->all();
 
         $allowedParticipantIds = Member::forCurrentTenant()
-            ->whereNull('archived_at')
+            ->notArchived()
             ->whereIn('id', $participantIds)
             ->pluck('id')
             ->all();
@@ -616,7 +616,7 @@ class ProtocolController extends Controller
         }
 
         $members = Member::forCurrentTenant()
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->get();
 
@@ -730,7 +730,7 @@ class ProtocolController extends Controller
             ->all();
 
         $allowedParticipantIds = Member::forCurrentTenant()
-            ->whereNull('archived_at')
+            ->notArchived()
             ->whereIn('id', $participantIds)
             ->pluck('id')
             ->all();
@@ -805,7 +805,7 @@ class ProtocolController extends Controller
 
         $members = Member::where('tenant_id', $protocol->tenant_id)
             ->whereNotNull('email')
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->get();
 
@@ -864,7 +864,7 @@ class ProtocolController extends Controller
         $members = Member::where('tenant_id', $protocol->tenant_id)
             ->whereIn('id', $validated['members'] ?? [])
             ->whereNotNull('email')
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->get();
 

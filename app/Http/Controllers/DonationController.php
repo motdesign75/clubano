@@ -271,7 +271,7 @@ class DonationController extends Controller
     {
         return [
             'members' => Member::forCurrentTenant()
-                ->whereNull('archived_at')
+                ->notArchived()
                 ->orderBy('organization')
                 ->orderBy('last_name')
                 ->orderBy('first_name')

@@ -1355,7 +1355,7 @@ class TransactionController extends Controller
         return Document::query()
             ->where('tenant_id', auth()->user()->tenant_id)
             ->where('category', Document::CATEGORY_CONTRACTS)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->when($selectedDocumentId, function ($query) use ($selectedDocumentId) {
                 $query->orWhere(function ($orQuery) use ($selectedDocumentId) {
                     $orQuery->where('tenant_id', auth()->user()->tenant_id)

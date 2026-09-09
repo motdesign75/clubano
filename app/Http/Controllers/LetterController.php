@@ -24,7 +24,7 @@ class LetterController extends Controller
             ->get();
 
         $members = Member::where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->get();
 
@@ -130,6 +130,7 @@ class LetterController extends Controller
     {
         return match ($validated['recipient_type']) {
             'member' => Member::where('tenant_id', $tenantId)
+                ->notArchived()
                 ->whereIn('id', $validated['members'] ?? [])
                 ->orderBy('last_name')
                 ->get()

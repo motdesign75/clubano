@@ -45,7 +45,7 @@ class StatisticsController extends Controller
         $activeMembers = Member::query()
             ->with('tags:id,name')
             ->where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->get();
 
         if ($memberId && ! $activeMembers->contains('id', $memberId)) {
@@ -68,6 +68,7 @@ class StatisticsController extends Controller
             ->with(['event:id,title,start,category_id', 'member:id,first_name,last_name,organization'])
             ->where('tenant_id', $tenantId)
             ->where('attended', true)
+            ->whereHas('member', fn ($query) => $query->notArchived())
             ->when($memberId, fn ($query) => $query->where('member_id', $memberId))
             ->whereHas('event', fn ($query) => $query->whereBetween('start', [$dateFrom, $dateTo]))
             ->when($categoryId, fn ($query) => $query->whereHas('event', fn ($eventQuery) => $eventQuery->where('category_id', $categoryId)))
@@ -76,6 +77,7 @@ class StatisticsController extends Controller
         $invitations = EventInvitation::query()
             ->with(['member:id,first_name,last_name,organization', 'event:id,title,start,category_id'])
             ->where('tenant_id', $tenantId)
+            ->whereHas('member', fn ($query) => $query->notArchived())
             ->when($memberId, fn ($query) => $query->where('member_id', $memberId))
             ->whereHas('event', fn ($query) => $query->whereBetween('start', [$dateFrom, $dateTo]))
             ->when($categoryId, fn ($query) => $query->whereHas('event', fn ($eventQuery) => $eventQuery->where('category_id', $categoryId)))

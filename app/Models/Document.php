@@ -122,6 +122,16 @@ class Document extends Model
         return $query->whereNull('archived_at');
     }
 
+    public function scopeNotArchived(Builder $query): Builder
+    {
+        return $query->whereNull('archived_at');
+    }
+
+    public function scopeArchived(Builder $query): Builder
+    {
+        return $query->whereNotNull('archived_at');
+    }
+
     public function scopeNeedsAttention(Builder $query): Builder
     {
         return $query

@@ -93,12 +93,12 @@ class MemberController extends Controller
                         ->orWhereDate('entry_date', '>', $today);
                 });
             } elseif ($status === 'archiviert') {
-                $query->whereNotNull('archived_at');
+                $query->archived();
             }
         }
 
         if (!request()->filled('status') || request('status') !== 'archiviert') {
-            $query->whereNull('archived_at');
+            $query->notArchived();
         }
 
         $sortField = request('sort', 'last_name');
@@ -126,7 +126,7 @@ class MemberController extends Controller
         $memberships = Membership::where('tenant_id', $tenantId)->orderBy('name')->get();
 
         $activeMembersBaseQuery = Member::where('tenant_id', $tenantId)
-            ->whereNull('archived_at');
+            ->notArchived();
 
         $stats = [
             'alle' => (clone $activeMembersBaseQuery)->count(),
@@ -148,16 +148,16 @@ class MemberController extends Controller
                 })
                 ->count(),
             'archiviert' => Member::where('tenant_id', $tenantId)
-                ->whereNotNull('archived_at')
+                ->archived()
                 ->count(),
             'austritte_bald' => Member::where('tenant_id', $tenantId)
-                ->whereNull('archived_at')
+                ->notArchived()
                 ->whereNotNull('exit_date')
                 ->whereDate('exit_date', '>', $today)
                 ->whereDate('exit_date', '<=', $upcomingExitWindow)
                 ->count(),
             'gekuendigt' => Member::where('tenant_id', $tenantId)
-                ->whereNull('archived_at')
+                ->notArchived()
                 ->whereNotNull('exit_date')
                 ->whereDate('exit_date', '>', $today)
                 ->count(),
@@ -165,7 +165,7 @@ class MemberController extends Controller
 
         $exitQuery = Member::query()
             ->where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->whereNotNull('exit_date')
             ->with('membership')
             ->orderBy('exit_date');
@@ -204,7 +204,7 @@ class MemberController extends Controller
         $allTags = Tag::where('tenant_id', $tenantId)->orderBy('name')->get();
         $familyPayerCandidates = Member::query()
             ->where('tenant_id', $tenantId)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
@@ -248,7 +248,7 @@ class MemberController extends Controller
         $familyPayerCandidates = Member::query()
             ->where('tenant_id', $member->tenant_id)
             ->where('id', '!=', $member->id)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
@@ -394,6 +394,7 @@ class MemberController extends Controller
         if ($payerId) {
             $payer = Member::query()
                 ->where('tenant_id', $member->tenant_id)
+                ->notArchived()
                 ->where('id', $payerId)
                 ->firstOrFail();
 
@@ -469,7 +470,7 @@ class MemberController extends Controller
         $familyPayerCandidates = Member::query()
             ->where('tenant_id', $member->tenant_id)
             ->where('id', '!=', $member->id)
-            ->whereNull('archived_at')
+            ->notArchived()
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
@@ -656,6 +657,7 @@ class MemberController extends Controller
 
         $members = Member::query()
             ->where('tenant_id', auth()->user()->tenant_id)
+            ->notArchived()
             ->when($memberIds->isNotEmpty(), fn ($query) => $query->whereIn('id', $memberIds))
             ->orderBy('last_name')
             ->get();

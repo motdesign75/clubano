@@ -110,6 +110,7 @@ class InvoiceController extends Controller
         $documentType = $request->input('type') === 'offer' ? 'offer' : 'invoice';
 
         $members = Member::where('tenant_id', $tenantId)
+            ->notArchived()
             ->orderBy('last_name')
             ->get();
 
@@ -135,7 +136,7 @@ class InvoiceController extends Controller
 
         $tenantId = auth()->user()->tenant_id;
         $documentType = $invoice->document_type;
-        $members = Member::where('tenant_id', $tenantId)->orderBy('last_name')->get();
+        $members = Member::where('tenant_id', $tenantId)->notArchived()->orderBy('last_name')->get();
         $contacts = Contact::where('tenant_id', $tenantId)
             ->orderByRaw("COALESCE(organization, company, last_name, first_name)")
             ->get();
@@ -298,7 +299,7 @@ class InvoiceController extends Controller
 
         $members = Member::where('tenant_id', $tenantId)
             ->when($validated['membership_id'] ?? null, fn ($query, $membershipId) => $query->where('membership_id', $membershipId))
-            ->whereNull('archived_at')
+            ->notArchived()
             ->whereNull('family_payer_id')
             ->with(['membership', 'familyMembers'])
             ->get();
@@ -371,7 +372,7 @@ class InvoiceController extends Controller
 
         return DB::transaction(function () use ($member, $period, $status, $now, $tenant, $membershipName, $interval, $amount, $admissionFee) {
             $familyMembers = $member->familyMembers()
-                ->whereNull('archived_at')
+                ->notArchived()
                 ->get();
 
             $invoice = $this->createInvoiceWithUniqueNumber([
@@ -1290,7 +1291,7 @@ class InvoiceController extends Controller
         $contact = null;
 
         if ($type === 'member') {
-            $member = Member::where('tenant_id', $tenantId)->findOrFail($validated['member_id']);
+            $member = Member::where('tenant_id', $tenantId)->notArchived()->findOrFail($validated['member_id']);
             $snapshot = $this->snapshotFromMember($member);
         } elseif ($type === 'contact') {
             $contact = Contact::where('tenant_id', $tenantId)->findOrFail($validated['contact_id']);

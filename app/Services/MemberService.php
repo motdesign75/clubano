@@ -129,6 +129,7 @@ class MemberService
         if ($member) {
             $payer = Member::query()
                 ->where('tenant_id', $member->tenant_id)
+                ->notArchived()
                 ->where('id', $payerId)
                 ->first();
 
