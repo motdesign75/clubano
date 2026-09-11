@@ -93,6 +93,82 @@ test('bank csv imports understand common counterparty and purpose columns', func
     expect($bankTransaction->purpose)->toBe('Rechnung R-20260824001 · Braukurs');
 });
 
+test('trinkwert daily closing csv imports with suggested accounts', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('trinkwert');
+
+    $cashAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1000',
+        'name' => 'Barkasse',
+        'type' => 'kasse',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $voucherAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1700',
+        'name' => 'Guthaben',
+        'type' => 'kasse',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $revenueAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8400',
+        'name' => 'Getränkeverkauf',
+        'type' => 'einnahme',
+        'tax_area' => 'wirtschaftlich',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $csv = "\xEF\xBB\xBFabschluss_datum;verein;quelle;umsatzart;zahlungsart;betrag;brutto_netto;steuer_satz;konto;gegenkonto;beschreibung;referenz;veranstaltung;kostenstelle;belegnummer;startzeit;endzeit;bediener;anzahl_bons;storno_summe;rabatt_summe;pfand_einnahmen;pfand_ausgaben;trinkgeld;differenz_kasse\n"
+        . "2026-09-09;\"Sarstedter Bierfreunde e.V.\";Trinkwert;Getraenkeverkauf;Bar;79,50;brutto;19;1000;8400;\"Tagesabschluss Getraenkeverkauf Bar\";TW-T1-20260909-VERKAUF-CASH;\"GemeinsamZeit 09.09.2026\";\"Trinkwert Kasse\";TW-T1-20260909-VERKAUF-CASH;13:22;18:51;\"Maik-Oliver Towet\";28;0,00;0,00;0,00;0,00;0,00;\n"
+        . "2026-09-09;\"Sarstedter Bierfreunde e.V.\";Trinkwert;Getraenkeverkauf;Guthaben;33,50;brutto;19;1700;8400;\"Tagesabschluss Getraenkeverkauf Guthaben\";TW-T1-20260909-VERKAUF-VOUCHER;\"GemeinsamZeit 09.09.2026\";\"Trinkwert Kasse\";TW-T1-20260909-VERKAUF-VOUCHER;13:22;18:51;\"Maik-Oliver Towet\";28;0,00;0,00;0,00;0,00;0,00;\n";
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $cashAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('Trinkwert-Tagesabschluss-2026-09-09.csv', $csv),
+    ])->assertRedirect();
+
+    $bankImport = BankImport::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+    $cashTransaction = BankTransaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('bank_reference', 'TW-T1-20260909-VERKAUF-CASH')
+        ->first();
+    $voucherTransaction = BankTransaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('bank_reference', 'TW-T1-20260909-VERKAUF-VOUCHER')
+        ->first();
+
+    expect($bankImport->format)->toBe('TRINKWERT-TAGESABSCHLUSS');
+    expect($bankImport->imported_count)->toBe(2);
+    expect($bankImport->meta['auto_assigned_count'])->toBe(2);
+    expect($cashTransaction->account_id)->toBe($cashAccount->id);
+    expect($cashTransaction->selected_account_id)->toBe($revenueAccount->id);
+    expect($cashTransaction->status)->toBe(BankTransaction::STATUS_READY);
+    expect($cashTransaction->counterparty_name)->toBe('Trinkwert · Bar');
+    expect($cashTransaction->purpose)->toContain('GemeinsamZeit 09.09.2026');
+    expect($cashTransaction->raw_data['trinkwert_source_account_number'])->toBe('1000');
+    expect($voucherTransaction->account_id)->toBe($voucherAccount->id);
+    expect($voucherTransaction->selected_account_id)->toBe($revenueAccount->id);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $cashTransaction))
+        ->assertRedirectContains('#bank-transaction-' . $cashTransaction->id);
+
+    $transaction = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+
+    expect($transaction->account_from_id)->toBe($revenueAccount->id);
+    expect($transaction->account_to_id)->toBe($cashAccount->id);
+    expect((float) $transaction->amount)->toBe(79.5);
+});
+
 test('camt imports read nested counterparty names from xml', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

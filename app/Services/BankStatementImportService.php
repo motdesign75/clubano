@@ -36,6 +36,13 @@ class BankStatementImportService
         }
 
         if (in_array($extension, ['csv', 'txt'], true)) {
+            if ($this->isTrinkwertCsv($file->getRealPath())) {
+                return [
+                    'format' => 'TRINKWERT-TAGESABSCHLUSS',
+                    'rows' => $this->parseTrinkwertCsv($file->getRealPath()),
+                ];
+            }
+
             return [
                 'format' => 'CSV',
                 'rows' => $this->parseCsv($file->getRealPath()),
@@ -110,6 +117,119 @@ class BankStatementImportService
                 ],
             ]);
         }
+
+        return $rows;
+    }
+
+    private function isTrinkwertCsv(string $path): bool
+    {
+        $delimiter = $this->detectDelimiter($path);
+        $handle = fopen($path, 'rb');
+
+        if ($handle === false) {
+            return false;
+        }
+
+        $header = fgetcsv($handle, 0, $delimiter);
+        fclose($handle);
+
+        if (! $header) {
+            return false;
+        }
+
+        $normalizedHeader = array_map(fn ($value) => $this->normalizeHeader((string) $value), $header);
+        $required = [
+            'abschlussdatum',
+            'quelle',
+            'umsatzart',
+            'zahlungsart',
+            'betrag',
+            'konto',
+            'gegenkonto',
+            'referenz',
+        ];
+
+        return empty(array_diff($required, $normalizedHeader));
+    }
+
+    private function parseTrinkwertCsv(string $path): array
+    {
+        $delimiter = $this->detectDelimiter($path);
+        $handle = fopen($path, 'rb');
+
+        if ($handle === false) {
+            throw new RuntimeException('Die Trinkwert-Datei konnte nicht gelesen werden.');
+        }
+
+        $header = fgetcsv($handle, 0, $delimiter);
+        if (! $header) {
+            fclose($handle);
+            throw new RuntimeException('Die Trinkwert-Datei enthält keine Kopfzeile.');
+        }
+
+        $normalizedHeader = array_map(fn ($value) => $this->normalizeHeader((string) $value), $header);
+        $rows = [];
+
+        while (($line = fgetcsv($handle, 0, $delimiter)) !== false) {
+            $data = [];
+            foreach ($normalizedHeader as $index => $key) {
+                $data[$key] = $line[$index] ?? null;
+            }
+
+            $amount = $this->decimal($this->first($data, ['betrag']));
+            if (abs($amount) <= 0) {
+                continue;
+            }
+
+            $reference = $this->first($data, ['referenz', 'belegnummer']);
+            $paymentMethod = $this->first($data, ['zahlungsart']) ?: 'Zahlung';
+            $salesType = $this->first($data, ['umsatzart']) ?: 'Tagesabschluss';
+            $sourceAccountNumber = $this->accountNumber($this->first($data, ['konto']));
+            $selectedAccountNumber = $this->accountNumber($this->first($data, ['gegenkonto']));
+            $bookingDate = $this->parseDate($this->first($data, ['abschlussdatum']));
+            $timeRange = trim(implode(' - ', array_filter([
+                $this->first($data, ['startzeit']),
+                $this->first($data, ['endzeit']),
+            ])));
+
+            $purpose = $this->combineText([
+                $this->first($data, ['beschreibung']) ?: trim($salesType . ' ' . $paymentMethod),
+                $this->first($data, ['veranstaltung']),
+                $timeRange !== '' ? 'Zeitraum: ' . $timeRange : null,
+                $this->first($data, ['bediener']) ? 'Bediener: ' . $this->first($data, ['bediener']) : null,
+                $this->first($data, ['anzahlbons']) ? 'Bons: ' . $this->first($data, ['anzahlbons']) : null,
+                $this->first($data, ['steuersatz']) !== null ? 'Steuer: ' . $this->first($data, ['steuersatz']) . ' %' : null,
+                $this->trinkwertAmountDetail('Storno', $this->first($data, ['stornosumme'])),
+                $this->trinkwertAmountDetail('Rabatt', $this->first($data, ['rabattsumme'])),
+                $this->trinkwertAmountDetail('Pfand Einnahmen', $this->first($data, ['pfandeinnahmen'])),
+                $this->trinkwertAmountDetail('Pfand Ausgaben', $this->first($data, ['pfandausgaben'])),
+                $this->trinkwertAmountDetail('Trinkgeld', $this->first($data, ['trinkgeld'])),
+                $this->trinkwertAmountDetail('Kassendifferenz', $this->first($data, ['differenzkasse'])),
+            ]);
+
+            $rows[] = $this->normalizeRow([
+                'booking_date' => $bookingDate,
+                'value_date' => $bookingDate,
+                'amount' => $amount,
+                'currency' => 'EUR',
+                'counterparty_name' => 'Trinkwert · ' . $paymentMethod,
+                'counterparty_iban' => null,
+                'purpose' => $purpose,
+                'end_to_end_id' => $this->first($data, ['belegnummer']) ?: $reference,
+                'bank_reference' => $reference,
+                'source_account_number' => $sourceAccountNumber,
+                'selected_account_number' => $selectedAccountNumber,
+                'raw' => [
+                    ...$data,
+                    'trinkwert_source_account_number' => $sourceAccountNumber,
+                    'trinkwert_selected_account_number' => $selectedAccountNumber,
+                    'trinkwert_payment_method' => $paymentMethod,
+                    'trinkwert_sales_type' => $salesType,
+                ],
+            ]);
+        }
+
+        fclose($handle);
 
         return $rows;
     }
@@ -309,6 +429,8 @@ class BankStatementImportService
             'purpose' => $this->clean($row['purpose'] ?? null, 2000),
             'end_to_end_id' => $this->clean($row['end_to_end_id'] ?? null, 255),
             'bank_reference' => $this->clean($row['bank_reference'] ?? null, 255),
+            'source_account_number' => $this->clean($row['source_account_number'] ?? null, 50),
+            'selected_account_number' => $this->clean($row['selected_account_number'] ?? null, 50),
             'raw' => $row['raw'] ?? [],
         ];
     }
@@ -442,6 +564,42 @@ class BankStatementImportService
         }
 
         return $parts === [] ? null : implode(' · ', $parts);
+    }
+
+    private function combineText(array $parts): ?string
+    {
+        $parts = array_values(array_filter(array_map(
+            fn ($value) => trim((string) $value),
+            $parts
+        ), fn ($value) => $value !== ''));
+
+        return $parts === [] ? null : implode(' · ', array_unique($parts));
+    }
+
+    private function accountNumber(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        return preg_replace('/[^0-9A-Za-z.\-_]/', '', $value) ?: null;
+    }
+
+    private function trinkwertAmountDetail(string $label, ?string $value): ?string
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return null;
+        }
+
+        $amount = $this->decimal($value);
+
+        if (abs($amount) <= 0) {
+            return null;
+        }
+
+        return $label . ': ' . number_format($amount, 2, ',', '.') . ' EUR';
     }
 
     private function decimal(?string $value): float

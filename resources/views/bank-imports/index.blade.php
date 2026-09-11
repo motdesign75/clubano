@@ -48,7 +48,7 @@
                 <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Bankumsätze</div>
                 <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Kontoauszug rein. Buchungen sauber raus.</h1>
                 <p class="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                    Importiere CAMT.053 oder CSV, prüfe die Umsätze in Ruhe und entscheide erst dann, welches Buchungskonto passt.
+                    Importiere Kontoauszüge oder Trinkwert-Tagesabschlüsse, prüfe die Umsätze in Ruhe und entscheide erst dann, welches Buchungskonto passt.
                 </p>
             </div>
 
@@ -106,14 +106,14 @@
                 <div>
                     <h2 class="text-xl font-semibold text-slate-950">Umsätze importieren</h2>
                     <p class="mt-1 text-sm leading-6 text-slate-500">
-                        CAMT.053 ist die beste Wahl. CSV und MT940/MTA funktionieren als Übergang, wenn deine Bank keine CAMT-Datei anbietet.
+                        CAMT.053 ist die beste Wahl für Bankumsätze. Trinkwert-Tagesabschlüsse kannst du als CSV hochladen.
                     </p>
                 </div>
             </div>
 
             <div class="mt-6 grid gap-4 md:grid-cols-2">
                 <div>
-                    <label for="account_id" class="mb-1 block text-sm font-semibold text-slate-700">Bankkonto</label>
+                    <label for="account_id" class="mb-1 block text-sm font-semibold text-slate-700">Bankkonto oder Kasse</label>
                     <select id="account_id" name="account_id" required class="w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                         <option value="">Konto wählen</option>
                         @foreach($bankAccounts as $account)
@@ -123,20 +123,20 @@
                         @endforeach
                     </select>
                     @if($bankAccounts->isEmpty())
-                        <p class="mt-2 text-xs text-rose-700">Bitte zuerst unter Konten & Kassen ein Bankkonto anlegen.</p>
+                        <p class="mt-2 text-xs text-rose-700">Bitte zuerst unter Konten & Kassen ein Bankkonto oder eine Kasse anlegen.</p>
                     @endif
                 </div>
 
                 <div>
                     <label for="statement_file" class="mb-1 block text-sm font-semibold text-slate-700">Datei</label>
                     <input id="statement_file" name="statement_file" type="file" required class="block w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm file:mr-4 file:rounded-xl file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-800 hover:file:bg-slate-200">
-                    <p class="mt-2 text-xs text-slate-500">Erlaubt: CAMT/XML, CSV, TXT, MT940, STA und MTA. PDF ist hier nicht geeignet, PDF bleibt nur Beleg.</p>
+                    <p class="mt-2 text-xs text-slate-500">Erlaubt: CAMT/XML, CSV, TXT, MT940, STA und MTA. Trinkwert-CSV wird automatisch erkannt.</p>
                 </div>
             </div>
 
             <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div class="text-xs leading-5 text-slate-500">
-                    Dubletten werden anhand Datum, Betrag, Empfänger und Verwendungszweck erkannt.
+                    Dubletten werden anhand Datum, Betrag, Konto, Empfänger und Verwendungszweck erkannt.
                 </div>
                 <button type="submit" @disabled($bankAccounts->isEmpty()) class="inline-flex min-h-11 items-center justify-center rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300">
                     Import prüfen
@@ -214,6 +214,8 @@
                         ?: 'Bankumsatz ohne Beschreibung';
                     $showPurpose = filled($bankTransaction->purpose) && $bankTransaction->purpose !== $transactionTitle;
                     $selectedInvoiceId = old('invoice_id', $bankTransaction->receipt_meta['invoice_id'] ?? null);
+                    $isTrinkwert = $bankTransaction->bankImport?->format === 'TRINKWERT-TAGESABSCHLUSS';
+                    $trinkwertData = $bankTransaction->raw_data ?? [];
                 @endphp
                 <article id="bank-transaction-{{ $bankTransaction->id }}" class="scroll-mt-24 p-5 target:bg-blue-50/70">
                     <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,430px)]">
@@ -236,6 +238,28 @@
                                     @if(blank($bankTransaction->counterparty_name))
                                         <div class="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
                                             Name im Export nicht enthalten
+                                        </div>
+                                    @endif
+                                    @if($isTrinkwert)
+                                        <div class="mt-2 flex flex-wrap gap-2">
+                                            <span class="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200">
+                                                Trinkwert-Tagesabschluss
+                                            </span>
+                                            @if(!empty($trinkwertData['trinkwert_sales_type'] ?? null))
+                                                <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                                                    {{ $trinkwertData['trinkwert_sales_type'] }}
+                                                </span>
+                                            @endif
+                                            @if(!empty($trinkwertData['anzahlbons'] ?? null))
+                                                <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                                                    {{ $trinkwertData['anzahlbons'] }} Bons
+                                                </span>
+                                            @endif
+                                            @if(!empty($trinkwertData['veranstaltung'] ?? null))
+                                                <span class="inline-flex max-w-full rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                                                    <span class="truncate">{{ $trinkwertData['veranstaltung'] }}</span>
+                                                </span>
+                                            @endif
                                         </div>
                                     @endif
                                     @if($showPurpose)

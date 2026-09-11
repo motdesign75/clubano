@@ -24,7 +24,7 @@ class BankImportController extends Controller
 
         $bankAccounts = Account::query()
             ->where('tenant_id', $tenantId)
-            ->where('type', 'bank')
+            ->whereIn('type', ['bank', 'kasse'])
             ->where('active', true)
             ->orderBy('number')
             ->get();
@@ -47,7 +47,7 @@ class BankImportController extends Controller
             ->get();
 
         $transactionsQuery = BankTransaction::query()
-            ->with(['account', 'selectedAccount', 'transaction'])
+            ->with(['account', 'selectedAccount', 'transaction', 'bankImport'])
             ->where('tenant_id', $tenantId)
             ->latest('booking_date')
             ->latest('id');
@@ -98,7 +98,7 @@ class BankImportController extends Controller
                 'required',
                 Rule::exists('accounts', 'id')->where(fn ($query) => $query
                     ->where('tenant_id', $tenantId)
-                    ->where('type', 'bank')
+                    ->whereIn('type', ['bank', 'kasse'])
                     ->where('active', true)),
             ],
             'statement_file' => ['required', 'file', 'max:12288'],
@@ -120,7 +120,14 @@ class BankImportController extends Controller
             $rowCount = count($parsed['rows']);
             $imported = 0;
             $duplicates = 0;
+            $autoAssigned = 0;
             $dates = collect($parsed['rows'])->pluck('booking_date')->filter()->sort()->values();
+            $accountsByNumber = Account::query()
+                ->where('tenant_id', $tenantId)
+                ->where('active', true)
+                ->where('is_postable', true)
+                ->get()
+                ->keyBy(fn (Account $account) => trim((string) $account->number));
 
             $bankImport = BankImport::create([
                 'tenant_id' => $tenantId,
@@ -135,7 +142,14 @@ class BankImportController extends Controller
             ]);
 
             foreach ($parsed['rows'] as $row) {
-                $fingerprint = $service->fingerprint($tenantId, (int) $validated['account_id'], $row);
+                $sourceAccount = $accountsByNumber->get((string) ($row['source_account_number'] ?? ''));
+                $selectedAccount = $accountsByNumber->get((string) ($row['selected_account_number'] ?? ''));
+                $sourceAccountId = (int) ($sourceAccount?->id ?? $validated['account_id']);
+                $selectedAccountId = $selectedAccount && (int) $selectedAccount->id !== $sourceAccountId
+                    ? (int) $selectedAccount->id
+                    : null;
+
+                $fingerprint = $service->fingerprint($tenantId, $sourceAccountId, $row);
 
                 if (BankTransaction::withoutGlobalScopes()
                     ->where('tenant_id', $tenantId)
@@ -148,7 +162,8 @@ class BankImportController extends Controller
                 BankTransaction::create([
                     'tenant_id' => $tenantId,
                     'bank_import_id' => $bankImport->id,
-                    'account_id' => $validated['account_id'],
+                    'account_id' => $sourceAccountId,
+                    'selected_account_id' => $selectedAccountId,
                     'booking_date' => $row['booking_date'],
                     'value_date' => $row['value_date'],
                     'amount' => $row['amount'],
@@ -160,22 +175,36 @@ class BankImportController extends Controller
                     'end_to_end_id' => $row['end_to_end_id'],
                     'bank_reference' => $row['bank_reference'],
                     'fingerprint' => $fingerprint,
-                    'status' => BankTransaction::STATUS_PENDING,
+                    'status' => $selectedAccountId ? BankTransaction::STATUS_READY : BankTransaction::STATUS_PENDING,
                     'raw_data' => $row['raw'],
                 ]);
 
                 $imported++;
+                if ($selectedAccountId) {
+                    $autoAssigned++;
+                }
             }
 
             $bankImport->update([
                 'imported_count' => $imported,
                 'duplicate_count' => $duplicates,
+                'meta' => array_filter([
+                    'auto_assigned_count' => $autoAssigned,
+                    'source' => $parsed['format'] === 'TRINKWERT-TAGESABSCHLUSS' ? 'Trinkwert' : null,
+                ]),
             ]);
         });
 
+        $autoAssigned = (int) ($bankImport?->meta['auto_assigned_count'] ?? 0);
+        $message = "{$bankImport->imported_count} Umsätze importiert, {$bankImport->duplicate_count} Dubletten übersprungen.";
+
+        if ($autoAssigned > 0) {
+            $message .= " {$autoAssigned} Zuordnung(en) wurden aus der Datei vorgeschlagen.";
+        }
+
         return redirect()
             ->route('bank-imports.index', ['import' => $bankImport?->id])
-            ->with('success', "{$bankImport->imported_count} Umsätze importiert, {$bankImport->duplicate_count} Dubletten übersprungen.");
+            ->with('success', $message);
     }
 
     public function update(Request $request, BankTransaction $bankTransaction)
