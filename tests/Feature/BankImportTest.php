@@ -147,7 +147,8 @@ test('trinkwert daily closing csv imports with suggested accounts', function () 
         ->where('bank_reference', 'TW-T1-20260909-VERKAUF-VOUCHER')
         ->first();
 
-    expect($bankImport->format)->toBe('TRINKWERT-TAGESABSCHLUSS');
+    expect($bankImport->format)->toBe('TRINKWERT');
+    expect(strlen($bankImport->format))->toBeLessThanOrEqual(20);
     expect($bankImport->imported_count)->toBe(2);
     expect($bankImport->meta['auto_assigned_count'])->toBe(2);
     expect($cashTransaction->account_id)->toBe($cashAccount->id);

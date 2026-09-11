@@ -190,7 +190,7 @@ class BankImportController extends Controller
                 'duplicate_count' => $duplicates,
                 'meta' => array_filter([
                     'auto_assigned_count' => $autoAssigned,
-                    'source' => $parsed['format'] === 'TRINKWERT-TAGESABSCHLUSS' ? 'Trinkwert' : null,
+                    'source' => $parsed['format'] === 'TRINKWERT' ? 'Trinkwert' : null,
                 ]),
             ]);
         });

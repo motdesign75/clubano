@@ -214,7 +214,7 @@
                         ?: 'Bankumsatz ohne Beschreibung';
                     $showPurpose = filled($bankTransaction->purpose) && $bankTransaction->purpose !== $transactionTitle;
                     $selectedInvoiceId = old('invoice_id', $bankTransaction->receipt_meta['invoice_id'] ?? null);
-                    $isTrinkwert = $bankTransaction->bankImport?->format === 'TRINKWERT-TAGESABSCHLUSS';
+                    $isTrinkwert = $bankTransaction->bankImport?->format === 'TRINKWERT';
                     $trinkwertData = $bankTransaction->raw_data ?? [];
                 @endphp
                 <article id="bank-transaction-{{ $bankTransaction->id }}" class="scroll-mt-24 p-5 target:bg-blue-50/70">

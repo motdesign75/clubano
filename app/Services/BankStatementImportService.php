@@ -38,7 +38,7 @@ class BankStatementImportService
         if (in_array($extension, ['csv', 'txt'], true)) {
             if ($this->isTrinkwertCsv($file->getRealPath())) {
                 return [
-                    'format' => 'TRINKWERT-TAGESABSCHLUSS',
+                    'format' => 'TRINKWERT',
                     'rows' => $this->parseTrinkwertCsv($file->getRealPath()),
                 ];
             }
