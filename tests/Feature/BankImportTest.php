@@ -157,17 +157,27 @@ test('trinkwert daily closing csv imports with suggested accounts', function () 
     expect($cashTransaction->counterparty_name)->toBe('Trinkwert · Bar');
     expect($cashTransaction->purpose)->toContain('GemeinsamZeit 09.09.2026');
     expect($cashTransaction->raw_data['trinkwert_source_account_number'])->toBe('1000');
-    expect($voucherTransaction->account_id)->toBe($voucherAccount->id);
-    expect($voucherTransaction->selected_account_id)->toBe($revenueAccount->id);
+    expect($voucherTransaction->account_id)->toBe($revenueAccount->id);
+    expect($voucherTransaction->selected_account_id)->toBe($voucherAccount->id);
+    expect($voucherTransaction->raw_data['trinkwert_is_credit_balance_redemption'])->toBeTrue();
+    expect($voucherTransaction->purpose)->toContain('Guthaben-Verbrauch: kein neuer Zahlungseingang');
 
     $this->actingAs($user)->post(route('bank-imports.transactions.book', $cashTransaction))
         ->assertRedirectContains('#bank-transaction-' . $cashTransaction->id);
 
-    $transaction = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+    $transaction = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('amount', 79.5)->first();
 
     expect($transaction->account_from_id)->toBe($revenueAccount->id);
     expect($transaction->account_to_id)->toBe($cashAccount->id);
     expect((float) $transaction->amount)->toBe(79.5);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $voucherTransaction))
+        ->assertRedirectContains('#bank-transaction-' . $voucherTransaction->id);
+
+    $voucherBooking = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('amount', 33.5)->first();
+
+    expect($voucherBooking->account_from_id)->toBe($voucherAccount->id);
+    expect($voucherBooking->account_to_id)->toBe($revenueAccount->id);
 });
 
 test('camt imports read nested counterparty names from xml', function () {

@@ -216,6 +216,9 @@
                     $selectedInvoiceId = old('invoice_id', $bankTransaction->receipt_meta['invoice_id'] ?? null);
                     $isTrinkwert = $bankTransaction->bankImport?->format === 'TRINKWERT';
                     $trinkwertData = $bankTransaction->raw_data ?? [];
+                    $isTrinkwertCreditBalance = $isTrinkwert && !empty($trinkwertData['trinkwert_is_credit_balance_redemption']);
+                    $movementLabel = $isTrinkwertCreditBalance ? 'Verrechnung' : ($bankTransaction->amount >= 0 ? 'Eingang' : 'Ausgang');
+                    $sourceAccountLabel = $isTrinkwertCreditBalance ? 'Erlöskonto' : 'Konto';
                 @endphp
                 <article id="bank-transaction-{{ $bankTransaction->id }}" class="scroll-mt-24 p-5 target:bg-blue-50/70">
                     <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,430px)]">
@@ -260,6 +263,11 @@
                                                     <span class="truncate">{{ $trinkwertData['veranstaltung'] }}</span>
                                                 </span>
                                             @endif
+                                            @if($isTrinkwertCreditBalance)
+                                                <span class="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-200">
+                                                    Guthaben-Verbrauch · kein neuer Zahlungseingang
+                                                </span>
+                                            @endif
                                         </div>
                                     @endif
                                     @if($showPurpose)
@@ -271,13 +279,13 @@
                                     <div class="text-xl font-semibold {{ $bankTransaction->amount >= 0 ? 'text-emerald-700' : 'text-rose-700' }}">
                                         {{ number_format((float) $bankTransaction->amount, 2, ',', '.') }} {{ $bankTransaction->currency }}
                                     </div>
-                                    <div class="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{{ $bankTransaction->amount >= 0 ? 'Eingang' : 'Ausgang' }}</div>
+                                    <div class="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{{ $movementLabel }}</div>
                                 </div>
                             </div>
 
                             <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                 <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Bankkonto</div>
+                                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{{ $sourceAccountLabel }}</div>
                                     <div class="mt-1 text-sm font-semibold text-slate-950">{{ $bankTransaction->account?->number }} · {{ $bankTransaction->account?->name }}</div>
                                 </div>
                                 <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">

@@ -184,8 +184,14 @@ class BankStatementImportService
             $reference = $this->first($data, ['referenz', 'belegnummer']);
             $paymentMethod = $this->first($data, ['zahlungsart']) ?: 'Zahlung';
             $salesType = $this->first($data, ['umsatzart']) ?: 'Tagesabschluss';
-            $sourceAccountNumber = $this->accountNumber($this->first($data, ['konto']));
-            $selectedAccountNumber = $this->accountNumber($this->first($data, ['gegenkonto']));
+            $rawSourceAccountNumber = $this->accountNumber($this->first($data, ['konto']));
+            $rawSelectedAccountNumber = $this->accountNumber($this->first($data, ['gegenkonto']));
+            $normalizedPaymentMethod = Str::lower(Str::ascii($paymentMethod));
+            $isCreditBalanceRedemption = str_contains($normalizedPaymentMethod, 'guthaben')
+                || str_contains($normalizedPaymentMethod, 'gutschein')
+                || str_contains($normalizedPaymentMethod, 'voucher');
+            $sourceAccountNumber = $isCreditBalanceRedemption ? $rawSelectedAccountNumber : $rawSourceAccountNumber;
+            $selectedAccountNumber = $isCreditBalanceRedemption ? $rawSourceAccountNumber : $rawSelectedAccountNumber;
             $bookingDate = $this->parseDate($this->first($data, ['abschlussdatum']));
             $timeRange = trim(implode(' - ', array_filter([
                 $this->first($data, ['startzeit']),
@@ -194,6 +200,7 @@ class BankStatementImportService
 
             $purpose = $this->combineText([
                 $this->first($data, ['beschreibung']) ?: trim($salesType . ' ' . $paymentMethod),
+                $isCreditBalanceRedemption ? 'Guthaben-Verbrauch: kein neuer Zahlungseingang' : null,
                 $this->first($data, ['veranstaltung']),
                 $timeRange !== '' ? 'Zeitraum: ' . $timeRange : null,
                 $this->first($data, ['bediener']) ? 'Bediener: ' . $this->first($data, ['bediener']) : null,
@@ -223,6 +230,9 @@ class BankStatementImportService
                     ...$data,
                     'trinkwert_source_account_number' => $sourceAccountNumber,
                     'trinkwert_selected_account_number' => $selectedAccountNumber,
+                    'trinkwert_original_source_account_number' => $rawSourceAccountNumber,
+                    'trinkwert_original_selected_account_number' => $rawSelectedAccountNumber,
+                    'trinkwert_is_credit_balance_redemption' => $isCreditBalanceRedemption,
                     'trinkwert_payment_method' => $paymentMethod,
                     'trinkwert_sales_type' => $salesType,
                 ],
