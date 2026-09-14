@@ -34,6 +34,7 @@ class Document extends Model
         'title',
         'category',
         'status',
+        'folder_id',
         'description',
         'tags',
         'document_date',
@@ -175,6 +176,11 @@ class Document extends Model
     public function invoice()
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function folder()
+    {
+        return $this->belongsTo(DocumentFolder::class, 'folder_id');
     }
 
     public function linkedTransaction()

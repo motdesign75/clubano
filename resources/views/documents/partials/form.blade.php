@@ -110,7 +110,19 @@
         @error('recognized_amount') <p class="mt-2 text-sm text-rose-600">{{ $message }}</p> @enderror
     </section>
 
-    <section class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <section class="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div>
+            <label for="folder_id" class="text-sm font-semibold text-slate-900">Ordner</label>
+            <select id="folder_id" name="folder_id" class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                <option value="">Ohne Ordner</option>
+                @foreach($folders as $folder)
+                    <option value="{{ $folder->id }}" @selected((string) old('folder_id', $document?->folder_id) === (string) $folder->id)>
+                        {{ $folder->parent_id ? '- ' : '' }}{{ $folder->name }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+
         <div>
             <label for="category" class="text-sm font-semibold text-slate-900">Kategorie *</label>
             <select id="category" name="category" required class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">

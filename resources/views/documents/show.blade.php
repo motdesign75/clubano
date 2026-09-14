@@ -60,6 +60,12 @@
                     <dd class="mt-1 text-sm font-semibold text-slate-950">{{ $document->category_label }}</dd>
                 </div>
                 <div>
+                    <dt class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ordner</dt>
+                    <dd class="mt-1 text-sm font-semibold text-slate-950">
+                        {{ $document->folder?->parent ? $document->folder->parent->name . ' / ' . $document->folder->name : ($document->folder?->name ?? 'Ohne Ordner') }}
+                    </dd>
+                </div>
+                <div>
                     <dt class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Dokumentdatum</dt>
                     <dd class="mt-1 text-sm text-slate-700">{{ $document->document_date?->format('d.m.Y') ?? 'Nicht gesetzt' }}</dd>
                 </div>

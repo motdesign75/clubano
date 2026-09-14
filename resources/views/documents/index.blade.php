@@ -6,8 +6,9 @@
 @php
     $canManageDocuments = auth()->user()?->canManageDocuments() ?? false;
     $canManageFinance = auth()->user()?->canManageFinance() ?? false;
-    $hasActiveFilters = filled($search) || filled($category) || filled($status) || filled($due);
+    $hasActiveFilters = filled($search) || filled($category) || filled($status) || filled($due) || (($folder ?? 'all') !== 'all');
     $documentsCollection = $documents->getCollection();
+    $activeFolderId = is_numeric($folder ?? null) ? (int) $folder : null;
 @endphp
 
 <div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -150,7 +151,53 @@
     </section>
 
     <section class="rounded-xl border border-slate-200 bg-white px-5 py-4 sm:px-6">
+        <div class="mb-4 grid gap-4 lg:grid-cols-[minmax(0,1fr),360px]">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ordner</div>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    <a href="{{ route('documents.index', request()->except('folder', 'page')) }}"
+                       class="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold {{ ($folder ?? 'all') === 'all' ? 'bg-slate-950 text-white' : 'border border-slate-200 text-slate-700 hover:bg-slate-50' }}">
+                        Alle Dokumente
+                    </a>
+                    <a href="{{ route('documents.index', array_merge(request()->except('page'), ['folder' => 'none'])) }}"
+                       class="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold {{ ($folder ?? 'all') === 'none' ? 'bg-slate-950 text-white' : 'border border-slate-200 text-slate-700 hover:bg-slate-50' }}">
+                        Ohne Ordner <span class="ml-2 text-xs opacity-70">{{ $folderCounts[''] ?? $folderCounts[null] ?? 0 }}</span>
+                    </a>
+                    @foreach($folders as $folderOption)
+                        <a href="{{ route('documents.index', array_merge(request()->except('page'), ['folder' => $folderOption->id])) }}"
+                            class="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold {{ $activeFolderId === $folderOption->id ? 'bg-slate-950 text-white' : 'border border-slate-200 text-slate-700 hover:bg-slate-50' }}">
+                            @if($folderOption->parent_id)
+                                <span class="mr-1 text-slate-400">-&gt;</span>
+                            @endif
+                            {{ $folderOption->name }}
+                            <span class="ml-2 text-xs opacity-70">{{ $folderCounts[$folderOption->id] ?? 0 }}</span>
+                        </a>
+                    @endforeach
+                </div>
+            </div>
+
+            @if($canManageDocuments)
+                <form method="POST" action="{{ route('documents.folders.store') }}" class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    @csrf
+                    <div class="text-sm font-semibold text-slate-900">Ordner anlegen</div>
+                    <div class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr),140px]">
+                        <input name="name" type="text" required class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300" placeholder="z. B. Steuer 2026">
+                        <select name="parent_id" class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                            <option value="">Hauptordner</option>
+                            @foreach($folders->whereNull('parent_id') as $folderOption)
+                                <option value="{{ $folderOption->id }}">{{ $folderOption->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <button type="submit" class="mt-2 inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white hover:bg-slate-800">
+                        Ordner speichern
+                    </button>
+                </form>
+            @endif
+        </div>
+
         <form method="GET" action="{{ route('documents.index') }}" class="grid gap-3 lg:grid-cols-5 lg:items-end">
+            <input type="hidden" name="folder" value="{{ $folder ?? 'all' }}">
             <div class="lg:col-span-2">
                 <label for="search" class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Suche</label>
                 <input id="search" name="search" type="search" value="{{ $search }}"
@@ -228,6 +275,7 @@
                                 <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-500">
                                     <span>{{ $document->original_name }}</span>
                                     <span>{{ $document->human_size }}</span>
+                                    <span>{{ $document->folder?->parent ? $document->folder->parent->name . ' / ' . $document->folder->name : ($document->folder?->name ?? 'Ohne Ordner') }}</span>
                                     @if($document->linked_context)
                                         <span>{{ $document->linked_context }}</span>
                                     @endif

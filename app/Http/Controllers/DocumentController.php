@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Document;
+use App\Models\DocumentFolder;
 use App\Models\Event;
 use App\Models\Invoice;
 use App\Models\Member;
@@ -11,6 +12,7 @@ use App\Models\Protocol;
 use App\Services\ReceiptRecognitionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class DocumentController extends Controller
@@ -22,9 +24,11 @@ class DocumentController extends Controller
         $category = $request->query('category');
         $status = $request->query('status');
         $due = $request->query('due');
+        $folder = $request->query('folder', 'all');
+        $folderId = is_numeric($folder) ? (int) $folder : null;
 
         $documents = Document::query()
-            ->with(['uploader', 'member', 'project', 'event', 'protocol', 'invoice'])
+            ->with(['uploader', 'member', 'project', 'event', 'protocol', 'invoice', 'folder.parent'])
             ->where('tenant_id', $tenantId)
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($query) use ($search) {
@@ -34,6 +38,8 @@ class DocumentController extends Controller
                 });
             })
             ->when($category, fn ($query) => $query->where('category', $category))
+            ->when($folder === 'none', fn ($query) => $query->whereNull('folder_id'))
+            ->when($folderId, fn ($query) => $query->where('folder_id', $folderId))
             ->when($status, function ($query) use ($status) {
                 if ($status === Document::STATUS_ARCHIVED) {
                     $query->archived();
@@ -55,10 +61,20 @@ class DocumentController extends Controller
             ->latest('updated_at')
             ->limit(8)
             ->get();
+        $folders = $this->folderOptions($tenantId);
+        $folderCounts = Document::query()
+            ->where('tenant_id', $tenantId)
+            ->notArchived()
+            ->selectRaw('folder_id, count(*) as aggregate')
+            ->groupBy('folder_id')
+            ->pluck('aggregate', 'folder_id');
 
         return view('documents.index', [
             'documents' => $documents,
             'receiptInbox' => $receiptInbox,
+            'folders' => $folders,
+            'folder' => $folder,
+            'folderCounts' => $folderCounts,
             'search' => $search,
             'category' => $category,
             'status' => $status,
@@ -76,6 +92,39 @@ class DocumentController extends Controller
     public function create(Request $request)
     {
         return view('documents.create', $this->formData($request));
+    }
+
+    public function storeFolder(Request $request)
+    {
+        $tenantId = $request->user()->tenant_id;
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'parent_id' => ['nullable', Rule::exists('document_folders', 'id')->where('tenant_id', $tenantId)->whereNull('parent_id')],
+        ]);
+
+        $name = trim($validated['name']);
+        $baseSlug = Str::slug($name) ?: 'ordner';
+        $slug = $baseSlug;
+        $counter = 2;
+
+        while (DocumentFolder::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('parent_id', $validated['parent_id'] ?? null)
+            ->where('slug', $slug)
+            ->exists()) {
+            $slug = $baseSlug . '-' . $counter++;
+        }
+
+        $folder = DocumentFolder::create([
+            'tenant_id' => $tenantId,
+            'parent_id' => $validated['parent_id'] ?? null,
+            'name' => $name,
+            'slug' => $slug,
+            'sort_order' => DocumentFolder::where('tenant_id', $tenantId)->where('parent_id', $validated['parent_id'] ?? null)->count() + 1,
+        ]);
+
+        return redirect()->route('documents.index', ['folder' => $folder->id])->with('success', 'Ordner wurde angelegt.');
     }
 
     public function store(Request $request, ReceiptRecognitionService $recognitionService)
@@ -133,7 +182,7 @@ class DocumentController extends Controller
         $this->authorizeTenant($request, $document);
 
         return view('documents.show', [
-            'document' => $document->load(['uploader', 'member', 'project', 'event', 'protocol', 'invoice']),
+            'document' => $document->load(['uploader', 'member', 'project', 'event', 'protocol', 'invoice', 'folder.parent']),
         ]);
     }
 
@@ -244,6 +293,7 @@ class DocumentController extends Controller
             'receiptMode' => $receiptMode,
             'categories' => Document::categories(),
             'statuses' => collect(Document::statuses())->except(Document::STATUS_ARCHIVED)->all(),
+            'folders' => $this->folderOptions($tenantId),
             'members' => Member::where('tenant_id', $tenantId)->notArchived()->orderBy('last_name')->orderBy('first_name')->get(),
             'projects' => Project::where('tenant_id', $tenantId)->orderBy('name')->get(),
             'events' => Event::where('tenant_id', $tenantId)->orderByDesc('start')->take(80)->get(),
@@ -260,6 +310,7 @@ class DocumentController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'category' => ['required', Rule::in(array_keys(Document::categories()))],
             'status' => ['required', Rule::in(array_keys(collect(Document::statuses())->except(Document::STATUS_ARCHIVED)->all()))],
+            'folder_id' => ['nullable', Rule::exists('document_folders', 'id')->where('tenant_id', $tenantId)],
             'description' => ['nullable', 'string', 'max:5000'],
             'tags' => ['nullable', 'string', 'max:1000'],
             'document_date' => ['nullable', 'date'],
@@ -285,6 +336,21 @@ class DocumentController extends Controller
             ->all();
 
         return $data;
+    }
+
+    protected function folderOptions(int|string $tenantId)
+    {
+        $folders = DocumentFolder::query()
+            ->where('tenant_id', $tenantId)
+            ->with('children')
+            ->whereNull('parent_id')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        return $folders->flatMap(function (DocumentFolder $folder) {
+            return collect([$folder])->merge($folder->children);
+        })->values();
     }
 
     protected function receiptData(array $data, Request $request, ReceiptRecognitionService $recognitionService, mixed $file = null): array
