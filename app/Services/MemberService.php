@@ -5,17 +5,20 @@ namespace App\Services;
 use App\Models\Member;
 use App\Models\MemberCommunicationLog;
 use App\Models\Membership;
+use App\Models\TemplateDispatchLog;
 use App\Http\Requests\StoreMemberRequest;
 use App\Http\Requests\UpdateMemberRequest;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class MemberService
 {
     public function __construct(
-        private readonly GermanIbanBicResolver $ibanBicResolver
+        private readonly GermanIbanBicResolver $ibanBicResolver,
+        private readonly MailTrackingService $mailTrackingService,
     ) {
     }
 
@@ -209,9 +212,29 @@ class MemberService
             ? $tenant->email
             : null;
 
+        $dispatchLog = TemplateDispatchLog::create([
+            'tenant_id' => $member->tenant_id,
+            'created_by' => auth()->id(),
+            'channel' => 'mail',
+            'action' => 'member_exit_confirmation',
+            'recipient_type' => 'member',
+            'member_id' => $member->id,
+            'recipient_name' => $member->full_name ?: null,
+            'recipient_reference' => $member->email,
+            'subject' => $subject,
+            'message_excerpt' => Str::limit(trim(strip_tags($body)), 500),
+            'dispatched_at' => now(),
+            'meta' => array_filter([
+                'exit_date' => $member->exit_date?->toDateString(),
+                'termination_date' => $member->termination_date?->toDateString(),
+            ]),
+        ]);
+
+        $trackedBody = $this->mailTrackingService->instrument($body, $dispatchLog);
+
         try {
             Mail::send('mail.layout', [
-                'body' => $body,
+                'body' => $trackedBody,
                 'tenant' => $tenant,
             ], function ($mail) use ($member, $subject, $fromAddress, $fromName, $replyToAddress, $tenant) {
                 $mail->to($member->email, $member->full_name ?: null)
@@ -235,6 +258,8 @@ class MemberService
                 'sent_at' => now(),
             ]);
         } catch (\Throwable $exception) {
+            $dispatchLog->delete();
+
             Log::warning('Austrittsmail konnte nicht gesendet werden.', [
                 'member_id' => $member->id,
                 'tenant_id' => $member->tenant_id,
