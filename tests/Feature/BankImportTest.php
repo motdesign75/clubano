@@ -272,6 +272,93 @@ test('booked bank transaction assignments can be corrected on the linked draft b
     expect((float) $bankAccount->refresh()->balance_current)->toBe(170.0);
 });
 
+test('bank transaction source accounts can be corrected on linked draft bookings', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('source-correction');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Hannoversche Volksbank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+        'balance_start' => 100,
+    ]);
+
+    $wrongSourceAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1700',
+        'name' => 'Verbindlichkeiten aus Guthaben',
+        'type' => 'kasse',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $contraAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4300',
+        'name' => 'Guthabenaufladungen',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $wrongSourceAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'umsatz.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $wrongSourceAccount->id,
+        'selected_account_id' => $contraAccount->id,
+        'booking_date' => '2026-09-15',
+        'amount' => 20,
+        'currency' => 'EUR',
+        'direction' => 'credit',
+        'counterparty_name' => 'HANNOVERSCHE VOLKSBANK',
+        'purpose' => 'Towet Guthabenaufladung 14.9.26 · Einzahlung',
+        'fingerprint' => 'source-correction-test',
+        'status' => BankTransaction::STATUS_READY,
+    ]);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $bankTransaction))
+        ->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $transaction = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+
+    expect($transaction->account_to_id)->toBe($wrongSourceAccount->id);
+
+    $this->actingAs($user)->patch(route('bank-imports.transactions.update', $bankTransaction->fresh()), [
+        'source_account_id' => $bankAccount->id,
+        'selected_account_id' => $contraAccount->id,
+    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $transaction->refresh();
+    $bankTransaction->refresh();
+
+    expect($bankTransaction->account_id)->toBe($bankAccount->id);
+    expect($bankTransaction->selected_account_id)->toBe($contraAccount->id);
+    expect($bankTransaction->status)->toBe(BankTransaction::STATUS_BOOKED);
+    expect($transaction->account_from_id)->toBe($contraAccount->id);
+    expect($transaction->account_to_id)->toBe($bankAccount->id);
+    expect((float) $wrongSourceAccount->refresh()->balance_current)->toBe(0.0);
+    expect((float) $bankAccount->refresh()->balance_current)->toBe(120.0);
+    expect((float) $contraAccount->refresh()->balance_current)->toBe(-20.0);
+});
+
 test('faulty bank imports can be deleted while keeping created bookings', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
