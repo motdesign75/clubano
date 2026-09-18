@@ -67,8 +67,13 @@
         .body { font-size: 10.5pt; line-height: 1.5; }
         .body p { margin: 0 0 4mm 0; }
         .body ul, .body ol { margin: 0 0 4mm 6mm; padding-left: 5mm; }
-        .body table { width: 100%; border-collapse: collapse; margin: 4mm 0; }
-        .body th, .body td { border: 0.2mm solid #cbd5e1; padding: 2mm; vertical-align: top; }
+        .body table { width: 100%; border-collapse: collapse; margin: 5mm 0; }
+        .body th, .body td { border: 0.2mm solid #cbd5e1; padding: 3mm; vertical-align: top; font-size: 11.5pt; line-height: 1.35; }
+        .body th { background: #f8fafc; font-weight: bold; color: #0f172a; }
+        .body td { color: #172033; }
+        .body table:not([role="presentation"]) td { font-weight: 600; }
+        .body table[role="presentation"],
+        .body table[role="presentation"] td { border: 0; padding-left: 0; padding-bottom: 0; background: transparent; font-weight: normal; }
     </style>
 </head>
 <body>

@@ -175,9 +175,9 @@ class TemplateParser
                 $name = e((string) ($row['name'] ?? ''));
                 $role = e((string) ($row['role'] ?? ''));
 
-                return '<td style="padding:18px 24px 0 0;vertical-align:top;min-width:150px;">'
-                    . '<div style="font-family:cursive;font-size:24px;line-height:1.1;color:#111827;">' . $name . '</div>'
-                    . '<div style="margin-top:6px;border-top:1px solid #cbd5e1;padding-top:5px;font-size:12px;line-height:1.35;color:#475569;">'
+                return '<td style="border:0;padding:20px 22px 0 0;vertical-align:top;min-width:145px;">'
+                    . '<div style="font-family:DejaVu Serif, Georgia, serif;font-style:italic;font-size:20px;line-height:1.25;color:#111827;white-space:nowrap;">' . $name . '</div>'
+                    . '<div style="margin-top:8px;border-top:1px solid #94a3b8;padding-top:5px;font-size:12px;line-height:1.35;color:#475569;">'
                     . '<strong style="color:#111827;">' . $name . '</strong>'
                     . ($role !== '' ? '<br>' . $role : '')
                     . '</div>'
@@ -185,6 +185,6 @@ class TemplateParser
             })
             ->implode('');
 
-        return '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;border-collapse:collapse;"><tr>' . $cells . '</tr></table>';
+        return '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;border:0;border-collapse:collapse;"><tr>' . $cells . '</tr></table>';
     }
 }
