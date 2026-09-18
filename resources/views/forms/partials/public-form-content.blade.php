@@ -90,14 +90,14 @@
                                     </span>
                                 @endif
                                 <span class="rounded-full bg-white px-3 py-1 font-semibold text-slate-800">
-                                    Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                    Normalpreis {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                 </span>
                             @elseif($clubBookingsFree)
                                 <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
                                     Vereine kostenfrei
                                 </span>
                                 <span class="rounded-full bg-white px-3 py-1 font-semibold text-slate-800">
-                                    Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                    Normalpreis {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                 </span>
                             @else
                                 <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
@@ -333,7 +333,7 @@
                             </select>
                             @if($clubBookingsFree)
                                 <p class="mt-2 text-sm leading-6 text-slate-500">
-                                    Kostenfrei gilt nur bei Auswahl „Verein“. Firmen, Unternehmen und sonstige Organisationen zahlen den Gästepreis.
+                                    Kostenfrei gilt nur bei Auswahl „Verein“. Für Firmen, Unternehmen und sonstige Organisationen gilt der Normalpreis.
                                 </p>
                             @endif
                             @error('organization_booking_type')
@@ -487,12 +487,12 @@
                                 <span class="font-semibold">
                                     @if($event->is_paid)
                                         @if($hasMemberRate)
-                                            Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.$currency : 'frei' }} · Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                            Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.$currency : 'frei' }} · Normalpreis {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                             @if($clubBookingsFree)
                                                 · Vereine frei
                                             @endif
                                         @elseif($clubBookingsFree)
-                                            Vereine frei · Firmen, Organisationen und Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                            Vereine frei · Normalpreis für Firmen, Organisationen und Einzelpersonen {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                         @else
                                             {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
                                         @endif

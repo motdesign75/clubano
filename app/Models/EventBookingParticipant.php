@@ -81,7 +81,7 @@ class EventBookingParticipant extends Model
         return match ($this->participant_type) {
             'member' => 'Mitglied',
             'contact' => 'Kontakt',
-            default => 'Gast',
+            default => 'Freier Teilnehmer',
         };
     }
 

@@ -2609,7 +2609,7 @@ class EventController extends Controller
         $firstName = trim((string) ($validated['first_name'] ?? ''));
         $lastName = trim((string) ($validated['last_name'] ?? ''));
         $organizationName = trim((string) ($validated['organization_name'] ?? ''));
-        $bookerName = $organizationName ?: (trim($firstName . ' ' . $lastName) ?: 'Gast');
+        $bookerName = $organizationName ?: (trim($firstName . ' ' . $lastName) ?: 'Teilnehmer');
 
         return collect([[
             'booker_name' => $bookerName,
@@ -2914,14 +2914,14 @@ class EventController extends Controller
             return $base
                 . ' ' . $memberText
                 . $organizationText
-                . ' Für Gäste und Nichtmitglieder kostet die Teilnahme ' . $this->formatEventPriceForText($externalPrice, $event) . '.'
+                . ' Der Normalpreis beträgt ' . $this->formatEventPriceForText($externalPrice, $event) . '.'
                 . $invoiceHint;
         }
 
         if ($externalPrice > 0 && $event->organization_bookings_free) {
             return $base
                 . ' Externe Vereine können kostenfrei teilnehmen.'
-                . ' Firmen, Unternehmen, sonstige Organisationen, Gäste und Nichtmitglieder zahlen ' . $this->formatEventPriceForText($externalPrice, $event) . '.'
+                . ' Für Firmen, Unternehmen, sonstige Organisationen und Einzelpersonen gilt der Normalpreis von ' . $this->formatEventPriceForText($externalPrice, $event) . '.'
                 . $invoiceHint;
         }
 

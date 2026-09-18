@@ -95,7 +95,7 @@
         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
                 <h3 class="text-base font-semibold text-slate-950">Teilnehmer nachtragen</h3>
-                <p class="mt-1 text-sm text-slate-500">Für telefonische Anmeldungen, Abendkasse, Gäste, Sponsoren oder Teilnehmer ohne Online-Zugang.</p>
+                <p class="mt-1 text-sm text-slate-500">Für telefonische Anmeldungen, Abendkasse, Sponsoren oder Teilnehmer ohne Online-Zugang.</p>
             </div>
             <span class="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">Intern</span>
         </div>
@@ -114,7 +114,7 @@
                 </label>
                 <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
                     <input type="radio" name="participant_type" value="guest" x-model="type" @change="syncPayment()" class="border-slate-300 text-slate-950 focus:ring-slate-400">
-                    Freier Gast
+                    Freier Teilnehmer
                 </label>
             </div>
 
@@ -239,7 +239,7 @@
                             <option value="organization">Sonstige Organisation</option>
                         </select>
                         @if($event->organization_bookings_free)
-                            <p class="mt-1 text-xs leading-5 text-slate-500">Nur Vereine werden kostenfrei vorgeschlagen. Firmen und sonstige Organisationen zahlen den Gästepreis.</p>
+                            <p class="mt-1 text-xs leading-5 text-slate-500">Nur Vereine werden kostenfrei vorgeschlagen. Für Firmen und sonstige Organisationen gilt der Normalpreis.</p>
                         @endif
                     </div>
                 </div>
@@ -372,7 +372,7 @@
                         <option value="">Alle</option>
                         <option value="member" @selected(($participantFilters['type'] ?? null) === 'member')>Mitglieder</option>
                         <option value="contact" @selected(($participantFilters['type'] ?? null) === 'contact')>Kontakte</option>
-                        <option value="guest" @selected(($participantFilters['type'] ?? null) === 'guest')>Freie Gäste</option>
+                        <option value="guest" @selected(($participantFilters['type'] ?? null) === 'guest')>Freie Teilnehmer</option>
                     </select>
                 </div>
                 <div>
