@@ -191,7 +191,7 @@ class BankStatementImportService
                 || str_contains($normalizedPaymentMethod, 'gutschein')
                 || str_contains($normalizedPaymentMethod, 'voucher');
             $sourceAccountNumber = $isCreditBalanceRedemption ? $rawSelectedAccountNumber : $rawSourceAccountNumber;
-            $selectedAccountNumber = $isCreditBalanceRedemption ? $rawSourceAccountNumber : $rawSelectedAccountNumber;
+            $selectedAccountNumber = $isCreditBalanceRedemption ? null : $rawSelectedAccountNumber;
             $bookingDate = $this->parseDate($this->first($data, ['abschlussdatum']));
             $timeRange = trim(implode(' - ', array_filter([
                 $this->first($data, ['startzeit']),
