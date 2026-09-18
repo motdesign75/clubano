@@ -396,6 +396,26 @@
                                 </form>
                             @endif
 
+                            @if($bankTransaction->status !== \App\Models\BankTransaction::STATUS_BOOKED)
+                                <details class="mt-2 rounded-xl border border-slate-200 bg-white p-3">
+                                    <summary class="cursor-pointer text-sm font-semibold text-slate-700">Bereits manuell gebucht</summary>
+                                    <form method="POST" action="{{ route('bank-imports.transactions.link-manual', $bankTransaction) }}" class="mt-3 space-y-2">
+                                        @csrf
+                                        <select name="transaction_id" required class="w-full rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                            <option value="">Buchung auswählen</option>
+                                            @foreach($manualBookingChoices as $bookingChoice)
+                                                <option value="{{ $bookingChoice->id }}">
+                                                    {{ $bookingChoice->date?->format('d.m.Y') }} · {{ number_format((float) $bookingChoice->amount, 2, ',', '.') }} € · {{ $bookingChoice->account_from?->number }} → {{ $bookingChoice->account_to?->number }} · {{ \Illuminate\Support\Str::limit($bookingChoice->description, 60) }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <button type="submit" class="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                            Verknüpfen
+                                        </button>
+                                    </form>
+                                </details>
+                            @endif
+
                             @if(! in_array($bankTransaction->status, [\App\Models\BankTransaction::STATUS_BOOKED, \App\Models\BankTransaction::STATUS_IGNORED], true))
                                 <form method="POST" action="{{ route('bank-imports.transactions.ignore', $bankTransaction) }}" class="mt-2">
                                     @csrf

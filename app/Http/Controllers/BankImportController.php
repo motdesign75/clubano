@@ -39,6 +39,14 @@ class BankImportController extends Controller
             ->get();
 
         $invoices = $this->invoiceChoices();
+        $manualBookingChoices = Transaction::query()
+            ->with(['account_from', 'account_to'])
+            ->where('tenant_id', $tenantId)
+            ->latest('date')
+            ->latest('id')
+            ->limit(300)
+            ->get()
+            ->reject(fn (Transaction $transaction) => $transaction->isCancelled());
 
         $imports = BankImport::query()
             ->with('account')
@@ -86,7 +94,8 @@ class BankImportController extends Controller
             'invoices',
             'summary',
             'status',
-            'importId'
+            'importId',
+            'manualBookingChoices'
         ));
     }
 
@@ -397,6 +406,66 @@ class BankImportController extends Controller
 
         return $this->backToBankTransaction($bankTransaction)
             ->with('success', 'Bankumsatz wurde ausgeblendet.');
+    }
+
+    public function linkManualBooking(Request $request, BankTransaction $bankTransaction)
+    {
+        $tenantId = auth()->user()->tenant_id;
+        $this->abortIfForeignTenant($bankTransaction, $tenantId);
+
+        if ($bankTransaction->status === BankTransaction::STATUS_BOOKED) {
+            return $this->backToBankTransaction($bankTransaction)
+                ->with('error', 'Dieser Bankumsatz wurde bereits gebucht.');
+        }
+
+        $validated = $request->validate([
+            'transaction_id' => [
+                'required',
+                Rule::exists('transactions', 'id')->where(fn ($query) => $query->where('tenant_id', $tenantId)),
+            ],
+        ]);
+
+        $transaction = Transaction::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->with(['account_from', 'account_to'])
+            ->findOrFail($validated['transaction_id']);
+
+        if ($transaction->isCancelled()) {
+            return $this->backToBankTransaction($bankTransaction)
+                ->with('error', 'Stornobuchungen können nicht als manuelle Buchung verknüpft werden.');
+        }
+
+        if (round(abs((float) $transaction->amount), 2) !== round(abs((float) $bankTransaction->amount), 2)) {
+            return $this->backToBankTransaction($bankTransaction)
+                ->with('error', 'Die ausgewählte Buchung hat nicht denselben Betrag.');
+        }
+
+        $sourceAccountId = (int) $bankTransaction->account_id;
+        $selectedAccountId = $bankTransaction->isCredit()
+            ? ((int) $transaction->account_to_id === $sourceAccountId ? (int) $transaction->account_from_id : null)
+            : ((int) $transaction->account_from_id === $sourceAccountId ? (int) $transaction->account_to_id : null);
+
+        if (! $selectedAccountId || $selectedAccountId === $sourceAccountId) {
+            return $this->backToBankTransaction($bankTransaction)
+                ->with('error', 'Die ausgewählte Buchung passt nicht zu diesem Bankkonto.');
+        }
+
+        DB::transaction(function () use ($bankTransaction, $transaction, $selectedAccountId) {
+            $previousStatus = $bankTransaction->status;
+
+            $bankTransaction->update([
+                'transaction_id' => $transaction->id,
+                'selected_account_id' => $selectedAccountId,
+                'status' => BankTransaction::STATUS_BOOKED,
+            ]);
+
+            if ($previousStatus !== BankTransaction::STATUS_BOOKED) {
+                $bankTransaction->bankImport?->increment('booked_count');
+            }
+        });
+
+        return $this->backToBankTransaction($bankTransaction)
+            ->with('success', 'Bankumsatz wurde mit der vorhandenen manuellen Buchung verknüpft.');
     }
 
     private function createTransactionFromBankTransaction(BankTransaction $bankTransaction): Transaction

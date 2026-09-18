@@ -461,6 +461,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             Route::delete('/bankumsaetze/import/{bankImport}', [BankImportController::class, 'destroy'])->name('bank-imports.destroy');
             Route::patch('/bankumsaetze/{bankTransaction}', [BankImportController::class, 'update'])->name('bank-imports.transactions.update');
             Route::post('/bankumsaetze/{bankTransaction}/buchen', [BankImportController::class, 'book'])->name('bank-imports.transactions.book');
+            Route::post('/bankumsaetze/{bankTransaction}/manuell-gebucht', [BankImportController::class, 'linkManualBooking'])->name('bank-imports.transactions.link-manual');
             Route::post('/bankumsaetze/{bankTransaction}/ignorieren', [BankImportController::class, 'ignore'])->name('bank-imports.transactions.ignore');
             Route::post('/bankumsaetze/sammel-buchen', [BankImportController::class, 'bulkBook'])->name('bank-imports.transactions.bulk-book');
             Route::post('/transactions/datev-import', [$cls, 'importDatev'])->name('transactions.datev-import');
