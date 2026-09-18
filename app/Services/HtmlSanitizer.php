@@ -119,6 +119,49 @@ class HtmlSanitizer
         return preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $value) ?? $value;
     }
 
+    public function normalizeLinks(string $value): string
+    {
+        if (! preg_match('/<\s*a(\s|>)/i', $value)) {
+            return $value;
+        }
+
+        $document = new DOMDocument('1.0', 'UTF-8');
+        $previous = libxml_use_internal_errors(true);
+        $document->loadHTML(
+            '<?xml encoding="utf-8" ?><!DOCTYPE html><html><head><meta charset="utf-8"></head><body><div id="clubano-link-root">' . mb_convert_encoding($value, 'HTML-ENTITIES', 'UTF-8') . '</div></body></html>',
+            LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+        );
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        $root = $document->getElementById('clubano-link-root');
+
+        if (! $root instanceof DOMElement) {
+            return $value;
+        }
+
+        foreach ($root->getElementsByTagName('a') as $link) {
+            $href = trim((string) $link->getAttribute('href'));
+
+            if ($href === '') {
+                continue;
+            }
+
+            if ($this->isSafeUrl($href, false)) {
+                $link->setAttribute('href', $this->normalizeHref($href));
+            } else {
+                $link->removeAttribute('href');
+            }
+        }
+
+        $html = '';
+        foreach ($root->childNodes as $child) {
+            $html .= $document->saveHTML($child);
+        }
+
+        return trim($html) !== '' ? trim($html) : $value;
+    }
+
     private function decodeMojibakeEntities(string $value): string
     {
         if (! preg_match('/&(?:Atilde|Acirc|acirc|curren|frac14|para|#(?:128|159));/i', $value)) {
@@ -282,8 +325,22 @@ class HtmlSanitizer
     {
         $value = trim($value);
 
+        if (preg_match('/^\{[a-zA-Z0-9_]+\}$/', $value)) {
+            return $value;
+        }
+
         if (preg_match('/^www\.[^\s]+$/i', $value)) {
             return 'https://' . $value;
+        }
+
+        if (preg_match('/^(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[\/:?#][^\s]*)?$/i', $value)) {
+            return 'https://' . $value;
+        }
+
+        if (preg_match('#^(?:\./|\../)+[^\s]+$#', $value)) {
+            $path = '/' . ltrim(preg_replace('#^(?:\./|\../)+#', '', $value) ?? '', '/');
+
+            return rtrim((string) config('app.url'), '/') . $path;
         }
 
         return $value;

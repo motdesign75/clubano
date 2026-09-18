@@ -366,6 +366,7 @@ class MailController extends Controller
         $overrides = $messageLink ? ['{link}' => $messageLink] : [];
         $html = $this->htmlSanitizer->normalize(TemplateParser::parse($body, $recipient, $tenant, $overrides));
         $html = $this->promoteStandaloneCallToAction($html, $messageLink);
+        $html = $this->htmlSanitizer->normalizeLinks($html);
         $mailSubject = trim(strip_tags($this->htmlSanitizer->normalize(TemplateParser::parse($subject, $recipient, $tenant, $overrides))));
 
         $dispatchLog = TemplateDispatchLog::create([
