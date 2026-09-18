@@ -165,7 +165,6 @@ class LetterController extends Controller
             trim((string) ($member->care_of ?? '')) ?: null,
             trim((string) ($member->street ?? '')),
             trim((string) (($member->zip ?? '') . ' ' . ($member->city ?? ''))),
-            trim((string) ($member->country ?? '')),
         ]);
 
         return [
@@ -189,7 +188,6 @@ class LetterController extends Controller
             trim((string) ($contact->care_of ?? '')) ?: null,
             trim((string) ($contact->street ?? '')),
             trim((string) (($contact->zip ?? '') . ' ' . ($contact->city ?? ''))),
-            trim((string) ($contact->country ?? '')),
         ]);
 
         return [
@@ -212,7 +210,6 @@ class LetterController extends Controller
             $nameLine,
             trim((string) ($recipient['street'] ?? '')),
             trim((string) (($recipient['zip'] ?? '') . ' ' . ($recipient['city'] ?? ''))),
-            trim((string) ($recipient['country'] ?? '')),
         ]);
 
         return [
