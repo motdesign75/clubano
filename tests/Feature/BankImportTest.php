@@ -169,6 +169,185 @@ test('bank imports relink existing manual cash to bank transfers instead of dupl
     expect(Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(1);
 });
 
+test('bank transactions can be manually linked to existing bookings', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('manual-link');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $cashAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1000',
+        'name' => 'Kasse',
+        'type' => 'kasse',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bankAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'umsatz.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bankAccount->id,
+        'booking_date' => '2026-09-18',
+        'amount' => 600,
+        'currency' => 'EUR',
+        'direction' => 'credit',
+        'counterparty_name' => 'Volksbank',
+        'purpose' => 'Einzahlung',
+        'fingerprint' => 'manual-link-bank-transaction',
+        'status' => BankTransaction::STATUS_PENDING,
+    ]);
+
+    $manualTransfer = Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-09-16',
+        'description' => 'Kasse an Bank',
+        'amount' => 600,
+        'account_from_id' => $cashAccount->id,
+        'account_to_id' => $bankAccount->id,
+        'tax_area' => 'ideell',
+        'receipt_number' => 'MAN-001',
+        'status' => 'abgeschlossen',
+        'finalized_at' => now(),
+        'finalized_by' => $user->id,
+    ]);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.link-manual', $bankTransaction), [
+        'transaction_id' => $manualTransfer->id,
+    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $bankTransaction->refresh();
+
+    expect($bankTransaction->status)->toBe(BankTransaction::STATUS_BOOKED);
+    expect($bankTransaction->transaction_id)->toBe($manualTransfer->id);
+    expect($bankTransaction->selected_account_id)->toBe($cashAccount->id);
+    expect($bankImport->refresh()->booked_count)->toBe(1);
+});
+
+test('manual bank transaction links must match amount and source account', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('manual-link-guard');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $otherBankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1210',
+        'name' => 'Andere Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $cashAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1000',
+        'name' => 'Kasse',
+        'type' => 'kasse',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bankAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'umsatz.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bankAccount->id,
+        'booking_date' => '2026-09-18',
+        'amount' => 600,
+        'currency' => 'EUR',
+        'direction' => 'credit',
+        'counterparty_name' => 'Volksbank',
+        'purpose' => 'Einzahlung',
+        'fingerprint' => 'manual-link-guard-bank-transaction',
+        'status' => BankTransaction::STATUS_PENDING,
+    ]);
+
+    $wrongAmount = Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-09-16',
+        'description' => 'Falscher Betrag',
+        'amount' => 500,
+        'account_from_id' => $cashAccount->id,
+        'account_to_id' => $bankAccount->id,
+        'tax_area' => 'ideell',
+        'receipt_number' => 'MAN-002',
+        'status' => 'entwurf',
+    ]);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.link-manual', $bankTransaction), [
+        'transaction_id' => $wrongAmount->id,
+    ])->assertSessionHas('error', 'Die ausgewählte Buchung hat nicht denselben Betrag.');
+
+    $wrongBank = Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-09-16',
+        'description' => 'Falsches Bankkonto',
+        'amount' => 600,
+        'account_from_id' => $cashAccount->id,
+        'account_to_id' => $otherBankAccount->id,
+        'tax_area' => 'ideell',
+        'receipt_number' => 'MAN-003',
+        'status' => 'entwurf',
+    ]);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.link-manual', $bankTransaction), [
+        'transaction_id' => $wrongBank->id,
+    ])->assertSessionHas('error', 'Die ausgewählte Buchung passt nicht zu diesem Bankkonto.');
+
+    expect($bankTransaction->refresh()->status)->toBe(BankTransaction::STATUS_PENDING);
+    expect($bankTransaction->transaction_id)->toBeNull();
+    expect($bankImport->refresh()->booked_count)->toBe(0);
+});
+
 test('trinkwert daily closing csv imports with suggested accounts', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
