@@ -324,9 +324,23 @@
                             <form method="POST" action="{{ route('bank-imports.transactions.update', $bankTransaction) }}" enctype="multipart/form-data" class="space-y-4">
                                 @csrf
                                 @method('PATCH')
-                                <input type="hidden" name="source_account_id" value="{{ $bankTransaction->account_id }}">
 
-                                <div>
+                                <div data-account-field>
+                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{{ $sourceAccountLabel }}</label>
+                                    <input type="hidden"
+                                           name="source_account_id"
+                                           value="{{ old('source_account_id', $bankTransaction->account_id) }}"
+                                           data-account-id-input>
+                                    <input type="search"
+                                           value="{{ $accountOptions[old('source_account_id', $bankTransaction->account_id)] ?? '' }}"
+                                           list="bank-import-account-options"
+                                           autocomplete="off"
+                                           placeholder="Kontonummer oder Name suchen"
+                                           data-account-search
+                                           class="w-full rounded-xl border-slate-300 bg-white text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                </div>
+
+                                <div data-account-field>
                                     <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Gegenkonto</label>
                                     <input type="hidden"
                                            name="selected_account_id"
@@ -438,8 +452,8 @@
                 return;
             }
 
-            const form = search.closest('form');
-            const hidden = form?.querySelector('[data-account-id-input]');
+            const field = search.closest('[data-account-field]');
+            const hidden = field?.querySelector('[data-account-id-input]');
             const options = document.getElementById('bank-import-account-options')?.options ?? [];
 
             if (! hidden) {

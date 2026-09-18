@@ -264,7 +264,14 @@ class BankImportController extends Controller
                     ->where('active', true)
                     ->where('is_postable', true)),
             ],
-            'source_account_id' => ['required', 'integer', Rule::in([(int) $bankTransaction->account_id])],
+            'source_account_id' => [
+                'required',
+                'integer',
+                Rule::exists('accounts', 'id')->where(fn ($query) => $query
+                    ->where('tenant_id', $tenantId)
+                    ->where('active', true)
+                    ->where('is_postable', true)),
+            ],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:12288'],
             'receipt_kind' => ['nullable', Rule::in(['none', 'upload', 'vertrag', 'system_invoice'])],
             'invoice_id' => [
@@ -287,9 +294,27 @@ class BankImportController extends Controller
 
         $receiptData = $this->receiptData($request, $validated, $bankTransaction);
 
-        DB::transaction(function () use ($bankTransaction, $validated, $receiptData) {
+        DB::transaction(function () use ($bankTransaction, $validated, $receiptData, $tenantId) {
+            $fingerprint = app(BankStatementImportService::class)->fingerprint(
+                $tenantId,
+                (int) $validated['source_account_id'],
+                $this->rowFromBankTransaction($bankTransaction)
+            );
+
+            if ($fingerprint !== $bankTransaction->fingerprint) {
+                $duplicateExists = BankTransaction::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantId)
+                    ->where('fingerprint', $fingerprint)
+                    ->whereKeyNot($bankTransaction->id)
+                    ->exists();
+
+                abort_if($duplicateExists, 422, 'Für dieses Konto existiert bereits ein gleicher Bankumsatz.');
+            }
+
             $bankTransaction->update([
+                'account_id' => $validated['source_account_id'],
                 'selected_account_id' => $validated['selected_account_id'],
+                'fingerprint' => $fingerprint,
                 'status' => $bankTransaction->transaction_id
                     ? BankTransaction::STATUS_BOOKED
                     : BankTransaction::STATUS_READY,
@@ -301,8 +326,8 @@ class BankImportController extends Controller
 
         return $this->backToBankTransaction($bankTransaction)
             ->with('success', $bankTransaction->transaction_id
-                ? 'Gegenkonto wurde gespeichert und der Buchungsentwurf aktualisiert.'
-                : 'Gegenkonto wurde gespeichert.');
+                ? 'Konten wurden gespeichert und der Buchungsentwurf aktualisiert.'
+                : 'Konten wurden gespeichert.');
     }
 
     public function book(BankTransaction $bankTransaction)
@@ -580,6 +605,20 @@ class BankImportController extends Controller
 
                 return (string) $transaction->description === $description;
             });
+    }
+
+    private function rowFromBankTransaction(BankTransaction $bankTransaction): array
+    {
+        return [
+            'booking_date' => $bankTransaction->booking_date?->toDateString(),
+            'amount' => (float) $bankTransaction->amount,
+            'currency' => $bankTransaction->currency,
+            'counterparty_iban' => $bankTransaction->counterparty_iban,
+            'counterparty_name' => $bankTransaction->counterparty_name,
+            'purpose' => $bankTransaction->purpose,
+            'end_to_end_id' => $bankTransaction->end_to_end_id,
+            'bank_reference' => $bankTransaction->bank_reference,
+        ];
     }
 
     private function selectedAccountIdFromExistingBooking(Transaction $transaction, int $sourceAccountId, array $row): ?int
