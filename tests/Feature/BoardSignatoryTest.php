@@ -68,6 +68,9 @@ test('template parser renders active board signatures in one row', function () {
     $html = TemplateParser::parse('<p>Viele Grüße</p>{vorstand_unterschriften}', $member, $tenant);
 
     expect($html)->toContain('<table')
+        ->and($html)->toContain('role="presentation"')
+        ->and($html)->toContain('font-style:italic')
+        ->and($html)->toContain('border:0')
         ->and($html)->toContain('Olli Towet')
         ->and($html)->toContain('Mara Muster')
         ->and($html)->not->toContain('Nicht aktiv');
