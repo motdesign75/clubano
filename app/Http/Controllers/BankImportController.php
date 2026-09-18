@@ -575,6 +575,7 @@ class BankImportController extends Controller
         $endToEndId = Str::lower(trim((string) ($row['end_to_end_id'] ?? '')));
 
         return Transaction::withoutGlobalScopes()
+            ->with(['account_from', 'account_to'])
             ->where('tenant_id', $tenantId)
             ->whereDate('date', $bookingDate)
             ->where('amount', $amount)
@@ -589,9 +590,14 @@ class BankImportController extends Controller
                 $source = (string) ($meta['source'] ?? '');
                 $isBankImportBooking = $source === 'Bankumsatz-Import'
                     || str_starts_with((string) $transaction->receipt_number, 'BANK-');
+                $isMoneyTransfer = $this->isMoneyTransfer($transaction);
 
-                if (! $isBankImportBooking) {
+                if (! $isBankImportBooking && ! $isMoneyTransfer) {
                     return false;
+                }
+
+                if ($isMoneyTransfer && ! $isBankImportBooking) {
+                    return true;
                 }
 
                 if (($meta['bank_import_fingerprint'] ?? null) === $fingerprint) {
@@ -608,6 +614,14 @@ class BankImportController extends Controller
 
                 return (string) $transaction->description === $description;
             });
+    }
+
+    private function isMoneyTransfer(Transaction $transaction): bool
+    {
+        $moneyAccountTypes = ['bank', 'kasse'];
+
+        return in_array((string) $transaction->account_from?->type, $moneyAccountTypes, true)
+            && in_array((string) $transaction->account_to?->type, $moneyAccountTypes, true);
     }
 
     private function rowFromBankTransaction(BankTransaction $bankTransaction): array
