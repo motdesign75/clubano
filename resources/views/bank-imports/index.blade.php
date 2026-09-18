@@ -148,18 +148,29 @@
             <h2 class="text-xl font-semibold text-slate-950">Letzte Importe</h2>
             <div class="mt-4 space-y-3">
                 @forelse($imports as $import)
-                    <a href="{{ route('bank-imports.index', ['import' => $import->id, 'status' => 'alle']) }}" class="block rounded-2xl border border-slate-200 px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50">
+                    <div class="rounded-2xl border border-slate-200 px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50">
                         <div class="flex items-start justify-between gap-3">
-                            <div class="min-w-0">
+                            <a href="{{ route('bank-imports.index', ['import' => $import->id, 'status' => 'alle']) }}" class="min-w-0 flex-1">
                                 <div class="truncate text-sm font-semibold text-slate-950">{{ $import->filename }}</div>
                                 <div class="mt-1 text-xs text-slate-500">
                                     {{ $import->format }} · {{ $import->account?->name }} · {{ $import->created_at->format('d.m.Y H:i') }}
                                 </div>
-                            </div>
+                            </a>
                             <div class="shrink-0 text-right text-sm font-semibold text-slate-900">{{ $import->imported_count }}</div>
                         </div>
-                        <div class="mt-2 text-xs text-slate-500">{{ $import->duplicate_count }} Dubletten, {{ $import->booked_count }} gebucht</div>
-                    </a>
+                        <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="text-xs text-slate-500">{{ $import->duplicate_count }} Dubletten, {{ $import->booked_count }} gebucht</div>
+                            <form method="POST"
+                                  action="{{ route('bank-imports.destroy', $import) }}"
+                                  onsubmit="return confirm('Diesen Import wirklich löschen? Bereits erzeugte Buchungen bleiben erhalten.');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="inline-flex min-h-9 items-center justify-center rounded-xl px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50">
+                                    Import löschen
+                                </button>
+                            </form>
+                        </div>
+                    </div>
                 @empty
                     <div class="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
                         Noch kein Bankumsatz importiert.

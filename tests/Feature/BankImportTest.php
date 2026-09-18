@@ -272,6 +272,151 @@ test('booked bank transaction assignments can be corrected on the linked draft b
     expect((float) $bankAccount->refresh()->balance_current)->toBe(170.0);
 });
 
+test('faulty bank imports can be deleted while keeping created bookings', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('delete-import');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $incomeAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4300',
+        'name' => 'Kurse',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bankAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'fehlerhaft.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+        'booked_count' => 1,
+    ]);
+
+    $transaction = Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-08-24',
+        'description' => 'Max Muster - Braukurs',
+        'amount' => 79,
+        'account_from_id' => $incomeAccount->id,
+        'account_to_id' => $bankAccount->id,
+        'tax_area' => 'zweckbetrieb',
+        'receipt_number' => 'BANK-20260824-000001',
+        'receipt_kind' => 'bank_import',
+        'receipt_meta' => ['source' => 'Bankumsatz-Import'],
+        'status' => 'entwurf',
+    ]);
+
+    BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bankAccount->id,
+        'transaction_id' => $transaction->id,
+        'selected_account_id' => $incomeAccount->id,
+        'booking_date' => '2026-08-24',
+        'amount' => 79,
+        'currency' => 'EUR',
+        'direction' => 'credit',
+        'counterparty_name' => 'Max Muster',
+        'purpose' => 'Braukurs',
+        'fingerprint' => 'delete-import-test',
+        'status' => BankTransaction::STATUS_BOOKED,
+    ]);
+
+    $this->actingAs($user)->delete(route('bank-imports.destroy', $bankImport))
+        ->assertRedirect(route('bank-imports.index'));
+
+    expect(BankImport::withoutGlobalScopes()->whereKey($bankImport->id)->exists())->toBeFalse();
+    expect(BankTransaction::withoutGlobalScopes()->where('bank_import_id', $bankImport->id)->exists())->toBeFalse();
+    expect(Transaction::withoutGlobalScopes()->whereKey($transaction->id)->exists())->toBeTrue();
+});
+
+test('reimported bank statements relink bookings created by a deleted prior import', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('reimport-linked');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $incomeAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4300',
+        'name' => 'Kurse',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $csv = "Buchungstag;Betrag;Währung;Name;Verwendungszweck;Referenz\n"
+        . "24.08.2026;79,00;EUR;Max Muster;Braukurs;ABC123\n";
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $bankAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('umsatz-alt.csv', $csv),
+    ])->assertRedirect();
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+
+    $this->actingAs($user)->patch(route('bank-imports.transactions.update', $bankTransaction), [
+        'source_account_id' => $bankAccount->id,
+        'selected_account_id' => $incomeAccount->id,
+    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $bankTransaction->fresh()))
+        ->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $createdTransaction = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+    $oldImport = BankImport::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+
+    $this->actingAs($user)->delete(route('bank-imports.destroy', $oldImport))
+        ->assertRedirect(route('bank-imports.index'));
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $bankAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('umsatz-neu.csv', $csv),
+    ])->assertRedirect();
+
+    $newImport = BankImport::withoutGlobalScopes()->where('tenant_id', $tenant->id)->latest('id')->first();
+    $reimportedTransaction = BankTransaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('bank_import_id', $newImport->id)
+        ->first();
+
+    expect(Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(1);
+    expect($reimportedTransaction->status)->toBe(BankTransaction::STATUS_BOOKED);
+    expect($reimportedTransaction->transaction_id)->toBe($createdTransaction->id);
+    expect($reimportedTransaction->selected_account_id)->toBe($incomeAccount->id);
+    expect($newImport->booked_count)->toBe(1);
+    expect($newImport->meta['existing_booking_count'])->toBe(1);
+});
+
 test('camt imports read nested counterparty names from xml', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

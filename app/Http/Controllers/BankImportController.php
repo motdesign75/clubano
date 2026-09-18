@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Str;
 
 class BankImportController extends Controller
 {
@@ -121,6 +122,7 @@ class BankImportController extends Controller
             $imported = 0;
             $duplicates = 0;
             $autoAssigned = 0;
+            $existingBookings = 0;
             $dates = collect($parsed['rows'])->pluck('booking_date')->filter()->sort()->values();
             $accountsByNumber = Account::query()
                 ->where('tenant_id', $tenantId)
@@ -150,6 +152,12 @@ class BankImportController extends Controller
                     : null;
 
                 $fingerprint = $service->fingerprint($tenantId, $sourceAccountId, $row);
+                $existingBooking = $this->matchingImportedTransaction($tenantId, $sourceAccountId, $row, $fingerprint);
+
+                if ($existingBooking) {
+                    $selectedAccountId = $this->selectedAccountIdFromExistingBooking($existingBooking, $sourceAccountId, $row)
+                        ?: $selectedAccountId;
+                }
 
                 if (BankTransaction::withoutGlobalScopes()
                     ->where('tenant_id', $tenantId)
@@ -175,11 +183,17 @@ class BankImportController extends Controller
                     'end_to_end_id' => $row['end_to_end_id'],
                     'bank_reference' => $row['bank_reference'],
                     'fingerprint' => $fingerprint,
-                    'status' => $selectedAccountId ? BankTransaction::STATUS_READY : BankTransaction::STATUS_PENDING,
+                    'transaction_id' => $existingBooking?->id,
+                    'status' => $existingBooking
+                        ? BankTransaction::STATUS_BOOKED
+                        : ($selectedAccountId ? BankTransaction::STATUS_READY : BankTransaction::STATUS_PENDING),
                     'raw_data' => $row['raw'],
                 ]);
 
                 $imported++;
+                if ($existingBooking) {
+                    $existingBookings++;
+                }
                 if ($selectedAccountId) {
                     $autoAssigned++;
                 }
@@ -190,21 +204,50 @@ class BankImportController extends Controller
                 'duplicate_count' => $duplicates,
                 'meta' => array_filter([
                     'auto_assigned_count' => $autoAssigned,
+                    'existing_booking_count' => $existingBookings,
                     'source' => $parsed['format'] === 'TRINKWERT' ? 'Trinkwert' : null,
                 ]),
+                'booked_count' => $existingBookings,
             ]);
         });
 
         $autoAssigned = (int) ($bankImport?->meta['auto_assigned_count'] ?? 0);
+        $existingBookings = (int) ($bankImport?->meta['existing_booking_count'] ?? 0);
         $message = "{$bankImport->imported_count} Umsätze importiert, {$bankImport->duplicate_count} Dubletten übersprungen.";
 
         if ($autoAssigned > 0) {
             $message .= " {$autoAssigned} Zuordnung(en) wurden aus der Datei vorgeschlagen.";
         }
 
+        if ($existingBookings > 0) {
+            $message .= " {$existingBookings} bereits vorhandene Buchung(en) wurden wieder verknüpft.";
+        }
+
         return redirect()
             ->route('bank-imports.index', ['import' => $bankImport?->id])
             ->with('success', $message);
+    }
+
+    public function destroy(BankImport $bankImport)
+    {
+        $tenantId = auth()->user()->tenant_id;
+        abort_unless((int) $bankImport->tenant_id === $tenantId, 404);
+
+        DB::transaction(function () use ($bankImport) {
+            $bankImport->load('bankTransactions');
+
+            foreach ($bankImport->bankTransactions as $bankTransaction) {
+                if (! $bankTransaction->transaction_id) {
+                    app(ReceiptStorage::class)->delete($bankTransaction->receipt_file);
+                }
+            }
+
+            $bankImport->delete();
+        });
+
+        return redirect()
+            ->route('bank-imports.index')
+            ->with('success', 'Import wurde gelöscht. Bereits erzeugte Buchungen bleiben erhalten und werden bei einem Neuimport erkannt.');
     }
 
     public function update(Request $request, BankTransaction $bankTransaction)
@@ -365,6 +408,7 @@ class BankImportController extends Controller
                 'counterparty_iban' => $bankTransaction->counterparty_iban,
                 'bank_reference' => $bankTransaction->bank_reference,
                 'end_to_end_id' => $bankTransaction->end_to_end_id,
+                'bank_import_fingerprint' => $bankTransaction->fingerprint,
                 'invoice_id' => $invoice?->id,
                 'invoice_number' => $invoice?->invoice_number,
                 'linked_at' => $invoice ? now()->toIso8601String() : null,
@@ -430,6 +474,7 @@ class BankImportController extends Controller
             'counterparty_iban' => $bankTransaction->counterparty_iban,
             'bank_reference' => $bankTransaction->bank_reference,
             'end_to_end_id' => $bankTransaction->end_to_end_id,
+            'bank_import_fingerprint' => $bankTransaction->fingerprint,
             'invoice_id' => $invoice?->id,
             'invoice_number' => $invoice?->invoice_number,
             'linked_at' => $invoice ? now()->toIso8601String() : null,
@@ -474,12 +519,78 @@ class BankImportController extends Controller
 
     private function description(BankTransaction $bankTransaction): string
     {
+        return $this->descriptionFromParts($bankTransaction->counterparty_name, $bankTransaction->purpose);
+    }
+
+    private function descriptionFromRow(array $row): string
+    {
+        return $this->descriptionFromParts($row['counterparty_name'] ?? null, $row['purpose'] ?? null);
+    }
+
+    private function descriptionFromParts(?string $counterpartyName, ?string $purpose): string
+    {
         $parts = array_filter([
-            $bankTransaction->counterparty_name,
-            $bankTransaction->purpose,
+            $counterpartyName,
+            $purpose,
         ]);
 
         return mb_substr(implode(' - ', $parts) ?: 'Bankumsatz importiert', 0, 255);
+    }
+
+    private function matchingImportedTransaction(int $tenantId, int $sourceAccountId, array $row, string $fingerprint): ?Transaction
+    {
+        $amount = abs((float) $row['amount']);
+        $bookingDate = $row['booking_date'];
+        $isCredit = ($row['direction'] ?? null) === 'credit';
+        $description = $this->descriptionFromRow($row);
+        $bankReference = Str::lower(trim((string) ($row['bank_reference'] ?? '')));
+        $endToEndId = Str::lower(trim((string) ($row['end_to_end_id'] ?? '')));
+
+        return Transaction::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereDate('date', $bookingDate)
+            ->where('amount', $amount)
+            ->where($isCredit ? 'account_to_id' : 'account_from_id', $sourceAccountId)
+            ->get()
+            ->first(function (Transaction $transaction) use ($fingerprint, $description, $bankReference, $endToEndId) {
+                if ($transaction->isCancelled()) {
+                    return false;
+                }
+
+                $meta = $transaction->receipt_meta ?? [];
+                $source = (string) ($meta['source'] ?? '');
+                $isBankImportBooking = $source === 'Bankumsatz-Import'
+                    || str_starts_with((string) $transaction->receipt_number, 'BANK-');
+
+                if (! $isBankImportBooking) {
+                    return false;
+                }
+
+                if (($meta['bank_import_fingerprint'] ?? null) === $fingerprint) {
+                    return true;
+                }
+
+                if ($bankReference !== '' && Str::lower((string) ($meta['bank_reference'] ?? '')) === $bankReference) {
+                    return true;
+                }
+
+                if ($endToEndId !== '' && Str::lower((string) ($meta['end_to_end_id'] ?? '')) === $endToEndId) {
+                    return true;
+                }
+
+                return (string) $transaction->description === $description;
+            });
+    }
+
+    private function selectedAccountIdFromExistingBooking(Transaction $transaction, int $sourceAccountId, array $row): ?int
+    {
+        $selectedAccountId = ($row['direction'] ?? null) === 'credit'
+            ? $transaction->account_from_id
+            : $transaction->account_to_id;
+
+        return (int) $selectedAccountId !== $sourceAccountId
+            ? (int) $selectedAccountId
+            : null;
     }
 
     private function abortIfForeignTenant(BankTransaction $bankTransaction, int $tenantId): void
