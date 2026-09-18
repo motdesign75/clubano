@@ -458,6 +458,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::middleware('tenant.role:finance')->group(function () use ($cls) {
             Route::get('/bankumsaetze/import', [BankImportController::class, 'index'])->name('bank-imports.index');
             Route::post('/bankumsaetze/import', [BankImportController::class, 'store'])->name('bank-imports.store');
+            Route::delete('/bankumsaetze/import/{bankImport}', [BankImportController::class, 'destroy'])->name('bank-imports.destroy');
             Route::patch('/bankumsaetze/{bankTransaction}', [BankImportController::class, 'update'])->name('bank-imports.transactions.update');
             Route::post('/bankumsaetze/{bankTransaction}/buchen', [BankImportController::class, 'book'])->name('bank-imports.transactions.book');
             Route::post('/bankumsaetze/{bankTransaction}/ignorieren', [BankImportController::class, 'ignore'])->name('bank-imports.transactions.ignore');
