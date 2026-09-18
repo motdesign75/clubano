@@ -1495,7 +1495,12 @@ class EventController extends Controller
         $this->authorizeEvent($event);
         $event->load(['activeBookingForm.fields']);
 
-        $bookings = $event->bookings()->with('participants')->get();
+        $bookings = $event->bookings()
+            ->where('booking_status', '!=', 'cancelled')
+            ->with(['participants' => fn ($query) => $query->active()])
+            ->get()
+            ->filter(fn (EventBooking $booking) => $booking->participants->isNotEmpty())
+            ->values();
         $fieldLabels = $event->activeBookingForm?->fields
             ?->reject(fn (PublicFormField $field) => $field->isDisplayOnly())
             ->pluck('label', 'slug') ?? collect();
@@ -1598,7 +1603,13 @@ class EventController extends Controller
     {
         $displayMode = $request?->query('display') === 'organization' ? 'organization' : 'person';
 
-        $event->load(['tenant', 'bookings.participants.member', 'bookings.participants.contact']);
+        $event->load([
+            'tenant',
+            'bookings' => fn ($query) => $query->where('booking_status', '!=', 'cancelled'),
+            'bookings.participants' => fn ($query) => $query->active(),
+            'bookings.participants.member',
+            'bookings.participants.contact',
+        ]);
         $participants = $event->bookings
             ->flatMap(fn (EventBooking $booking) => $booking->participants->map(fn ($participant) => [
                 'booking' => $booking,
@@ -1716,8 +1727,15 @@ class EventController extends Controller
         ]);
 
         $paymentRequired = $request->boolean('payment_required');
+        $paymentStatus = $validated['payment_status'];
         $priceAmount = $paymentRequired ? round((float) ($validated['price_amount'] ?? 0), 2) : 0;
-        $paymentStatus = $paymentRequired ? $validated['payment_status'] : 'not_required';
+
+        if ($paymentStatus === 'cancelled') {
+            $paymentRequired = false;
+            $priceAmount = 0;
+        } elseif (! $paymentRequired) {
+            $paymentStatus = 'not_required';
+        }
 
         if ($priceAmount <= 0 && $paymentStatus === 'open') {
             $paymentStatus = 'not_required';
@@ -1739,12 +1757,12 @@ class EventController extends Controller
 
         $booking->recalculateTotalsFromParticipants();
 
-        if ($booking->participants()->count() === 1) {
-            $participant->refresh();
+        if ($booking->activeParticipants()->count() === 1) {
+            $remainingParticipant = $booking->activeParticipants()->first();
             $booking->forceFill([
-                'booker_name' => $participant->display_name ?: $participant->full_name ?: $booking->booker_name,
-                'booker_email' => $participant->email,
-                'booker_phone' => $participant->phone,
+                'booker_name' => $remainingParticipant?->display_name ?: $remainingParticipant?->full_name ?: $booking->booker_name,
+                'booker_email' => $remainingParticipant?->email,
+                'booker_phone' => $remainingParticipant?->phone,
             ])->save();
         }
 
@@ -2471,9 +2489,11 @@ class EventController extends Controller
         $participantDisplayMode = request('anzeige') === 'organization' ? 'organization' : 'person';
 
         $participants = EventBookingParticipant::query()
+            ->active()
             ->whereHas('booking', fn ($query) => $query
                 ->where('event_id', $event->id)
-                ->where('tenant_id', $event->tenant_id))
+                ->where('tenant_id', $event->tenant_id)
+                ->where('booking_status', '!=', 'cancelled'))
             ->with(['booking.submission', 'member', 'contact'])
             ->when($participantSearch !== '', function ($query) use ($participantSearch) {
                 $query->where(function ($subQuery) use ($participantSearch) {
@@ -2496,17 +2516,20 @@ class EventController extends Controller
             ->paginate(50, ['*'], 'teilnehmer')
             ->withQueryString();
 
-        $bookingTotals = EventBooking::query()
-            ->where('event_id', $event->id)
-            ->where('tenant_id', $event->tenant_id)
-            ->selectRaw('COUNT(*) as booking_count, COALESCE(SUM(participant_count), 0) as participant_count, COALESCE(SUM(total_amount), 0) as revenue')
+        $participantTotals = EventBookingParticipant::query()
+            ->active()
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $event->id)
+                ->where('tenant_id', $event->tenant_id)
+                ->where('booking_status', '!=', 'cancelled'))
+            ->selectRaw('COUNT(DISTINCT event_booking_id) as booking_count, COUNT(*) as participant_count, COALESCE(SUM(price_amount), 0) as revenue')
             ->first();
 
         return [
             'eventParticipants' => $participants,
-            'bookingSubmissionCount' => (int) ($bookingTotals->booking_count ?? 0),
-            'participantCount' => (int) ($bookingTotals->participant_count ?? 0),
-            'bookingRevenue' => (float) ($bookingTotals->revenue ?? 0),
+            'bookingSubmissionCount' => (int) ($participantTotals->booking_count ?? 0),
+            'participantCount' => (int) ($participantTotals->participant_count ?? 0),
+            'bookingRevenue' => (float) ($participantTotals->revenue ?? 0),
             'participantFilters' => [
                 'search' => $participantSearch,
                 'payment_status' => $participantPaymentStatus,
@@ -2531,16 +2554,19 @@ class EventController extends Controller
 
     private function participantSummaryData(Event $event): array
     {
-        $bookingTotals = EventBooking::query()
-            ->where('event_id', $event->id)
-            ->where('tenant_id', $event->tenant_id)
-            ->selectRaw('COUNT(*) as booking_count, COALESCE(SUM(participant_count), 0) as participant_count, COALESCE(SUM(total_amount), 0) as revenue')
+        $participantTotals = EventBookingParticipant::query()
+            ->active()
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $event->id)
+                ->where('tenant_id', $event->tenant_id)
+                ->where('booking_status', '!=', 'cancelled'))
+            ->selectRaw('COUNT(DISTINCT event_booking_id) as booking_count, COUNT(*) as participant_count, COALESCE(SUM(price_amount), 0) as revenue')
             ->first();
 
         return [
-            'bookingSubmissionCount' => (int) ($bookingTotals->booking_count ?? 0),
-            'participantCount' => (int) ($bookingTotals->participant_count ?? 0),
-            'bookingRevenue' => (float) ($bookingTotals->revenue ?? 0),
+            'bookingSubmissionCount' => (int) ($participantTotals->booking_count ?? 0),
+            'participantCount' => (int) ($participantTotals->participant_count ?? 0),
+            'bookingRevenue' => (float) ($participantTotals->revenue ?? 0),
         ];
     }
 

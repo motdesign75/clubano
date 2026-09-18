@@ -64,6 +64,13 @@ class EventBooking extends Model
         return $this->hasMany(EventBookingParticipant::class)->orderBy('position');
     }
 
+    public function activeParticipants()
+    {
+        return $this->hasMany(EventBookingParticipant::class)
+            ->active()
+            ->orderBy('position');
+    }
+
     public function voucherRedemptions()
     {
         return $this->hasMany(VoucherRedemption::class);
@@ -71,20 +78,18 @@ class EventBooking extends Model
 
     public function recalculateTotalsFromParticipants(): void
     {
-        $participants = $this->participants()->get();
+        $participants = $this->activeParticipants()->get();
         $grossAmount = $participants->sum(fn (EventBookingParticipant $participant) => (float) $participant->price_amount);
         $voucherDiscount = min((float) ($this->voucher_discount_amount ?? 0), $grossAmount);
         $totalAmount = max(0, round($grossAmount - $voucherDiscount, 2));
-        $participantCount = max(1, $participants->count());
+        $participantCount = $participants->count();
         $paymentStatuses = $participants->pluck('payment_status');
 
         $paymentStatus = 'not_required';
-        if ($totalAmount > 0) {
-            $paymentStatus = $paymentStatuses->contains('open') ? 'open' : 'paid';
-        }
-
-        if ($paymentStatuses->every(fn ($status) => $status === 'cancelled')) {
+        if ($participants->isEmpty()) {
             $paymentStatus = 'cancelled';
+        } elseif ($totalAmount > 0) {
+            $paymentStatus = $paymentStatuses->contains('open') ? 'open' : 'paid';
         }
 
         $this->forceFill([

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class EventBookingParticipant extends Model
@@ -56,6 +57,11 @@ class EventBookingParticipant extends Model
     public function contact()
     {
         return $this->belongsTo(Contact::class);
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('payment_status', '!=', 'cancelled');
     }
 
     public function getFullNameAttribute(): string

@@ -960,6 +960,39 @@ test('staff can manually add event participants from members contacts and guests
         ->assertSee('Presse Demo')
         ->assertSee('Petra Kontakt');
 
+    $petraParticipant = EventBooking::query()
+        ->where('event_id', $event->id)
+        ->with('participants')
+        ->get()
+        ->flatMap->participants
+        ->firstWhere('email', 'petra@example.test');
+
+    $this->actingAs($staff)->patch(route('events.participants.update', [$event, $petraParticipant->booking, $petraParticipant]), [
+        'first_name' => 'Petra',
+        'last_name' => 'Kontakt',
+        'organization_name' => null,
+        'email' => 'petra@example.test',
+        'phone' => null,
+        'payment_status' => 'cancelled',
+        'payment_reason' => 'Abgesagt',
+        'source' => 'manual',
+        'note' => 'Storniert vor Termin',
+    ])->assertRedirect(route('events.participants.manage', $event));
+
+    $petraParticipant->refresh();
+    expect($petraParticipant->payment_status)->toBe('cancelled');
+    expect($petraParticipant->booking->fresh()->participant_count)->toBe(1);
+
+    $this->actingAs($staff)->get(route('events.participants.manage', $event))
+        ->assertOk()
+        ->assertDontSee('petra@example.test')
+        ->assertSee('5 Teilnehmer insgesamt');
+
+    $this->actingAs($staff)->get(route('events.participants.print', [$event, 'display' => 'organization']))
+        ->assertOk()
+        ->assertDontSee('Petra Kontakt')
+        ->assertSee('Sponsor GmbH');
+
     $pdfResponse = $this->actingAs($staff)->get(route('events.participants.pdf', [$event, 'display' => 'organization']));
     $pdfResponse->assertOk();
     expect($pdfResponse->headers->get('content-type'))->toContain('application/pdf');
