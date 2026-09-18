@@ -337,15 +337,15 @@
                         <option value="du" @selected($bookingAddressTone === 'du')>Du-Ansprache</option>
                         <option value="sie" @selected($bookingAddressTone === 'sie')>Sie-Ansprache</option>
                     </select>
-                    <p class="mt-1 text-xs leading-5 text-slate-500">Für öffentliche Anmeldungen mit Gästen, Firmen oder anderen Vereinen wirkt die Sie-Ansprache oft passender.</p>
+                    <p class="mt-1 text-xs leading-5 text-slate-500">Für öffentliche Anmeldungen mit Firmen, Organisationen oder anderen Vereinen wirkt die Sie-Ansprache oft passender.</p>
                 </div>
 
                 <div>
-                    <label for="price_per_person" class="{{ $labelClass }}">Preis für Gäste / Nichtmitglieder</label>
+                    <label for="price_per_person" class="{{ $labelClass }}">Normalpreis / Nichtmitglieder</label>
                     <input type="number" step="0.01" min="0" name="price_per_person" id="price_per_person"
                            value="{{ old('price_per_person', number_format((float) ($event->price_per_person ?? 0), 2, '.', '')) }}"
                            class="{{ $inputClass }}">
-                    <p class="mt-1 text-xs text-slate-500">Dieser Preis gilt für externe Teilnehmer, Gäste, Firmen und Organisationen.</p>
+                    <p class="mt-1 text-xs text-slate-500">Dieser Preis gilt für externe Teilnehmer, Firmen, Organisationen und Einzelpersonen.</p>
                 </div>
 
                 <div>
@@ -360,7 +360,7 @@
                     <input type="checkbox" name="organization_bookings_free" value="1" class="mt-1 h-5 w-5 rounded border-emerald-300 text-emerald-700" @checked(old('organization_bookings_free', $event->organization_bookings_free ?? false))>
                     <span>
                         <span class="block text-sm font-semibold text-emerald-950">Vereine kostenfrei</span>
-                        <span class="mt-1 block text-sm text-emerald-700">Gilt nur für externe Vereine. Firmen, Unternehmen und sonstige Organisationen zahlen weiterhin den Gästepreis.</span>
+                        <span class="mt-1 block text-sm text-emerald-700">Gilt nur für externe Vereine. Für Firmen, Unternehmen und sonstige Organisationen gilt weiterhin der Normalpreis.</span>
                     </span>
                 </label>
 

@@ -61,7 +61,7 @@
                                 @if($event->is_paid)
                                     @if($hasMemberRate)
                                         Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.strtoupper($event->currency ?: 'EUR') : 'kostenfrei' }}<br>
-                                        Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }}
+                                        Normalpreis {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }}
                                     @else
                                         {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }} pro Person
                                     @endif
@@ -252,7 +252,7 @@
                                     @if($event->is_paid)
                                         @if($hasMemberRate)
                                             Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.strtoupper($event->currency ?: 'EUR') : 'kostenfrei' }}<br>
-                                            Gäste {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }}
+                                            Normalpreis {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }}
                                         @else
                                             {{ number_format($externalPrice, 2, ',', '.') }} {{ strtoupper($event->currency ?: 'EUR') }} pro Person
                                         @endif

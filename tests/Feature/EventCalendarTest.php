@@ -306,7 +306,7 @@ test('event booking form can use formal address tone for public copy', function 
     expect($form->booking_address_tone)->toBe('sie')
         ->and($form->description)->toContain('Melden Sie sich hier verbindlich zur Veranstaltung an.')
         ->and($form->description)->toContain('Für Mitglieder ist die Teilnahme kostenlos.')
-        ->and($form->description)->toContain('Für Gäste und Nichtmitglieder kostet die Teilnahme 70,00 €.')
+        ->and($form->description)->toContain('Der Normalpreis beträgt 70,00 €.')
         ->and($form->description)->toContain('Nach der Buchung erhalten Sie automatisch eine Rechnung per E-Mail, wenn eine Zahlung fällig ist.')
         ->and($form->success_message)->toContain('Danke für Ihre Anmeldung.');
 });

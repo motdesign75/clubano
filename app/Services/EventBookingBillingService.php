@@ -58,7 +58,7 @@ class EventBookingBillingService
 
                 InvoiceItem::create([
                     'invoice_id' => $invoice->id,
-                    'description' => $this->buildItemDescription($event) . ($type === 'member' ? ' - Mitglieder' : ' - Gäste/Nichtmitglieder'),
+                    'description' => $this->buildItemDescription($event) . ($type === 'member' ? ' - Mitglieder' : ' - Normalpreis/Nichtmitglieder'),
                     'details' => 'Buchungsnummer: ' . $booking->booking_reference,
                     'quantity' => $participants->count(),
                     'unit' => 'Teilnehmer',
