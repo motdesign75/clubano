@@ -150,7 +150,7 @@ test('trinkwert daily closing csv imports with suggested accounts', function () 
     expect($bankImport->format)->toBe('TRINKWERT');
     expect(strlen($bankImport->format))->toBeLessThanOrEqual(20);
     expect($bankImport->imported_count)->toBe(2);
-    expect($bankImport->meta['auto_assigned_count'])->toBe(2);
+    expect($bankImport->meta['auto_assigned_count'])->toBe(1);
     expect($cashTransaction->account_id)->toBe($cashAccount->id);
     expect($cashTransaction->selected_account_id)->toBe($revenueAccount->id);
     expect($cashTransaction->status)->toBe(BankTransaction::STATUS_READY);
@@ -158,7 +158,8 @@ test('trinkwert daily closing csv imports with suggested accounts', function () 
     expect($cashTransaction->purpose)->toContain('GemeinsamZeit 09.09.2026');
     expect($cashTransaction->raw_data['trinkwert_source_account_number'])->toBe('1000');
     expect($voucherTransaction->account_id)->toBe($revenueAccount->id);
-    expect($voucherTransaction->selected_account_id)->toBe($voucherAccount->id);
+    expect($voucherTransaction->selected_account_id)->toBeNull();
+    expect($voucherTransaction->status)->toBe(BankTransaction::STATUS_PENDING);
     expect($voucherTransaction->raw_data['trinkwert_is_credit_balance_redemption'])->toBeTrue();
     expect($voucherTransaction->purpose)->toContain('Guthaben-Verbrauch: kein neuer Zahlungseingang');
 
@@ -171,13 +172,104 @@ test('trinkwert daily closing csv imports with suggested accounts', function () 
     expect($transaction->account_to_id)->toBe($cashAccount->id);
     expect((float) $transaction->amount)->toBe(79.5);
 
-    $this->actingAs($user)->post(route('bank-imports.transactions.book', $voucherTransaction))
+    $this->actingAs($user)->patch(route('bank-imports.transactions.update', $voucherTransaction), [
+        'source_account_id' => $revenueAccount->id,
+        'selected_account_id' => $voucherAccount->id,
+    ])->assertRedirectContains('#bank-transaction-' . $voucherTransaction->id);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $voucherTransaction->fresh()))
         ->assertRedirectContains('#bank-transaction-' . $voucherTransaction->id);
 
     $voucherBooking = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('amount', 33.5)->first();
 
     expect($voucherBooking->account_from_id)->toBe($voucherAccount->id);
     expect($voucherBooking->account_to_id)->toBe($revenueAccount->id);
+});
+
+test('booked bank transaction assignments can be corrected on the linked draft booking', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('booking-correction');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+        'balance_start' => 100,
+    ]);
+
+    $wrongAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1700',
+        'name' => 'Verbindlichkeiten aus Guthaben',
+        'type' => 'kasse',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $correctAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4300',
+        'name' => 'Veranstaltungserlöse',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bankAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'umsatz.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bankAccount->id,
+        'selected_account_id' => $wrongAccount->id,
+        'booking_date' => '2026-08-24',
+        'amount' => 70,
+        'currency' => 'EUR',
+        'direction' => 'credit',
+        'counterparty_name' => 'Max Muster',
+        'purpose' => 'Anmeldung',
+        'fingerprint' => 'booking-correction-test',
+        'status' => BankTransaction::STATUS_READY,
+    ]);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $bankTransaction))
+        ->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $transaction = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+
+    expect($transaction->account_from_id)->toBe($wrongAccount->id);
+
+    $this->actingAs($user)->patch(route('bank-imports.transactions.update', $bankTransaction->fresh()), [
+        'source_account_id' => $bankAccount->id,
+        'selected_account_id' => $correctAccount->id,
+    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $transaction->refresh();
+    $bankTransaction->refresh();
+
+    expect($bankTransaction->status)->toBe(BankTransaction::STATUS_BOOKED);
+    expect($bankTransaction->selected_account_id)->toBe($correctAccount->id);
+    expect($transaction->account_from_id)->toBe($correctAccount->id);
+    expect($transaction->account_to_id)->toBe($bankAccount->id);
+    expect((float) $wrongAccount->refresh()->balance_current)->toBe(0.0);
+    expect((float) $correctAccount->refresh()->balance_current)->toBe(-70.0);
+    expect((float) $bankAccount->refresh()->balance_current)->toBe(170.0);
 });
 
 test('camt imports read nested counterparty names from xml', function () {

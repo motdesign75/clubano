@@ -242,20 +242,24 @@ class BankImportController extends Controller
             'contract_date' => ['nullable', 'date'],
         ]);
 
-        if ($bankTransaction->status === BankTransaction::STATUS_BOOKED) {
-            return back()->with('error', 'Dieser Bankumsatz wurde bereits gebucht.');
-        }
-
         $receiptData = $this->receiptData($request, $validated, $bankTransaction);
 
-        $bankTransaction->update([
-            'selected_account_id' => $validated['selected_account_id'],
-            'status' => BankTransaction::STATUS_READY,
-            ...$receiptData,
-        ]);
+        DB::transaction(function () use ($bankTransaction, $validated, $receiptData) {
+            $bankTransaction->update([
+                'selected_account_id' => $validated['selected_account_id'],
+                'status' => $bankTransaction->transaction_id
+                    ? BankTransaction::STATUS_BOOKED
+                    : BankTransaction::STATUS_READY,
+                ...$receiptData,
+            ]);
+
+            $this->syncLinkedTransaction($bankTransaction);
+        });
 
         return $this->backToBankTransaction($bankTransaction)
-            ->with('success', 'Gegenkonto wurde gespeichert.');
+            ->with('success', $bankTransaction->transaction_id
+                ? 'Gegenkonto wurde gespeichert und der Buchungsentwurf aktualisiert.'
+                : 'Gegenkonto wurde gespeichert.');
     }
 
     public function book(BankTransaction $bankTransaction)
@@ -335,8 +339,9 @@ class BankImportController extends Controller
         }
 
         $amount = abs((float) $bankTransaction->amount);
-        $isCredit = $bankTransaction->isCredit();
         $invoice = $this->invoiceFromBankTransaction($bankTransaction);
+
+        [$accountFromId, $accountToId] = $this->accountPairForBankTransaction($bankTransaction);
 
         $transaction = Transaction::create([
             'tenant_id' => $bankTransaction->tenant_id,
@@ -345,8 +350,8 @@ class BankImportController extends Controller
             'date' => $bankTransaction->booking_date,
             'description' => $this->description($bankTransaction),
             'amount' => $amount,
-            'account_from_id' => $isCredit ? $contraAccount->id : $bankAccount->id,
-            'account_to_id' => $isCredit ? $bankAccount->id : $contraAccount->id,
+            'account_from_id' => $accountFromId,
+            'account_to_id' => $accountToId,
             'tax_area' => $contraAccount->tax_area ?: $bankAccount->tax_area ?: 'ideell',
             'receipt_number' => 'BANK-' . $bankTransaction->booking_date?->format('Ymd') . '-' . str_pad((string) $bankTransaction->id, 6, '0', STR_PAD_LEFT),
             'receipt_kind' => $invoice ? 'system_invoice' : 'bank_import',
@@ -392,6 +397,79 @@ class BankImportController extends Controller
         $bankTransaction->bankImport?->increment('booked_count');
 
         return $transaction;
+    }
+
+    private function syncLinkedTransaction(BankTransaction $bankTransaction): void
+    {
+        $bankTransaction->refresh()->loadMissing(['account', 'selectedAccount', 'transaction']);
+
+        if (! $bankTransaction->transaction) {
+            return;
+        }
+
+        if ($bankTransaction->transaction->isFinalized()) {
+            abort(422, 'Die verknüpfte Buchung ist bereits abgeschlossen und kann nicht mehr automatisch korrigiert werden.');
+        }
+
+        [$accountFromId, $accountToId] = $this->accountPairForBankTransaction($bankTransaction);
+        $affectedAccountIds = collect([
+            $bankTransaction->transaction->account_from_id,
+            $bankTransaction->transaction->account_to_id,
+            $accountFromId,
+            $accountToId,
+        ])->filter()->unique()->values();
+
+        $invoice = $this->invoiceFromBankTransaction($bankTransaction);
+        $receiptKind = $invoice ? 'system_invoice' : ($bankTransaction->receipt_kind ?: 'bank_import');
+        $receiptMeta = array_filter([
+            ...($bankTransaction->receipt_meta ?? []),
+            'source' => 'Bankumsatz-Import',
+            'bank_import_id' => $bankTransaction->bank_import_id,
+            'bank_transaction_id' => $bankTransaction->id,
+            'counterparty_name' => $bankTransaction->counterparty_name,
+            'counterparty_iban' => $bankTransaction->counterparty_iban,
+            'bank_reference' => $bankTransaction->bank_reference,
+            'end_to_end_id' => $bankTransaction->end_to_end_id,
+            'invoice_id' => $invoice?->id,
+            'invoice_number' => $invoice?->invoice_number,
+            'linked_at' => $invoice ? now()->toIso8601String() : null,
+            'linked_by' => $invoice ? auth()->id() : null,
+        ]);
+
+        $bankTransaction->transaction->forceFill([
+            'date' => $bankTransaction->booking_date,
+            'description' => $this->description($bankTransaction),
+            'amount' => abs((float) $bankTransaction->amount),
+            'account_from_id' => $accountFromId,
+            'account_to_id' => $accountToId,
+            'tax_area' => $bankTransaction->selectedAccount?->tax_area
+                ?: $bankTransaction->account?->tax_area
+                ?: 'ideell',
+            'receipt_file' => $bankTransaction->receipt_file,
+            'receipt_kind' => $receiptKind,
+            'receipt_meta' => $receiptMeta,
+            'invoice_id' => $invoice?->id,
+            'updated_by' => auth()->id(),
+        ])->save();
+
+        Account::query()
+            ->whereIn('id', $affectedAccountIds)
+            ->get()
+            ->each(fn (Account $account) => $account->updateBalance());
+    }
+
+    private function accountPairForBankTransaction(BankTransaction $bankTransaction): array
+    {
+        $bankAccount = $bankTransaction->account;
+        $contraAccount = $bankTransaction->selectedAccount;
+
+        if (! $bankAccount || ! $contraAccount) {
+            abort(422, 'Bankkonto oder Gegenkonto fehlt.');
+        }
+
+        return $bankTransaction->isCredit()
+            ? [$contraAccount->id, $bankAccount->id]
+            : [$bankAccount->id, $contraAccount->id];
     }
 
     private function description(BankTransaction $bankTransaction): string
