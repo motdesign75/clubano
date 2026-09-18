@@ -95,6 +95,28 @@ test('html sanitizer normalizes www mail button links to https urls', function (
         ->toContain('JETZT ANMELDEN');
 });
 
+test('html sanitizer normalizes domain mail button links without scheme', function () {
+    $html = '<p><a href="ghg-sarstedt.de/anmelden" style="display:inline-block;background:#047857;color:#ffffff;">JETZT ANMELDEN</a></p>';
+
+    $clean = app(HtmlSanitizer::class)->sanitize($html);
+
+    expect($clean)
+        ->toContain('href="https://ghg-sarstedt.de/anmelden"')
+        ->toContain('JETZT ANMELDEN');
+});
+
+test('html sanitizer normalizes editor relative form links to absolute app urls', function () {
+    config(['app.url' => 'https://clubano.test']);
+
+    $html = '<p><a href="../f/event-55-goldener-oktober" style="display:inline-block;background:#047857;color:#ffffff;">JETZT ANMELDEN</a></p>';
+
+    $clean = app(HtmlSanitizer::class)->sanitize($html);
+
+    expect($clean)
+        ->toContain('href="https://clubano.test/f/event-55-goldener-oktober"')
+        ->toContain('JETZT ANMELDEN');
+});
+
 test('template parser replaces individual link placeholder from recipient data', function () {
     $html = '<a href="{link}">Antwort öffnen</a>';
 
