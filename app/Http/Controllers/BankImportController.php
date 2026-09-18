@@ -144,7 +144,10 @@ class BankImportController extends Controller
             ]);
 
             foreach ($parsed['rows'] as $row) {
-                $sourceAccount = $accountsByNumber->get((string) ($row['source_account_number'] ?? ''));
+                $useSourceAccountFromFile = $parsed['format'] === 'TRINKWERT';
+                $sourceAccount = $useSourceAccountFromFile
+                    ? $accountsByNumber->get((string) ($row['source_account_number'] ?? ''))
+                    : null;
                 $selectedAccount = $accountsByNumber->get((string) ($row['selected_account_number'] ?? ''));
                 $sourceAccountId = (int) ($sourceAccount?->id ?? $validated['account_id']);
                 $selectedAccountId = $selectedAccount && (int) $selectedAccount->id !== $sourceAccountId

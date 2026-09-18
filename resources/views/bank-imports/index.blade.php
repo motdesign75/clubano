@@ -325,20 +325,7 @@
                                 @csrf
                                 @method('PATCH')
 
-                                <div data-account-field>
-                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{{ $sourceAccountLabel }}</label>
-                                    <input type="hidden"
-                                           name="source_account_id"
-                                           value="{{ old('source_account_id', $bankTransaction->account_id) }}"
-                                           data-account-id-input>
-                                    <input type="search"
-                                           value="{{ $accountOptions[old('source_account_id', $bankTransaction->account_id)] ?? '' }}"
-                                           list="bank-import-account-options"
-                                           autocomplete="off"
-                                           placeholder="Kontonummer oder Name suchen"
-                                           data-account-search
-                                           class="w-full rounded-xl border-slate-300 bg-white text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                                </div>
+                                <input type="hidden" name="source_account_id" value="{{ $bankTransaction->account_id }}">
 
                                 <div data-account-field>
                                     <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Gegenkonto</label>

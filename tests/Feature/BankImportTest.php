@@ -78,8 +78,18 @@ test('bank csv imports understand common counterparty and purpose columns', func
         'is_postable' => true,
     ]);
 
-    $csv = "Buchungstag;Betrag;Währung;Auftraggeber/Empfänger;Verwendungszweck 1;Verwendungszweck 2;IBAN Auftraggeber/Empfänger\n"
-        . "24.08.2026;100,00;EUR;Max Muster;Rechnung R-20260824001;Braukurs;DE02120300000000202051\n";
+    $wrongAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1700',
+        'name' => 'Verbindlichkeiten aus Guthaben',
+        'type' => 'kasse',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $csv = "Buchungstag;Betrag;Währung;Auftraggeber/Empfänger;Verwendungszweck 1;Verwendungszweck 2;IBAN Auftraggeber/Empfänger;Konto\n"
+        . "24.08.2026;100,00;EUR;Max Muster;Rechnung R-20260824001;Braukurs;DE02120300000000202051;{$wrongAccount->number}\n";
 
     $this->actingAs($user)->post(route('bank-imports.store'), [
         'account_id' => $bankAccount->id,
@@ -91,6 +101,7 @@ test('bank csv imports understand common counterparty and purpose columns', func
     expect($bankTransaction->counterparty_name)->toBe('Max Muster');
     expect($bankTransaction->counterparty_iban)->toBe('DE02120300000000202051');
     expect($bankTransaction->purpose)->toBe('Rechnung R-20260824001 · Braukurs');
+    expect($bankTransaction->account_id)->toBe($bankAccount->id);
 });
 
 test('trinkwert daily closing csv imports with suggested accounts', function () {
