@@ -104,6 +104,71 @@ test('bank csv imports understand common counterparty and purpose columns', func
     expect($bankTransaction->account_id)->toBe($bankAccount->id);
 });
 
+test('bank imports relink existing manual cash to bank transfers instead of duplicating them', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('manual-transfer-match');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Volksbank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $cashAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1000',
+        'name' => 'Kasse',
+        'type' => 'kasse',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $manualTransfer = Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-09-15',
+        'description' => 'Einzahlung Kasse an Bank',
+        'amount' => 600,
+        'account_from_id' => $cashAccount->id,
+        'account_to_id' => $bankAccount->id,
+        'tax_area' => 'ideell',
+        'receipt_number' => 'MAN-TRANSFER-001',
+        'status' => 'abgeschlossen',
+        'finalized_at' => now(),
+        'finalized_by' => $user->id,
+    ]);
+
+    $csv = "Buchungstag;Betrag;Währung;Name;Verwendungszweck;Referenz\n"
+        . "15.09.2026;600,00;EUR;Volksbank;Einzahlung;TRANSFER-600\n";
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $bankAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('volksbank.csv', $csv),
+    ])->assertRedirect();
+
+    $bankImport = BankImport::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->first();
+
+    expect(Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(1);
+    expect($bankImport->booked_count)->toBe(1);
+    expect($bankImport->meta['existing_booking_count'])->toBe(1);
+    expect($bankTransaction->status)->toBe(BankTransaction::STATUS_BOOKED);
+    expect($bankTransaction->transaction_id)->toBe($manualTransfer->id);
+    expect($bankTransaction->selected_account_id)->toBe($cashAccount->id);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $bankTransaction))
+        ->assertSessionHas('error', 'Dieser Bankumsatz wurde bereits gebucht.');
+
+    expect(Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(1);
+});
+
 test('trinkwert daily closing csv imports with suggested accounts', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
