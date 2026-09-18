@@ -28,37 +28,37 @@
             box-sizing: border-box;
         }
         .sender-line {
-            margin-left: 5mm;
+            margin-left: 3mm;
             margin-top: 2mm;
-            width: 80mm;
-            height: 5mm;
+            width: 84mm;
+            height: 5.5mm;
             overflow: hidden;
             white-space: nowrap;
-            font-size: 7.5pt;
-            line-height: 5mm;
+            font-size: 8.2pt;
+            line-height: 5.5mm;
             color: #64748b;
         }
         .recipient-address {
-            margin-left: 5mm;
-            margin-top: 9mm;
-            width: 85mm;
-            height: 29mm;
+            margin-left: 3mm;
+            margin-top: 6mm;
+            width: 86mm;
+            height: 32mm;
             overflow: hidden;
-            font-size: 12pt;
-            line-height: 5mm;
+            font-size: 13.5pt;
+            line-height: 5.7mm;
             color: #111827;
         }
         .meta {
             padding-top: 5mm;
             width: 65mm;
             min-height: 40mm;
-            font-size: 9.5pt;
+            font-size: 11.5pt;
             line-height: 1.35;
             color: #475569;
         }
-        .meta-row { margin-bottom: 2.4mm; }
-        .meta-label { display: block; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; }
-        .meta-value { display: block; color: #172033; }
+        .meta-row { margin-bottom: 3.2mm; }
+        .meta-label { display: block; font-size: 7.8pt; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; }
+        .meta-value { display: block; color: #172033; font-size: 11.5pt; line-height: 1.3; }
         .content {
             margin: 26mm 20mm {{ $bottomMargin ?? 30 }}mm 25mm;
             box-sizing: border-box;

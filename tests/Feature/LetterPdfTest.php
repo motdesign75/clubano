@@ -72,8 +72,10 @@ test('letter pdf address window uses full envelope window dimensions', function 
 
     expect($html)->toContain('.address-cell { width: 90mm; }')
         ->and($html)->toContain('width: 90mm;')
-        ->and($html)->toContain('font-size: 12pt;')
-        ->and($html)->toContain('line-height: 5mm;');
+        ->and($html)->toContain('margin-left: 3mm;')
+        ->and($html)->toContain('font-size: 13.5pt;')
+        ->and($html)->toContain('line-height: 5.7mm;')
+        ->and($html)->toContain('font-size: 11.5pt;');
 });
 
 test('letter address lines omit country codes for every recipient type', function () {
