@@ -52,6 +52,30 @@ test('letter pdfs are generated with printable window envelope layout', function
     expect($response->getContent())->not->toContain('>DE<');
 });
 
+test('letter pdf address window uses full envelope window dimensions', function () {
+    $html = view('letters.pdf', [
+        'tenant' => (object) [
+            'city' => 'Musterstadt',
+            'email' => 'post@example.test',
+            'phone' => '01234 5678',
+        ],
+        'template' => (object) ['subject' => 'Einladung'],
+        'letter' => [
+            'address_lines' => ['Muster GmbH', 'Max Mustermann', 'Empfaengerweg 4', '54321 Beispielstadt'],
+            'body' => '<p>Hallo</p>',
+        ],
+        'senderLine' => 'Briefverein e.V. · Musterstrasse 12 · 12345 Musterstadt',
+        'bottomMargin' => 45,
+        'letterheadImagePath' => null,
+        'showLetterheadImage' => false,
+    ])->render();
+
+    expect($html)->toContain('.address-cell { width: 90mm; }')
+        ->and($html)->toContain('width: 90mm;')
+        ->and($html)->toContain('font-size: 12pt;')
+        ->and($html)->toContain('line-height: 5mm;');
+});
+
 test('letter address lines omit country codes for every recipient type', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

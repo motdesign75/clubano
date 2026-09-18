@@ -18,11 +18,11 @@
         }
         .top-row tr,
         .top-row td { padding: 0; vertical-align: top; border: 0; }
-        .address-cell { width: 85mm; }
-        .top-gap-cell { width: 20mm; }
+        .address-cell { width: 90mm; }
+        .top-gap-cell { width: 15mm; }
         .meta-cell { width: 65mm; }
         .address-window {
-            width: 85mm;
+            width: 90mm;
             height: 45mm;
             overflow: hidden;
             box-sizing: border-box;
@@ -30,7 +30,7 @@
         .sender-line {
             margin-left: 5mm;
             margin-top: 2mm;
-            width: 75mm;
+            width: 80mm;
             height: 5mm;
             overflow: hidden;
             white-space: nowrap;
@@ -40,12 +40,12 @@
         }
         .recipient-address {
             margin-left: 5mm;
-            margin-top: 10.7mm;
-            width: 80mm;
-            height: 27.3mm;
+            margin-top: 9mm;
+            width: 85mm;
+            height: 29mm;
             overflow: hidden;
-            font-size: 11pt;
-            line-height: 4.55mm;
+            font-size: 12pt;
+            line-height: 5mm;
             color: #111827;
         }
         .meta {
