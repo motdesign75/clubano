@@ -1278,12 +1278,15 @@ test('staff can choose events for a printable poster overview', function () {
 
     $selectionResponse->assertOk();
     $selectionResponse->assertSee('Terminaushang');
+    $selectionResponse->assertSee('Detail');
+    $selectionResponse->assertSee('Kompakt');
     $selectionResponse->assertSee('Sommerfest');
     $selectionResponse->assertSee('Internes Planungstreffen');
 
     $printResponse = $this->actingAs($staff)->post(route('events.poster.print'), [
         'headline' => 'Termine im Vereinsheim',
         'note' => 'Bitte vormerken.',
+        'layout' => 'detail',
         'event_ids' => [$firstEvent->id],
     ]);
 
@@ -1292,12 +1295,27 @@ test('staff can choose events for a printable poster overview', function () {
     $printResponse->assertSee('Bitte vormerken.');
     $printResponse->assertSee('Sommerfest');
     $printResponse->assertSee('gemütlicher Atmosphäre');
+    $printResponse->assertSee('Detailansicht');
     $printResponse->assertDontSee('gem&uuml;tlicher', false);
     $printResponse->assertDontSee('Internes Planungstreffen');
+
+    $compactPrintResponse = $this->actingAs($staff)->post(route('events.poster.print'), [
+        'headline' => 'Viele Termine',
+        'layout' => 'compact',
+        'event_ids' => [$firstEvent->id, $secondEvent->id],
+    ]);
+
+    $compactPrintResponse->assertOk();
+    $compactPrintResponse->assertSee('Kompakte Liste');
+    $compactPrintResponse->assertSee('Sommerfest');
+    $compactPrintResponse->assertSee('Internes Planungstreffen');
+    $compactPrintResponse->assertDontSee('gemütlicher Atmosphäre');
+    $compactPrintResponse->assertDontSee('Verantwortlich:');
 
     $pdfResponse = $this->actingAs($staff)->post(route('events.poster.pdf'), [
         'headline' => 'Termine im Vereinsheim',
         'note' => 'Bitte vormerken.',
+        'layout' => 'compact',
         'event_ids' => [$firstEvent->id],
     ]);
 

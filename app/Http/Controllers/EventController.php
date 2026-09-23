@@ -450,6 +450,7 @@ class EventController extends Controller
             'event_ids.*' => ['integer', Rule::exists('events', 'id')->where('tenant_id', $tenantId)],
             'headline' => 'nullable|string|max:120',
             'note' => 'nullable|string|max:500',
+            'layout' => 'nullable|in:detail,compact',
         ]);
 
         $eventIds = collect($validated['event_ids'])->map(fn ($id) => (int) $id)->unique()->values();
@@ -472,6 +473,7 @@ class EventController extends Controller
             'tenant' => $events->first()->tenant,
             'headline' => $validated['headline'] ?? 'Aktuelle Termine',
             'note' => $validated['note'] ?? null,
+            'layout' => $validated['layout'] ?? 'detail',
         ];
     }
 
