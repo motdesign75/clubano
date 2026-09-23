@@ -1,3 +1,6 @@
+@php
+    $isCompact = ($layout ?? 'detail') === 'compact';
+@endphp
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -68,6 +71,45 @@
             padding: 18px 0;
             border-bottom: 1px solid #e2e8f0;
             break-inside: avoid;
+        }
+
+        .compact .month {
+            margin-top: 24px;
+        }
+
+        .compact .month-title {
+            padding-bottom: 6px;
+            font-size: 16px;
+        }
+
+        .compact .event {
+            grid-template-columns: 150px minmax(0, 1fr);
+            gap: 16px;
+            padding: 10px 0;
+            align-items: baseline;
+        }
+
+        .compact-date {
+            font-size: 15px;
+            font-weight: 850;
+            color: #0f172a;
+        }
+
+        .compact-time {
+            margin-top: 2px;
+            font-size: 13px;
+            color: #475569;
+        }
+
+        .compact .event-title {
+            font-size: 18px;
+            line-height: 1.25;
+        }
+
+        .compact .event-meta {
+            margin-top: 3px;
+            font-size: 13px;
+            gap: 6px;
         }
 
         .date-box {
@@ -169,10 +211,10 @@
         <button type="button" onclick="window.print()">Drucken</button>
     </div>
 
-    <main class="page">
+    <main class="page {{ $isCompact ? 'compact' : 'detail' }}">
         <div class="eyebrow">{{ $tenant->name ?? 'Clubano' }}</div>
         <h1>{{ $headline }}</h1>
-        <div class="meta">Stand: {{ now()->format('d.m.Y') }} · {{ $events->count() }} Termin{{ $events->count() === 1 ? '' : 'e' }}</div>
+        <div class="meta">Stand: {{ now()->format('d.m.Y') }} · {{ $events->count() }} Termin{{ $events->count() === 1 ? '' : 'e' }} · {{ $isCompact ? 'Kompakte Liste' : 'Detailansicht' }}</div>
 
         @if($note)
             <div class="note">{{ $note }}</div>
@@ -184,36 +226,52 @@
 
                 @foreach($monthEvents as $event)
                     <article class="event">
-                        <div class="date-box">
-                            <div class="weekday">{{ $event->start->translatedFormat('D') }}</div>
-                            <div class="day">{{ $event->start->format('d') }}</div>
-                            <div class="time">{{ $event->start->format('H:i') }} Uhr</div>
-                        </div>
-
-                        <div>
-                            <div class="event-title">{{ $event->title }}</div>
-                            <div class="event-meta">
-                                <span class="pill">{{ $event->location ?: 'Ort folgt' }}</span>
-                                <span class="pill">bis {{ $event->end->format('H:i') }} Uhr</span>
-                                @if($event->category)
-                                    <span class="pill">{{ $event->category->name }}</span>
-                                @endif
-                                @if($event->responsible_name)
-                                    <span class="pill">Verantwortlich: {{ $event->responsible_name }}</span>
-                                @endif
+                        @if($isCompact)
+                            <div>
+                                <div class="compact-date">{{ $event->start->translatedFormat('D, d.m.Y') }}</div>
+                                <div class="compact-time">{{ $event->start->format('H:i') }} - {{ $event->end->format('H:i') }} Uhr</div>
+                            </div>
+                            <div>
+                                <div class="event-title">{{ $event->title }}</div>
+                                <div class="event-meta">
+                                    <span class="pill">{{ $event->location ?: 'Ort folgt' }}</span>
+                                    @if($event->category)
+                                        <span class="pill">{{ $event->category->name }}</span>
+                                    @endif
+                                </div>
+                            </div>
+                        @else
+                            <div class="date-box">
+                                <div class="weekday">{{ $event->start->translatedFormat('D') }}</div>
+                                <div class="day">{{ $event->start->format('d') }}</div>
+                                <div class="time">{{ $event->start->format('H:i') }} Uhr</div>
                             </div>
 
-                            @php
-                                $description = \Illuminate\Support\Str::limit(
-                                    html_entity_decode(trim(strip_tags($event->description ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-                                    220
-                                );
-                            @endphp
+                            <div>
+                                <div class="event-title">{{ $event->title }}</div>
+                                <div class="event-meta">
+                                    <span class="pill">{{ $event->location ?: 'Ort folgt' }}</span>
+                                    <span class="pill">bis {{ $event->end->format('H:i') }} Uhr</span>
+                                    @if($event->category)
+                                        <span class="pill">{{ $event->category->name }}</span>
+                                    @endif
+                                    @if($event->responsible_name)
+                                        <span class="pill">Verantwortlich: {{ $event->responsible_name }}</span>
+                                    @endif
+                                </div>
 
-                            @if($description !== '')
-                                <div class="description">{{ $description }}</div>
-                            @endif
-                        </div>
+                                @php
+                                    $description = \Illuminate\Support\Str::limit(
+                                        html_entity_decode(trim(strip_tags($event->description ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                                        220
+                                    );
+                                @endphp
+
+                                @if($description !== '')
+                                    <div class="description">{{ $description }}</div>
+                                @endif
+                            </div>
+                        @endif
                     </article>
                 @endforeach
             </section>

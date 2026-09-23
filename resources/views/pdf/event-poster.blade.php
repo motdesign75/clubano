@@ -1,3 +1,6 @@
+@php
+    $isCompact = ($layout ?? 'detail') === 'compact';
+@endphp
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -118,17 +121,57 @@
             color: #334155;
             font-size: 10px;
         }
+
+        .compact .month {
+            margin-top: 16px;
+        }
+
+        .compact .month-title {
+            padding-bottom: 4px;
+            font-size: 12px;
+        }
+
+        .compact td {
+            padding: 7px 0;
+        }
+
+        .compact-date-cell {
+            width: 115px;
+            padding-right: 12px;
+        }
+
+        .compact-date {
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .compact-time {
+            margin-top: 2px;
+            color: #475569;
+            font-size: 9px;
+        }
+
+        .compact .event-title {
+            font-size: 13px;
+            line-height: 1.2;
+        }
+
+        .compact .event-meta {
+            margin-top: 3px;
+            font-size: 9px;
+        }
     </style>
 </head>
 <body>
     <div class="eyebrow">{{ $tenant->name ?? 'Clubano' }}</div>
     <h1>{{ $headline }}</h1>
-    <div class="meta">Stand: {{ now()->format('d.m.Y') }} &middot; {{ $events->count() }} Termin{{ $events->count() === 1 ? '' : 'e' }}</div>
+    <div class="meta">Stand: {{ now()->format('d.m.Y') }} &middot; {{ $events->count() }} Termin{{ $events->count() === 1 ? '' : 'e' }} &middot; {{ $isCompact ? 'Kompakte Liste' : 'Detailansicht' }}</div>
 
     @if($note)
         <div class="note">{{ $note }}</div>
     @endif
 
+    <div class="{{ $isCompact ? 'compact' : 'detail' }}">
     @foreach($events->groupBy(fn ($event) => $event->start->translatedFormat('F Y')) as $month => $monthEvents)
         <section class="month">
             <div class="month-title">{{ $month }}</div>
@@ -137,42 +180,59 @@
                 <tbody>
                     @foreach($monthEvents as $event)
                         <tr class="event-row">
-                            <td class="date-cell">
-                                <div class="date-box">
-                                    <div class="weekday">{{ $event->start->translatedFormat('D') }}</div>
-                                    <div class="day">{{ $event->start->format('d') }}</div>
-                                    <div class="time">{{ $event->start->format('H:i') }} Uhr</div>
-                                </div>
-                            </td>
-                            <td>
-                                <div class="event-title">{{ $event->title }}</div>
-                                <div class="event-meta">
-                                    {{ $event->location ?: 'Ort folgt' }}
-                                    &nbsp;|&nbsp; bis {{ $event->end->format('H:i') }} Uhr
-                                    @if($event->category)
-                                        &nbsp;|&nbsp; {{ $event->category->name }}
-                                    @endif
-                                    @if($event->responsible_name)
-                                        &nbsp;|&nbsp; Verantwortlich: {{ $event->responsible_name }}
-                                    @endif
-                                </div>
+                            @if($isCompact)
+                                <td class="compact-date-cell">
+                                    <div class="compact-date">{{ $event->start->translatedFormat('D, d.m.Y') }}</div>
+                                    <div class="compact-time">{{ $event->start->format('H:i') }} - {{ $event->end->format('H:i') }} Uhr</div>
+                                </td>
+                                <td>
+                                    <div class="event-title">{{ $event->title }}</div>
+                                    <div class="event-meta">
+                                        {{ $event->location ?: 'Ort folgt' }}
+                                        @if($event->category)
+                                            &nbsp;|&nbsp; {{ $event->category->name }}
+                                        @endif
+                                    </div>
+                                </td>
+                            @else
+                                <td class="date-cell">
+                                    <div class="date-box">
+                                        <div class="weekday">{{ $event->start->translatedFormat('D') }}</div>
+                                        <div class="day">{{ $event->start->format('d') }}</div>
+                                        <div class="time">{{ $event->start->format('H:i') }} Uhr</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="event-title">{{ $event->title }}</div>
+                                    <div class="event-meta">
+                                        {{ $event->location ?: 'Ort folgt' }}
+                                        &nbsp;|&nbsp; bis {{ $event->end->format('H:i') }} Uhr
+                                        @if($event->category)
+                                            &nbsp;|&nbsp; {{ $event->category->name }}
+                                        @endif
+                                        @if($event->responsible_name)
+                                            &nbsp;|&nbsp; Verantwortlich: {{ $event->responsible_name }}
+                                        @endif
+                                    </div>
 
-                                @php
-                                    $description = \Illuminate\Support\Str::limit(
-                                        html_entity_decode(trim(strip_tags($event->description ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-                                        220
-                                    );
-                                @endphp
+                                    @php
+                                        $description = \Illuminate\Support\Str::limit(
+                                            html_entity_decode(trim(strip_tags($event->description ?? '')), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                                            220
+                                        );
+                                    @endphp
 
-                                @if($description !== '')
-                                    <div class="description">{{ $description }}</div>
-                                @endif
-                            </td>
+                                    @if($description !== '')
+                                        <div class="description">{{ $description }}</div>
+                                    @endif
+                                </td>
+                            @endif
                         </tr>
                     @endforeach
                 </tbody>
             </table>
         </section>
     @endforeach
+    </div>
 </body>
 </html>

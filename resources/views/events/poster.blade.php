@@ -66,7 +66,7 @@
         @csrf
 
         <section class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div class="grid gap-4 lg:grid-cols-2">
+            <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr),minmax(0,1fr),minmax(260px,0.9fr)]">
                 <div>
                     <label for="headline" class="text-sm font-semibold text-slate-900">Überschrift auf dem Aushang</label>
                     <input id="headline" name="headline" type="text" value="{{ old('headline', 'Aktuelle Termine') }}" class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
@@ -75,6 +75,19 @@
                     <label for="note" class="text-sm font-semibold text-slate-900">Optionaler Hinweis</label>
                     <input id="note" name="note" type="text" value="{{ old('note') }}" placeholder="z. B. Änderungen vorbehalten" class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
                 </div>
+                <fieldset>
+                    <legend class="text-sm font-semibold text-slate-900">Darstellung</legend>
+                    <div class="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
+                        <label class="cursor-pointer rounded-md px-3 py-2 text-center text-sm font-semibold text-slate-700 has-[:checked]:bg-white has-[:checked]:text-slate-950 has-[:checked]:shadow-sm">
+                            <input type="radio" name="layout" value="detail" class="sr-only" @checked(old('layout', 'detail') === 'detail')>
+                            Detail
+                        </label>
+                        <label class="cursor-pointer rounded-md px-3 py-2 text-center text-sm font-semibold text-slate-700 has-[:checked]:bg-white has-[:checked]:text-slate-950 has-[:checked]:shadow-sm">
+                            <input type="radio" name="layout" value="compact" class="sr-only" @checked(old('layout') === 'compact')>
+                            Kompakt
+                        </label>
+                    </div>
+                </fieldset>
             </div>
         </section>
 
