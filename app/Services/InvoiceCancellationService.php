@@ -5,11 +5,19 @@ namespace App\Services;
 use App\Models\Invoice;
 use App\Models\MemberCreditApplication;
 use App\Models\EventBooking;
+use App\Models\TemplateDispatchLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class InvoiceCancellationService
 {
+    public function __construct(
+        private readonly TenantMailConfigurator $tenantMailConfigurator,
+    ) {
+    }
+
     public function canCancelAutomatically(Invoice $invoice): bool
     {
         if (! $invoice->isInvoice()) {
@@ -25,7 +33,9 @@ class InvoiceCancellationService
 
     public function cancel(Invoice $invoice, ?string $reason = null): void
     {
-        DB::transaction(function () use ($invoice, $reason) {
+        $notificationInvoice = null;
+
+        DB::transaction(function () use ($invoice, $reason, &$notificationInvoice) {
             $invoice->loadMissing(['items', 'eventBookings']);
 
             if ($invoice->status === 'storniert') {
@@ -81,7 +91,13 @@ class InvoiceCancellationService
             ])->save();
 
             $this->syncEventBookingPaymentStatus($invoice);
+
+            $notificationInvoice = $invoice->fresh(['tenant', 'eventBookings.event']);
         });
+
+        if ($notificationInvoice) {
+            $this->sendCancellationMail($notificationInvoice);
+        }
     }
 
     public function cancelForEventBookingIfPossible(EventBooking $booking): bool
@@ -108,5 +124,88 @@ class InvoiceCancellationService
         $invoice->eventBookings()->update([
             'payment_status' => $paymentStatus,
         ]);
+    }
+
+    private function sendCancellationMail(Invoice $invoice): void
+    {
+        if (blank($invoice->recipient_email) || ! $invoice->tenant) {
+            return;
+        }
+
+        $tenant = $invoice->tenant;
+        $eventBooking = $invoice->eventBookings->first();
+        $event = $eventBooking?->event;
+
+        $this->tenantMailConfigurator->apply($tenant);
+
+        $subject = 'Storno zur Rechnung ' . $invoice->invoice_number;
+        $body = $this->buildCancellationMailBody($invoice, $eventBooking, $event, $tenant);
+        $fromAddress = $tenant->mail_from_address ?: config('mail.from.address');
+        $fromName = $tenant->mail_from_name ?: ($tenant->name ?: config('mail.from.name'));
+        $replyToAddress = filled($tenant->email) && $tenant->email !== $fromAddress ? $tenant->email : null;
+
+        try {
+            Mail::send('mail.layout', [
+                'body' => $body,
+                'tenant' => $tenant,
+            ], function ($mail) use ($invoice, $subject, $fromAddress, $fromName, $replyToAddress, $tenant) {
+                $mail->to($invoice->recipient_email, $invoice->recipient_name ?: null)
+                    ->subject($subject)
+                    ->from($fromAddress, $fromName);
+
+                if ($replyToAddress) {
+                    $mail->replyTo($replyToAddress, $tenant->name ?? $fromName);
+                }
+            });
+
+            TemplateDispatchLog::create([
+                'tenant_id' => $tenant->id,
+                'template_id' => null,
+                'created_by' => Auth::id(),
+                'channel' => 'mail',
+                'action' => 'invoice_cancellation_sent',
+                'recipient_type' => $eventBooking ? 'event_booking' : 'invoice',
+                'recipient_name' => $invoice->recipient_name,
+                'recipient_reference' => $invoice->recipient_email,
+                'subject' => $subject,
+                'message_excerpt' => 'Storno-Information zur Rechnung ' . $invoice->invoice_number,
+                'dispatched_at' => now(),
+                'meta' => [
+                    'invoice_id' => $invoice->id,
+                    'invoice_number' => $invoice->invoice_number,
+                    'booking_id' => $eventBooking?->id,
+                    'booking_reference' => $eventBooking?->booking_reference,
+                    'event_id' => $event?->id,
+                    'event_title' => $event?->title,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Storno-Mail fuer Rechnung fehlgeschlagen', [
+                'invoice_id' => $invoice->id,
+                'email' => $invoice->recipient_email,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function buildCancellationMailBody(Invoice $invoice, ?EventBooking $booking, $event, $tenant): string
+    {
+        $reason = trim((string) $invoice->cancellation_reason);
+        $reasonLine = $reason !== ''
+            ? '<p><strong>Grund:</strong> ' . e($reason) . '</p>'
+            : '';
+
+        $eventLine = $event
+            ? '<p>Die Rechnung gehörte zur Veranstaltung <strong>' . e($event->title) . '</strong>'
+                . ($booking ? ' mit der Buchungsnummer <strong>' . e($booking->booking_reference) . '</strong>' : '')
+                . '.</p>'
+            : '';
+
+        return '<p>Guten Tag,</p>'
+            . '<p>die Rechnung <strong>' . e($invoice->invoice_number) . '</strong> wurde storniert.</p>'
+            . $eventLine
+            . $reasonLine
+            . '<p>Für diese Rechnung ist keine Zahlung mehr erforderlich. Falls bereits eine Zahlung erfolgt ist oder Fragen offen sind, meldet euch bitte direkt bei uns.</p>'
+            . '<p>Viele Gruesse<br>' . e($tenant->name ?? 'Euer Verein') . '</p>';
     }
 }

@@ -882,13 +882,21 @@ class PublicFormController extends Controller
             return $submission->fresh(['member', 'contact', 'eventBooking.invoice']);
         });
 
-        if ($submission->eventBooking && $submission->eventBooking->invoice && $form->event && $form->tenant) {
-            $this->eventBookingBillingService->sendInvoiceMail(
-                $submission->eventBooking->invoice,
+        if ($submission->eventBooking && $form->event && $form->tenant) {
+            $this->eventBookingBillingService->sendBookingConfirmationMail(
                 $submission->eventBooking,
                 $form->event,
                 $form->tenant
             );
+
+            if ($submission->eventBooking->invoice) {
+                $this->eventBookingBillingService->sendInvoiceMail(
+                    $submission->eventBooking->invoice,
+                    $submission->eventBooking,
+                    $form->event,
+                    $form->tenant
+                );
+            }
         }
 
         $this->sendConfirmationMail($form, $submission, $answers);

@@ -110,6 +110,14 @@ test('paid public event booking creates linked invoice and dispatch log', functi
         ->first();
 
     expect($dispatchLog)->not->toBeNull();
+
+    $confirmationLog = TemplateDispatchLog::query()
+        ->where('action', 'event_booking_confirmation_sent')
+        ->where('recipient_reference', 'max@example.test')
+        ->first();
+
+    expect($confirmationLog)->not->toBeNull()
+        ->and($confirmationLog->subject)->toContain('Anmeldebestätigung');
 });
 
 test('event booking reuses booker as first participant when multiple participants are booked', function () {
@@ -556,4 +564,12 @@ test('cancelling an event form submission also cancels its generated invoice', f
         ->and($booking->fresh()->booking_status)->toBe('cancelled')
         ->and($booking->fresh()->payment_status)->toBe('cancelled')
         ->and($invoice->fresh()->status)->toBe('storniert');
+
+    $cancellationLog = TemplateDispatchLog::query()
+        ->where('action', 'invoice_cancellation_sent')
+        ->where('recipient_reference', 'sarah@example.test')
+        ->first();
+
+    expect($cancellationLog)->not->toBeNull()
+        ->and($cancellationLog->subject)->toContain($invoice->invoice_number);
 });
