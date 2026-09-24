@@ -27,6 +27,7 @@ use App\Http\Controllers\PublicFormController;
 use App\Http\Controllers\StatisticsController;
 use App\Http\Controllers\UpdateNoticeController;
 use App\Http\Controllers\PrivacyCenterController;
+use App\Http\Controllers\DataUpdateRequestController;
 
 
 
@@ -79,6 +80,12 @@ Route::get('/einladungen/{token}', [EventController::class, 'invitationResponse'
 Route::post('/einladungen/{token}', [EventController::class, 'storeInvitationResponse'])
     ->middleware('throttle:public-invitation-response')
     ->name('events.invitations.public.store');
+Route::get('/stammdaten-pruefen/{token}', [DataUpdateRequestController::class, 'publicShow'])
+    ->middleware('signed')
+    ->name('data-update-requests.public.show');
+Route::post('/stammdaten-pruefen/{token}', [DataUpdateRequestController::class, 'publicSubmit'])
+    ->middleware(['signed', 'throttle:public-invitation-response'])
+    ->name('data-update-requests.public.submit');
 Route::get('/dokumentation', [DocumentationController::class, 'index'])->name('docs.index');
 Route::get('/dokumentation/assets/{filename}', [DocumentationController::class, 'asset'])->name('docs.asset');
 Route::get('/dokumentation/{path}', [DocumentationController::class, 'show'])
@@ -202,6 +209,11 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/automatische-mails', [AutomatedMailController::class, 'index'])->name('automated-mails.index');
         Route::put('/automatische-mails/{occasion}', [AutomatedMailController::class, 'update'])->name('automated-mails.update');
         Route::post('/automatische-mails/{occasion}/test', [AutomatedMailController::class, 'test'])->name('automated-mails.test');
+
+        Route::get('/stammdaten-pruefung', [DataUpdateRequestController::class, 'index'])->name('data-update-requests.index');
+        Route::post('/stammdaten-pruefung', [DataUpdateRequestController::class, 'store'])->name('data-update-requests.store');
+        Route::post('/stammdaten-pruefung/{dataUpdateRequest}/uebernehmen', [DataUpdateRequestController::class, 'approve'])->name('data-update-requests.approve');
+        Route::post('/stammdaten-pruefung/{dataUpdateRequest}/ablehnen', [DataUpdateRequestController::class, 'reject'])->name('data-update-requests.reject');
     });
 
     $when($C.'VoucherController', function($cls){
