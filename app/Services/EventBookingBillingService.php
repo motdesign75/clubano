@@ -154,6 +154,66 @@ class EventBookingBillingService
         }
     }
 
+    public function sendBookingConfirmationMail(EventBooking $booking, Event $event, Tenant $tenant): void
+    {
+        if (blank($booking->booker_email)) {
+            return;
+        }
+
+        $booking->loadMissing(['participants']);
+
+        $this->tenantMailConfigurator->apply($tenant);
+
+        $subject = 'Anmeldebestätigung: ' . $event->title;
+        $body = $this->buildBookingConfirmationBody($booking, $event, $tenant);
+
+        $fromAddress = $tenant->mail_from_address ?: config('mail.from.address');
+        $fromName = $tenant->mail_from_name ?: ($tenant->name ?: config('mail.from.name'));
+        $replyToAddress = filled($tenant->email) && $tenant->email !== $fromAddress ? $tenant->email : null;
+
+        try {
+            Mail::send('mail.layout', [
+                'body' => $body,
+                'tenant' => $tenant,
+            ], function ($mail) use ($booking, $subject, $fromAddress, $fromName, $replyToAddress, $tenant) {
+                $mail->to($booking->booker_email, $booking->booker_name ?: null)
+                    ->subject($subject)
+                    ->from($fromAddress, $fromName);
+
+                if ($replyToAddress) {
+                    $mail->replyTo($replyToAddress, $tenant->name ?? $fromName);
+                }
+            });
+
+            TemplateDispatchLog::create([
+                'tenant_id' => $tenant->id,
+                'template_id' => null,
+                'created_by' => null,
+                'channel' => 'mail',
+                'action' => 'event_booking_confirmation_sent',
+                'recipient_type' => 'event_booking',
+                'recipient_name' => $booking->booker_name,
+                'recipient_reference' => $booking->booker_email,
+                'subject' => $subject,
+                'message_excerpt' => 'Anmeldebestätigung fuer Event-Buchung ' . $booking->booking_reference,
+                'dispatched_at' => now(),
+                'meta' => [
+                    'event_id' => $event->id,
+                    'event_title' => $event->title,
+                    'booking_id' => $booking->id,
+                    'booking_reference' => $booking->booking_reference,
+                    'invoice_id' => $booking->invoice_id,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Anmeldebestaetigung fuer Event-Buchung fehlgeschlagen', [
+                'booking_id' => $booking->id,
+                'email' => $booking->booker_email,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
     private function buildItemDescription(Event $event): string
     {
         $date = $event->start?->format('d.m.Y');
@@ -185,6 +245,41 @@ class EventBookingBillingService
             . '<p>Anbei findet ihr die Rechnung <strong>' . e($invoice->invoice_number) . '</strong> ueber <strong>' . e($amount) . '</strong>.</p>'
             . '<p>Bitte ueberweist den Betrag bis zum <strong>' . e($dueDate) . '</strong> und gebt dabei die Rechnungsnummer <strong>' . e($invoice->invoice_number) . '</strong> als Verwendungszweck an.</p>'
             . '<p>Die Buchungsnummer lautet <strong>' . e($booking->booking_reference) . '</strong>.</p>'
+            . '<p>Viele Gruesse<br>' . e($tenant->name ?? 'Euer Verein') . '</p>';
+    }
+
+    private function buildBookingConfirmationBody(EventBooking $booking, Event $event, Tenant $tenant): string
+    {
+        $currency = strtoupper($booking->currency ?: ($event->currency ?: 'EUR'));
+        $amount = number_format((float) $booking->total_amount, 2, ',', '.') . ' ' . $currency;
+        $grossAmount = number_format((float) $booking->gross_amount, 2, ',', '.') . ' ' . $currency;
+        $dateLine = trim(($event->start?->format('d.m.Y H:i') ?? '') . ' - ' . ($event->end?->format('H:i') ?? '') . ' Uhr');
+        $participants = $booking->participants
+            ->map(fn ($participant) => $participant->display_name ?: $participant->full_name)
+            ->filter()
+            ->values();
+
+        $participantList = $participants->isEmpty()
+            ? '<li>' . e($booking->booker_name ?: 'Anmeldung') . '</li>'
+            : $participants->map(fn ($name) => '<li>' . e($name) . '</li>')->implode('');
+
+        $paymentHint = (float) $booking->total_amount > 0
+            ? '<p>Für diese Anmeldung ist ein Betrag von <strong>' . e($amount) . '</strong> offen. Wenn eine Rechnung erstellt wurde, erhältst du sie separat per E-Mail.</p>'
+            : '<p>Für diese Anmeldung ist aktuell kein offener Betrag zu zahlen.</p>';
+
+        $discountHint = (float) $booking->voucher_discount_amount > 0
+            ? '<p>Angerechneter Gutschein/Rabatt: <strong>' . e(number_format((float) $booking->voucher_discount_amount, 2, ',', '.') . ' ' . $currency) . '</strong>.</p>'
+            : '';
+
+        return '<p>Guten Tag,</p>'
+            . '<p>vielen Dank fuer deine Anmeldung zu <strong>' . e($event->title) . '</strong>. Wir haben die Anmeldung unter der Buchungsnummer <strong>' . e($booking->booking_reference) . '</strong> gespeichert.</p>'
+            . '<p><strong>Termin:</strong> ' . e($dateLine ?: 'Termin folgt') . '<br>'
+            . '<strong>Ort:</strong> ' . e($event->location ?: 'Ort folgt') . '</p>'
+            . '<p><strong>Angemeldete Person(en):</strong></p><ul>' . $participantList . '</ul>'
+            . '<p><strong>Gesamtbetrag vor Abzug:</strong> ' . e($grossAmount) . '<br>'
+            . '<strong>Offener Betrag:</strong> ' . e($amount) . '</p>'
+            . $discountHint
+            . $paymentHint
             . '<p>Viele Gruesse<br>' . e($tenant->name ?? 'Euer Verein') . '</p>';
     }
 

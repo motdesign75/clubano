@@ -15,6 +15,7 @@ use App\Models\PublicForm;
 use App\Models\PublicFormField;
 use App\Models\PublicFormSubmission;
 use App\Models\Tag;
+use App\Models\TemplateDispatchLog;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
@@ -483,6 +484,14 @@ test('event bookings can make external club registrations free without making bu
         ->and($booking->participants->first()->participant_type)->toBe('guest')
         ->and($booking->participants->first()->member_id)->toBeNull()
         ->and((float) $booking->participants->first()->price_amount)->toBe(0.0);
+
+    $confirmationLog = TemplateDispatchLog::query()
+        ->where('action', 'event_booking_confirmation_sent')
+        ->where('recipient_reference', 'eva@partnerverein.test')
+        ->first();
+
+    expect($confirmationLog)->not->toBeNull()
+        ->and($confirmationLog->subject)->toContain('Anmeldebestätigung');
 
     $this->post(route('forms.public.submit', $form->slug), [
         'booking_mode' => 'organization',
