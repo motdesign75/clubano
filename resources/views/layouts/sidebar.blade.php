@@ -426,10 +426,11 @@
                 'hint' => 'Mitglieder, Kontakte, Firmen',
                 'icon' => 'users',
                 'route' => route('members.index'),
-                'active' => request()->routeIs('members.*') || request()->routeIs('contacts.*'),
+                'active' => request()->routeIs('members.*') || request()->routeIs('contacts.*') || request()->routeIs('data-update-requests.*'),
                 'children' => collect([
                     collect($primaryNav)->firstWhere('label', 'Mitglieder'),
                     collect($workNav)->firstWhere('label', 'Kontakte & Firmen'),
+                    collect($workNav)->firstWhere('label', 'Stammdaten prüfen'),
                 ])->filter()->values()->all(),
             ],
             [
