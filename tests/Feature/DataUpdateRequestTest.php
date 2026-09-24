@@ -44,11 +44,16 @@ test('staff can request member data updates and approve submitted changes', func
     $response = $this->actingAs($staff)->post(route('data-update-requests.store'), [
         'target_type' => 'member',
         'member_ids' => [$member->id],
+        'address_style' => 'du',
         'message' => 'Bitte kurz pruefen.',
     ]);
 
     $response->assertRedirect(route('data-update-requests.index'));
-    Mail::assertSent(AutomatedClubMail::class);
+    Mail::assertSent(AutomatedClubMail::class, function (AutomatedClubMail $mail) {
+        return $mail->mailSubject === 'Bitte prüfe deine gespeicherten Stammdaten'
+            && str_contains($mail->bodyHtml, 'Bitte prüfe deine Angaben')
+            && str_contains($mail->bodyHtml, 'deine Angaben zunächst intern');
+    });
 
     $dataRequest = DataUpdateRequest::query()->firstOrFail();
 
@@ -133,6 +138,7 @@ test('staff can request contact data updates without applying them before review
     $this->actingAs($staff)->post(route('data-update-requests.store'), [
         'target_type' => 'contact',
         'contact_ids' => [$contact->id],
+        'address_style' => 'sie',
     ])->assertRedirect(route('data-update-requests.index'));
 
     $dataRequest = DataUpdateRequest::query()->where('contact_id', $contact->id)->firstOrFail();

@@ -1,9 +1,16 @@
 <p>Hallo {{ $recipientName ?: '' }},</p>
 
-<p>
-    wir möchten sicherstellen, dass die bei uns gespeicherten Stammdaten aktuell sind.
-    Bitte prüfen Sie Ihre Angaben über den folgenden Link:
-</p>
+@if(($addressStyle ?? 'sie') === 'du')
+    <p>
+        wir möchten sicherstellen, dass die bei uns gespeicherten Stammdaten aktuell sind.
+        Bitte prüfe deine Angaben über den folgenden Link:
+    </p>
+@else
+    <p>
+        wir möchten sicherstellen, dass die bei uns gespeicherten Stammdaten aktuell sind.
+        Bitte prüfen Sie Ihre Angaben über den folgenden Link:
+    </p>
+@endif
 
 @if($message)
     <p>{!! nl2br(e($message)) !!}</p>
@@ -16,7 +23,11 @@
 </p>
 
 <p>
-    Eingereichte Änderungen werden nicht automatisch übernommen. Wir prüfen die Angaben zunächst intern und aktualisieren die Stammdaten anschließend.
+    @if(($addressStyle ?? 'sie') === 'du')
+        Eingereichte Änderungen werden nicht automatisch übernommen. Wir prüfen deine Angaben zunächst intern und aktualisieren die Stammdaten anschließend.
+    @else
+        Eingereichte Änderungen werden nicht automatisch übernommen. Wir prüfen Ihre Angaben zunächst intern und aktualisieren die Stammdaten anschließend.
+    @endif
 </p>
 
 <p>Viele Grüße<br>{{ $tenant->name }}</p>

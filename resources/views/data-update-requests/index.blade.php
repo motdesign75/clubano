@@ -68,6 +68,20 @@
                 </div>
 
                 <div class="mt-5">
+                    <div class="text-sm font-semibold text-slate-800">Anredeform in der E-Mail</div>
+                    <div class="mt-2 grid gap-3 sm:grid-cols-2">
+                        <label class="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
+                            <input type="radio" name="address_style" value="sie" class="text-indigo-600" {{ old('address_style', 'sie') === 'sie' ? 'checked' : '' }}>
+                            Sie
+                        </label>
+                        <label class="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
+                            <input type="radio" name="address_style" value="du" class="text-indigo-600" {{ old('address_style') === 'du' ? 'checked' : '' }}>
+                            Du
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mt-5">
                     <label for="message" class="text-sm font-semibold text-slate-800">Hinweis in der E-Mail</label>
                     <textarea id="message" name="message" rows="3" class="mt-2 block w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Optionaler Hinweis, warum die Daten geprüft werden sollen.">{{ old('message') }}</textarea>
                 </div>

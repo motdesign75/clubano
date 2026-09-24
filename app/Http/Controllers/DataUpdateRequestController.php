@@ -53,6 +53,7 @@ class DataUpdateRequestController extends Controller
             'member_ids.*' => ['integer'],
             'contact_ids' => ['nullable', 'array'],
             'contact_ids.*' => ['integer'],
+            'address_style' => ['required', 'in:du,sie'],
             'message' => ['nullable', 'string', 'max:1200'],
         ]);
 
@@ -94,7 +95,7 @@ class DataUpdateRequestController extends Controller
                 'sent_at' => now(),
             ]);
 
-            $this->sendRequestMail($updateRequest);
+            $this->sendRequestMail($updateRequest, $data['address_style']);
             $sent++;
         }
 
@@ -242,10 +243,13 @@ class DataUpdateRequestController extends Controller
         abort_unless((int) $dataUpdateRequest->tenant_id === (int) $request->user()->tenant_id, 404);
     }
 
-    private function sendRequestMail(DataUpdateRequest $updateRequest): void
+    private function sendRequestMail(DataUpdateRequest $updateRequest, string $addressStyle): void
     {
         $tenant = $updateRequest->tenant;
-        $subject = 'Bitte prüfen Sie Ihre gespeicherten Stammdaten';
+        $isInformal = $addressStyle === 'du';
+        $subject = $isInformal
+            ? 'Bitte prüfe deine gespeicherten Stammdaten'
+            : 'Bitte prüfen Sie Ihre gespeicherten Stammdaten';
         $url = URL::temporarySignedRoute(
             'data-update-requests.public.show',
             now()->addDays(30),
@@ -256,6 +260,7 @@ class DataUpdateRequestController extends Controller
             'tenant' => $tenant,
             'recipientName' => $updateRequest->recipient_name,
             'message' => $updateRequest->message,
+            'addressStyle' => $addressStyle,
             'url' => $url,
         ])->render();
 
@@ -284,7 +289,10 @@ class DataUpdateRequestController extends Controller
             'subject' => $subject,
             'message_excerpt' => 'Stammdatenprüfung versendet',
             'dispatched_at' => now(),
-            'meta' => ['data_update_request_id' => $updateRequest->id],
+            'meta' => [
+                'data_update_request_id' => $updateRequest->id,
+                'address_style' => $addressStyle,
+            ],
         ]);
     }
 
