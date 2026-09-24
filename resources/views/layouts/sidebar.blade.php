@@ -100,6 +100,14 @@
             'minRole' => 'Lesen',
         ],
         [
+            'label' => 'Stammdaten prüfen',
+            'hint' => 'Mitglieder und Kontakte Daten bestätigen lassen',
+            'route' => route('data-update-requests.index'),
+            'active' => request()->routeIs('data-update-requests.*'),
+            'icon' => 'clipboard-document-list',
+            'minRole' => 'Mitarbeiter',
+        ],
+        [
             'label' => 'Projekte',
             'hint' => 'Größere Vorhaben bündeln',
             'route' => route('projects.index'),
