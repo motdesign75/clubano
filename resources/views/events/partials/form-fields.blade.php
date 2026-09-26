@@ -317,6 +317,14 @@
                         <span class="mt-1 block text-sm text-slate-500">Die eigentliche Automatik folgt im Benachrichtigungsmodul.</span>
                     </span>
                 </label>
+
+                <label class="flex items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-4">
+                    <input type="checkbox" name="mobile_shifts_enabled" id="mobile_shifts_enabled" value="1" class="mt-1 h-5 w-5 rounded border-indigo-300 text-indigo-700" @checked(old('mobile_shifts_enabled', $event->mobile_shifts_enabled ?? false))>
+                    <span>
+                        <span class="block text-base font-semibold text-indigo-950">Dienstplan in der App anzeigen</span>
+                        <span class="mt-1 block text-sm text-indigo-700">Nur wenn diese Option aktiv ist, sehen Mitglieder die Schichten in der mobilen App.</span>
+                    </span>
+                </label>
             </div>
         </section>
 

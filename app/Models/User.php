@@ -31,6 +31,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'email',
         'password',
         'tenant_id',
+        'member_id',
         'role',
         'email_verified_at',
         'last_login_at',
@@ -79,6 +80,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function tenant()
     {
         return $this->belongsTo(\App\Models\Tenant::class);
+    }
+
+    public function member()
+    {
+        return $this->belongsTo(\App\Models\Member::class);
     }
 
     public function hasVerifiedEmail(): bool
