@@ -18,6 +18,9 @@
     },
     "extra": {
       "apiBaseUrl": "https://app.clubano.de"
-    }
+    },
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }
