@@ -12,7 +12,7 @@ export async function readToken() {
 }
 
 export async function clearToken() {
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => null);
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -27,10 +27,13 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     }
   });
 
-  const payload = await response.json().catch(() => ({}));
+  const payload: unknown = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.message ?? "Die Anfrage konnte nicht verarbeitet werden.");
+    const message = payload && typeof payload === "object" && "message" in payload && typeof payload.message === "string"
+      ? payload.message
+      : "Die Anfrage konnte nicht verarbeitet werden.";
+    throw new Error(message);
   }
 
   return payload as T;

@@ -23,6 +23,43 @@ type Session = {
   member: Member;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function valueOrEmpty(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function normalizeSession(value: unknown): Session | null {
+  if (!isRecord(value) || !isRecord(value.tenant) || !isRecord(value.member)) {
+    return null;
+  }
+
+  const tenant = {
+    ...value.tenant,
+    name: valueOrEmpty(value.tenant.name) || "Clubano"
+  } as Tenant;
+  const member = {
+    ...value.member,
+    full_name: valueOrEmpty(value.member.full_name) || "Mitglied"
+  } as Member;
+
+  return { tenant, member };
+}
+
+function requireSession(value: unknown): Session {
+  const session = normalizeSession(value);
+  if (!session) {
+    throw new Error("Die Sitzung konnte nicht geladen werden. Bitte melde dich erneut an.");
+  }
+  return session;
+}
+
+function arrayOrEmpty<T>(value: T[] | null | undefined) {
+  return Array.isArray(value) ? value : [];
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,8 +72,8 @@ export default function App() {
         setSession(null);
         return;
       }
-      const data = await apiFetch<Session>("/api/mobile/me");
-      setSession(data);
+      const data = await apiFetch<unknown>("/api/mobile/me");
+      setSession(requireSession(data));
     } catch {
       await clearToken();
       setSession(null);
@@ -112,12 +149,16 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   async function login() {
     try {
       setBusy(true);
-      const data = await apiFetch<Session & { token: string }>("/api/mobile/login", {
+      const data = await apiFetch<unknown>("/api/mobile/login", {
         method: "POST",
         body: JSON.stringify({ email, password, device_name: "Clubano App" })
       });
+      if (!isRecord(data) || typeof data.token !== "string") {
+        throw new Error("Die Anmeldung wurde vom Server unvollständig beantwortet.");
+      }
+      const nextSession = requireSession(data);
       await saveToken(data.token);
-      onLogin(data);
+      onLogin(nextSession);
     } catch (error) {
       Alert.alert("Login nicht möglich", error instanceof Error ? error.message : "Bitte prüfe die Eingaben.");
     } finally {
@@ -141,7 +182,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
 function Home({ session, setScreen }: { session: Session; setScreen: (screen: Screen) => void }) {
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.heading}>Hallo {session.member.first_name ?? session.member.full_name}</Text>
+      <Text style={styles.heading}>Hallo {session.member.first_name || session.member.full_name || "Mitglied"}</Text>
       <Text style={styles.muted}>Hier findest du die wichtigsten Vereinsfunktionen ohne Chat und ohne Rechnungen.</Text>
       {[
         ["profile", "Stammdaten prüfen"],
@@ -174,6 +215,10 @@ function Profile({ member, refresh }: { member: Member; refresh: () => void }) {
     change_note: ""
   }), [member]);
   const [form, setForm] = useState(initial);
+
+  useEffect(() => {
+    setForm(initial);
+  }, [initial]);
 
   async function submit() {
     try {
@@ -214,12 +259,28 @@ function Profile({ member, refresh }: { member: Member; refresh: () => void }) {
 
 function Events() {
   const [events, setEvents] = useState<ClubEvent[]>([]);
-  useEffect(() => { apiFetch<{ events: ClubEvent[] }>("/api/mobile/events").then((data) => setEvents(data.events)); }, []);
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ events?: ClubEvent[] }>("/api/mobile/events")
+      .then((data) => {
+        if (active) setEvents(arrayOrEmpty(data.events));
+      })
+      .catch(() => {
+        if (active) setEvents([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function respond(event: ClubEvent, status: string) {
-    await apiFetch(`/api/mobile/events/${event.id}/response`, { method: "POST", body: JSON.stringify({ status }) });
-    const data = await apiFetch<{ events: ClubEvent[] }>("/api/mobile/events");
-    setEvents(data.events);
+    try {
+      await apiFetch(`/api/mobile/events/${event.id}/response`, { method: "POST", body: JSON.stringify({ status }) });
+      const data = await apiFetch<{ events?: ClubEvent[] }>("/api/mobile/events");
+      setEvents(arrayOrEmpty(data.events));
+    } catch (error) {
+      Alert.alert("Antwort nicht gespeichert", error instanceof Error ? error.message : "Bitte versuche es erneut.");
+    }
   }
 
   return (
@@ -241,7 +302,24 @@ function Events() {
 
 function Shifts() {
   const [events, setEvents] = useState<Array<{ id: number; title: string; shifts: Shift[] }>>([]);
-  useEffect(() => { apiFetch<{ events: Array<{ id: number; title: string; shifts: Shift[] }> }>("/api/mobile/shifts").then((data) => setEvents(data.events)); }, []);
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ events?: Array<{ id: number; title: string; shifts?: Shift[] }> }>("/api/mobile/shifts")
+      .then((data) => {
+        if (active) {
+          setEvents(arrayOrEmpty(data.events).map((event) => ({
+            ...event,
+            shifts: arrayOrEmpty(event.shifts)
+          })));
+        }
+      })
+      .catch(() => {
+        if (active) setEvents([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -250,11 +328,11 @@ function Shifts() {
       {events.map((event) => (
         <View key={event.id} style={styles.card}>
           <Text style={styles.cardTitle}>{event.title}</Text>
-          {event.shifts.map((shift) => (
+          {arrayOrEmpty(event.shifts).map((shift) => (
             <View key={shift.id} style={styles.shift}>
               <Text style={styles.label}>{shift.title}</Text>
               <Text style={styles.muted}>{formatDate(shift.starts_at)} · offen: {shift.open_slots}</Text>
-              <Text>{shift.assignments.map((a) => a.is_me ? `${a.name} (du)` : a.name).join(", ") || "Noch niemand eingetragen"}</Text>
+              <Text>{arrayOrEmpty(shift.assignments).map((a) => a.is_me ? `${a.name} (du)` : a.name).join(", ") || "Noch niemand eingetragen"}</Text>
             </View>
           ))}
         </View>
@@ -265,7 +343,19 @@ function Shifts() {
 
 function Documents() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
-  useEffect(() => { apiFetch<{ documents: DocumentItem[] }>("/api/mobile/documents").then((data) => setDocuments(data.documents)); }, []);
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ documents?: DocumentItem[] }>("/api/mobile/documents")
+      .then((data) => {
+        if (active) setDocuments(arrayOrEmpty(data.documents));
+      })
+      .catch(() => {
+        if (active) setDocuments([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   return (
     <FlatList contentContainerStyle={styles.content} data={documents} keyExtractor={(item) => String(item.id)} ListHeaderComponent={<Text style={styles.heading}>Satzung & Beitragsordnung</Text>} renderItem={({ item }) => (
       <View style={styles.card}>
@@ -287,7 +377,19 @@ function News() {
 
 function Contact() {
   const [contact, setContact] = useState<any>(null);
-  useEffect(() => { apiFetch<{ contact: any }>("/api/mobile/contact").then((data) => setContact(data.contact)); }, []);
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ contact?: any }>("/api/mobile/contact")
+      .then((data) => {
+        if (active) setContact(data.contact ?? null);
+      })
+      .catch(() => {
+        if (active) setContact(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.heading}>Kontakt zum Verein</Text>
@@ -305,8 +407,16 @@ function Centered({ children }: { children: React.ReactNode }) {
   return <SafeAreaView style={styles.centered}>{children}</SafeAreaView>;
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
+function formatDate(value?: string | null) {
+  if (!value) {
+    return "Termin offen";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Termin offen";
+  }
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 const styles = StyleSheet.create({
