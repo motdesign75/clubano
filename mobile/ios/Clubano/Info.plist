@@ -45,6 +45,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Clubano benötigt im Entwicklungsmodus Zugriff auf den lokalen Mac, um die App über Xcode zu starten.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
