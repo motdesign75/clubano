@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Clubano",
+    "slug": "clubano",
+    "scheme": "clubano",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "de.clubano.app"
+    },
+    "android": {
+      "package": "de.clubano.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      }
+    },
+    "extra": {
+      "apiBaseUrl": "https://app.clubano.de"
+    }
+  }
+}

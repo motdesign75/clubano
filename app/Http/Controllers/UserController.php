@@ -184,6 +184,7 @@ class UserController extends Controller
 
             $user = User::create([
                 'tenant_id' => $tenantId,
+                'member_id' => $member->id,
                 'name' => $name,
                 'email' => $email,
                 'email_verified_at' => now(),
