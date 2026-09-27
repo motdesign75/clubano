@@ -266,6 +266,27 @@
                             Letzte App-Anmeldung: {{ $member->mobileAppUser->last_login_at->format('d.m.Y H:i') }} Uhr
                         </p>
                     @endif
+
+                    <div class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-4">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <div class="text-sm font-semibold text-blue-950">Mitgliederausweis-QR</div>
+                                <p class="mt-1 text-sm leading-6 text-blue-800">
+                                    Der QR-Code in der App enthält nur eine signierte Clubano-Identität. Bei Verlust oder Verdacht auf Kopie kann er hier erneuert werden.
+                                </p>
+                                @if($member->mobile_identity_rotated_at)
+                                    <p class="mt-2 text-xs text-blue-700">
+                                        Zuletzt erneuert: {{ $member->mobile_identity_rotated_at->format('d.m.Y H:i') }} Uhr
+                                    </p>
+                                @endif
+                            </div>
+                            <button type="submit"
+                                    form="mobile-identity-rotate-form"
+                                    class="inline-flex items-center justify-center rounded-full border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800 transition hover:bg-blue-100">
+                                Ausweis-QR erneuern
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -468,6 +489,10 @@
                 </div>
             </div>
         </div>
+    </form>
+
+    <form id="mobile-identity-rotate-form" method="POST" action="{{ route('members.mobile-identity.rotate', $member) }}" onsubmit="return confirm('Ausweis-QR wirklich erneuern? Der bisherige QR-Code wird dadurch ungültig.');">
+        @csrf
     </form>
 </div>
 @endsection

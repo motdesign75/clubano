@@ -13,7 +13,10 @@ use App\Models\Member;
 use App\Models\MobileAppUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Mpdf\QrCode\Output;
+use Mpdf\QrCode\QrCode;
 
 class MobileAppController extends Controller
 {
@@ -139,6 +142,33 @@ class MobileAppController extends Controller
             'request_id' => $updateRequest->id,
             'changes_count' => count($changes),
         ], 201);
+    }
+
+    public function memberCard(Request $request)
+    {
+        $user = $request->user();
+        $member = $this->memberFor($user);
+
+        abort_if(! $member, 403, 'Für diesen Zugang ist kein Mitglied verknüpft.');
+
+        $member->load('tenant');
+        $member->ensureMobileIdentity();
+        $qrPayload = $member->mobileIdentityPayload();
+
+        return response()->json([
+            'card' => [
+                'club_name' => $member->tenant?->name,
+                'first_name' => $member->first_name,
+                'last_name' => $member->last_name,
+                'full_name' => $member->full_name,
+                'member_number' => $member->member_id,
+                'identity_uuid' => $member->mobile_identity_uuid,
+                'identity_rotated_at' => optional($member->mobile_identity_rotated_at)->toIso8601String(),
+                'qr_payload' => $qrPayload,
+                'qr_code_data_uri' => $this->qrCodeDataUri($qrPayload),
+                'logo_data_uri' => $this->tenantLogoDataUri($member),
+            ],
+        ]);
     }
 
     public function events(Request $request)
@@ -433,5 +463,27 @@ class MobileAppController extends Controller
         return collect($this->profileFields())
             ->mapWithKeys(fn (array $field, string $name) => [$name => (string) ($member->{$name} ?? '')])
             ->all();
+    }
+
+    private function qrCodeDataUri(string $payload): string
+    {
+        $qrCode = new QrCode($payload);
+        $qrPng = (new Output\Png())->output($qrCode, 520, [255, 255, 255], [15, 23, 42]);
+
+        return 'data:image/png;base64,' . base64_encode($qrPng);
+    }
+
+    private function tenantLogoDataUri(Member $member): ?string
+    {
+        $path = $member->tenant?->logo_storage_path;
+
+        if (! $path || ! Storage::disk('public')->exists($path)) {
+            return null;
+        }
+
+        $mimeType = Storage::disk('public')->mimeType($path) ?: 'image/png';
+        $contents = Storage::disk('public')->get($path);
+
+        return 'data:' . $mimeType . ';base64,' . base64_encode($contents);
     }
 }

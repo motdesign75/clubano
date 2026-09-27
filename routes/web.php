@@ -278,6 +278,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::patch('/members/{member}/family-billing', [$cls, 'updateFamilyBilling'])->middleware('tenant.role:Mitarbeiter')->name('members.family-billing.update');
         Route::post('/members/{member}/credits', [$cls, 'storeCredit'])->middleware('tenant.role:Admin')->name('members.credits.store');
         Route::post('/members/{member}/communication-log', [$cls, 'storeCommunicationLog'])->middleware('tenant.role:Mitarbeiter')->name('members.communication-log.store');
+        Route::post('/members/{member}/mobile-identity/rotate', [$cls, 'rotateMobileIdentity'])->middleware('tenant.role:Mitarbeiter')->name('members.mobile-identity.rotate');
         Route::post('/members/{member}/restore', [$cls, 'restore'])->middleware('tenant.role:Mitarbeiter')->name('members.restore');
         Route::get('/members/{member}/edit', [$cls, 'edit'])->middleware('tenant.role:Mitarbeiter')->name('members.edit');
         Route::put('/members/{member}', [$cls, 'update'])->middleware('tenant.role:Mitarbeiter')->name('members.update');

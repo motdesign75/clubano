@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -14,9 +15,9 @@ import {
   View
 } from "react-native";
 import { apiFetch, clearToken, readToken, saveToken } from "./src/api";
-import type { ClubEvent, DocumentItem, Member, NewsItem, Shift, Tenant } from "./src/types";
+import type { ClubEvent, DocumentItem, Member, MemberCard, NewsItem, Shift, Tenant } from "./src/types";
 
-type Screen = "home" | "profile" | "events" | "shifts" | "documents" | "news" | "contact";
+type Screen = "home" | "card" | "profile" | "events" | "shifts" | "documents" | "news" | "contact";
 type IconName = keyof typeof Ionicons.glyphMap;
 
 type Session = {
@@ -63,6 +64,7 @@ function arrayOrEmpty<T>(value: T[] | null | undefined) {
 
 const navItems: Array<[Screen, string, IconName]> = [
   ["home", "Start", "home-outline"],
+  ["card", "Ausweis", "qr-code-outline"],
   ["profile", "Daten", "person-circle-outline"],
   ["events", "Termine", "calendar-outline"],
   ["shifts", "Dienste", "people-outline"],
@@ -80,6 +82,7 @@ const tileTones = {
 };
 
 const homeTiles: Array<{ screen: Screen; title: string; text: string; icon: IconName; tone: keyof typeof tileTones }> = [
+  { screen: "card", title: "Ausweis", text: "Mitgliedskarte mit sicherem QR-Code", icon: "qr-code-outline", tone: "blue" },
   { screen: "profile", title: "Stammdaten", text: "Daten prüfen und Änderungen einreichen", icon: "person-outline", tone: "blue" },
   { screen: "events", title: "Termine", text: "Veranstaltungen und Rückmeldungen", icon: "calendar-clear-outline", tone: "green" },
   { screen: "shifts", title: "Dienstplan", text: "Freigegebene Dienste im Blick behalten", icon: "people-outline", tone: "amber" },
@@ -157,6 +160,7 @@ export default function App() {
       </View>
 
       {screen === "home" && <Home session={session} setScreen={setScreen} />}
+      {screen === "card" && <MemberCardScreen />}
       {screen === "profile" && <Profile member={session.member} refresh={loadSession} />}
       {screen === "events" && <Events />}
       {screen === "shifts" && <Shifts />}
@@ -234,6 +238,64 @@ function Home({ session, setScreen }: { session: Session; setScreen: (screen: Sc
         </Pressable>
       ))}
       </View>
+    </ScrollView>
+  );
+}
+
+function MemberCardScreen() {
+  const [card, setCard] = useState<MemberCard | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ card?: MemberCard }>("/api/mobile/member-card")
+      .then((data) => {
+        if (active) setCard(data.card ?? null);
+      })
+      .catch(() => {
+        if (active) setCard(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <ScrollView contentContainerStyle={styles.content}>
+      <SectionHeader icon="qr-code-outline" title="Mitgliederausweis" text="Deine Clubano-Identität für künftige Vereinsfunktionen." />
+      {!card ? (
+        <View style={styles.surfaceCard}>
+          <ActivityIndicator />
+          <Text style={styles.muted}>Ausweis wird geladen...</Text>
+        </View>
+      ) : (
+        <View style={styles.memberPass}>
+          <View style={styles.passTop}>
+            <View style={styles.passLogo}>
+              {card.logo_data_uri ? (
+                <Image source={{ uri: card.logo_data_uri }} style={styles.passLogoImage} resizeMode="contain" />
+              ) : (
+                <Ionicons name="people" size={28} color="#ffffff" />
+              )}
+            </View>
+            <View style={styles.passClub}>
+              <Text style={styles.passKicker}>Mein Clubano</Text>
+              <Text style={styles.passClubName}>{card.club_name ?? "Verein"}</Text>
+            </View>
+          </View>
+
+          <View>
+            <Text style={styles.passLabel}>Mitglied</Text>
+            <Text style={styles.passName}>{card.full_name}</Text>
+            {card.member_number ? <Text style={styles.passNumber}>Nr. {card.member_number}</Text> : null}
+          </View>
+
+          <View style={styles.qrBox}>
+            <Image source={{ uri: card.qr_code_data_uri }} style={styles.qrImage} resizeMode="contain" />
+          </View>
+
+          <Text style={styles.passHint}>Dieser QR-Code weist dich als Mitglied aus. Er enthält keine Adresse, keine E-Mail und kein Guthaben.</Text>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -607,6 +669,19 @@ const styles = StyleSheet.create({
   tileTitle: { color: "#102A43", fontWeight: "900", fontSize: 17 },
   tileText: { color: "#46627F", lineHeight: 19, flex: 1 },
   surfaceCard: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 16, borderWidth: 1, borderColor: "#D9E6F2", gap: 9 },
+  memberPass: { backgroundColor: "#123E69", borderRadius: 8, padding: 18, gap: 18, borderWidth: 1, borderColor: "#0D2C4A" },
+  passTop: { flexDirection: "row", alignItems: "center", gap: 12 },
+  passLogo: { width: 60, height: 60, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#1D75BD", overflow: "hidden" },
+  passLogoImage: { width: 54, height: 54 },
+  passClub: { flex: 1 },
+  passKicker: { color: "#A7F3D0", fontSize: 11, fontWeight: "900", textTransform: "uppercase" },
+  passClubName: { color: "#FFFFFF", fontWeight: "900", fontSize: 20 },
+  passLabel: { color: "#A7C7E7", fontSize: 12, fontWeight: "900", textTransform: "uppercase" },
+  passName: { color: "#FFFFFF", fontSize: 28, fontWeight: "900" },
+  passNumber: { marginTop: 4, color: "#DDEBFA", fontWeight: "800" },
+  qrBox: { alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF", borderRadius: 8, padding: 14 },
+  qrImage: { width: 250, height: 250 },
+  passHint: { color: "#DDEBFA", lineHeight: 20, fontSize: 13 },
   newsCard: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 16, borderWidth: 1, borderColor: "#CFE3F7", gap: 10, shadowColor: "#123E69", shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   cardTopline: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   newsDate: { color: "#52708F", fontWeight: "800", fontSize: 12 },

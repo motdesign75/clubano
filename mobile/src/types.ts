@@ -74,3 +74,16 @@ export type NewsItem = {
   published_at: string | null;
   push_enabled: boolean;
 };
+
+export type MemberCard = {
+  club_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  full_name: string;
+  member_number: string | null;
+  identity_uuid: string;
+  identity_rotated_at: string | null;
+  qr_payload: string;
+  qr_code_data_uri: string;
+  logo_data_uri: string | null;
+};
