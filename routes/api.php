@@ -16,6 +16,7 @@ Route::prefix('mobile')->name('api.mobile.')->group(function () {
         Route::post('/events/{event}/response', [MobileAppController::class, 'respondToEvent'])->name('events.response');
         Route::get('/shifts', [MobileAppController::class, 'shifts'])->name('shifts.index');
         Route::get('/documents', [MobileAppController::class, 'documents'])->name('documents.index');
+        Route::get('/news', [MobileAppController::class, 'news'])->name('news.index');
         Route::get('/contact', [MobileAppController::class, 'contact'])->name('contact');
     });
 });

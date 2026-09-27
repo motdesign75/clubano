@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AppNewsItem;
 use App\Models\DataUpdateRequest;
 use App\Models\Document;
 use App\Models\Event;
@@ -265,6 +266,26 @@ class MobileAppController extends Controller
             ]);
 
         return response()->json(['documents' => $documents]);
+    }
+
+    public function news(Request $request)
+    {
+        $news = AppNewsItem::withoutGlobalScopes()
+            ->where('tenant_id', $request->user()->tenant_id)
+            ->published()
+            ->orderByDesc('published_at')
+            ->limit(50)
+            ->get()
+            ->map(fn (AppNewsItem $item) => [
+                'id' => $item->id,
+                'title' => $item->title,
+                'teaser' => $item->teaser,
+                'body' => $item->body,
+                'published_at' => optional($item->published_at)->toIso8601String(),
+                'push_enabled' => (bool) $item->push_enabled,
+            ]);
+
+        return response()->json(['news' => $news]);
     }
 
     public function contact(Request $request)

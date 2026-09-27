@@ -9,6 +9,7 @@ use App\Http\Controllers\TemplateDispatchLogController;
 use App\Http\Controllers\MailController;
 use App\Http\Controllers\MembershipBillingController;
 use App\Http\Controllers\AutomatedMailController;
+use App\Http\Controllers\AppNewsController;
 use App\Http\Controllers\MailTrackingController;
 use App\Http\Controllers\LetterController;
 use App\Http\Controllers\TransactionController;
@@ -206,6 +207,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
     });
 
     Route::middleware('tenant.role:Mitarbeiter')->group(function () {
+        Route::resource('app-news', AppNewsController::class)
+            ->parameters(['app-news' => 'appNews'])
+            ->except(['show']);
+
         Route::get('/automatische-mails', [AutomatedMailController::class, 'index'])->name('automated-mails.index');
         Route::put('/automatische-mails/{occasion}', [AutomatedMailController::class, 'update'])->name('automated-mails.update');
         Route::post('/automatische-mails/{occasion}/test', [AutomatedMailController::class, 'test'])->name('automated-mails.test');

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
+use App\Models\AppNewsItem;
 use App\Models\DataUpdateRequest;
 use App\Models\Document;
 use App\Models\Event;
@@ -221,6 +222,50 @@ test('mobile documents only expose bylaws and contribution rules', function () {
         ->assertOk()
         ->assertJsonCount(1, 'documents')
         ->assertJsonPath('documents.0.title', 'Satzung');
+});
+
+test('mobile news only exposes published items from own tenant', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$user, , $tenant] = mobileUserFixture();
+
+    AppNewsItem::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Neue Vereinsinfo',
+        'teaser' => 'Wichtig für alle Mitglieder.',
+        'body' => 'Bitte am Wochenende beachten.',
+        'status' => AppNewsItem::STATUS_PUBLISHED,
+        'published_at' => now()->subMinute(),
+        'push_enabled' => true,
+    ]);
+
+    AppNewsItem::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Noch Entwurf',
+        'status' => AppNewsItem::STATUS_DRAFT,
+        'published_at' => now()->subMinute(),
+    ]);
+
+    $otherTenant = Tenant::create([
+        'name' => 'Anderer Verein',
+        'slug' => 'anderer-verein-' . bin2hex(random_bytes(3)),
+        'email' => 'anderer@example.test',
+        'license_mode' => 'gifted',
+    ]);
+
+    AppNewsItem::withoutGlobalScopes()->create([
+        'tenant_id' => $otherTenant->id,
+        'title' => 'Fremde News',
+        'status' => AppNewsItem::STATUS_PUBLISHED,
+        'published_at' => now()->subMinute(),
+    ]);
+
+    $this->actingAs($user, 'sanctum')
+        ->getJson('/api/mobile/news')
+        ->assertOk()
+        ->assertJsonCount(1, 'news')
+        ->assertJsonPath('news.0.title', 'Neue Vereinsinfo')
+        ->assertJsonPath('news.0.push_enabled', true);
 });
 
 function mobileUserFixture(): array
