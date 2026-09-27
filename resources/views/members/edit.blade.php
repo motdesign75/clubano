@@ -98,6 +98,7 @@
                 <a href="#edit-person" class="rounded-full bg-slate-950 px-3.5 py-2 text-sm font-semibold text-white">Person</a>
                 <a href="#edit-membership" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Mitgliedschaft</a>
                 <a href="#edit-contact" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Kontakt</a>
+                <a href="#edit-app-access" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">App-Zugang</a>
                 <a href="#edit-payment" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Zahlung</a>
                 <a href="#edit-privacy" class="rounded-full px-3.5 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Datenschutz</a>
             </div>
@@ -232,6 +233,39 @@
                             <span>Post erlaubt</span>
                         </label>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="edit-app-access" class="rounded-2xl border border-slate-200 bg-white p-6 scroll-mt-6">
+            <div class="grid gap-6 xl:grid-cols-4">
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">App-Zugang</div>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Mein Clubano</h2>
+                    <p class="mt-2 text-sm leading-6 text-slate-500">Diese Zugangsdaten gelten nur für die App und nicht für die große Clubano-Anwendung.</p>
+                </div>
+
+                <div class="space-y-6 xl:col-span-3">
+                    <label class="inline-flex items-center gap-3 border-t border-slate-100 py-3">
+                        <input type="checkbox" name="mobile_app_is_active" value="1" class="rounded border-gray-300" @checked(old('mobile_app_is_active', $member->mobileAppUser?->is_active ?? false))>
+                        <span>App-Zugang aktiv</span>
+                    </label>
+
+                    <div class="grid gap-6 md:grid-cols-2">
+                        <x-ui.input name="mobile_app_username" label="App-Benutzername" :value="old('mobile_app_username', $member->mobileAppUser?->username)" />
+                        <div>
+                            <x-ui.input type="password" name="mobile_app_password" label="Neues App-Passwort" value="" autocomplete="new-password" />
+                            <p class="mt-2 text-xs text-slate-500">
+                                Leer lassen, wenn das bestehende Passwort unverändert bleiben soll.
+                            </p>
+                        </div>
+                    </div>
+
+                    @if($member->mobileAppUser?->last_login_at)
+                        <p class="text-sm text-slate-500">
+                            Letzte App-Anmeldung: {{ $member->mobileAppUser->last_login_at->format('d.m.Y H:i') }} Uhr
+                        </p>
+                    @endif
                 </div>
             </div>
         </section>

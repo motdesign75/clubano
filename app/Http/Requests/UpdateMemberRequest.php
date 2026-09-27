@@ -68,6 +68,24 @@ class UpdateMemberRequest extends FormRequest
             'care_of'           => 'nullable|string|max:255',
             'membership_id'     => ['nullable', Rule::exists('memberships', 'id')->where('tenant_id', $tenantId)],
             'photo'             => 'nullable|image|max:2048',
+            'mobile_app_username' => [
+                'nullable',
+                'string',
+                'max:120',
+                Rule::unique('mobile_app_users', 'username')
+                    ->where(fn ($query) => $query->where('tenant_id', $tenantId))
+                    ->ignore($this->route('member')?->mobileAppUser?->id),
+            ],
+            'mobile_app_password' => [
+                'nullable',
+                'string',
+                'min:8',
+                'max:255',
+                Rule::requiredIf(fn () => $this->boolean('mobile_app_is_active')
+                    && ! $this->route('member')?->mobileAppUser
+                    && filled($this->input('mobile_app_username'))),
+            ],
+            'mobile_app_is_active' => 'nullable|boolean',
         ];
     }
 }

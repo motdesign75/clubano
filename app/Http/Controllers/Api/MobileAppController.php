@@ -9,9 +9,8 @@ use App\Models\Event;
 use App\Models\EventInvitation;
 use App\Models\EventShiftAssignment;
 use App\Models\Member;
-use App\Models\User;
+use App\Models\MobileAppUser;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
@@ -20,13 +19,22 @@ class MobileAppController extends Controller
     public function login(Request $request)
     {
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'username' => ['nullable', 'string', 'max:120'],
+            'email' => ['nullable', 'string', 'max:120'],
             'password' => ['required', 'string'],
             'device_name' => ['nullable', 'string', 'max:120'],
         ]);
 
-        $user = User::query()
-            ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim($validated['email']))])
+        $identifier = mb_strtolower(trim((string) ($validated['username'] ?? $validated['email'] ?? '')));
+
+        if ($identifier === '') {
+            return response()->json(['message' => 'Bitte gib deinen App-Benutzernamen ein.'], 422);
+        }
+
+        $user = MobileAppUser::query()
+            ->with(['tenant', 'member'])
+            ->where('is_active', true)
+            ->whereRaw('LOWER(username) = ?', [$identifier])
             ->first();
 
         if (! $user || ! Hash::check($validated['password'], $user->password)) {
@@ -37,7 +45,12 @@ class MobileAppController extends Controller
             return response()->json(['message' => 'Für diesen Zugang ist kein Mitglied verknüpft.'], 403);
         }
 
-        $token = $user->createToken($validated['device_name'] ?? 'Clubano App', ['mobile'])->plainTextToken;
+        $user->forceFill([
+            'last_login_at' => now(),
+            'last_login_ip' => $request->ip(),
+        ])->save();
+
+        $token = $user->createToken($validated['device_name'] ?? 'Mein Clubano App', ['mobile'])->plainTextToken;
 
         return response()->json([
             'token' => $token,
@@ -106,9 +119,9 @@ class MobileAppController extends Controller
         $updateRequest = DataUpdateRequest::create([
             'tenant_id' => $user->tenant_id,
             'member_id' => $member->id,
-            'created_by' => $user->id,
+            'created_by' => null,
             'recipient_email' => $member->email,
-            'recipient_name' => $member->full_name ?: $member->organization ?: $user->name,
+            'recipient_name' => $member->full_name ?: $member->organization ?: $user->username,
             'token' => bin2hex(random_bytes(24)),
             'status' => DataUpdateRequest::STATUS_SUBMITTED,
             'current_data' => $current,
@@ -161,7 +174,7 @@ class MobileAppController extends Controller
 
         $payload = $this->eventPayload($event);
         $payload['shifts'] = $event->mobile_shifts_enabled
-            ? $event->shifts->map(fn ($shift) => $this->shiftPayload($shift))->values()
+            ? $event->shifts->map(fn ($shift) => $this->shiftPayload($shift, $member->id))->values()
             : [];
 
         return response()->json(['event' => $payload]);
@@ -194,7 +207,7 @@ class MobileAppController extends Controller
                 'status' => $validated['status'],
                 'note' => $validated['note'] ?? null,
                 'responded_at' => now(),
-                'recorded_by' => $request->user()->id,
+                'recorded_by' => null,
             ],
         );
 
@@ -226,7 +239,7 @@ class MobileAppController extends Controller
                 'title' => $event->title,
                 'starts_at' => optional($event->start)->toIso8601String(),
                 'location' => $event->location,
-                'shifts' => $event->shifts->map(fn ($shift) => $this->shiftPayload($shift))->values(),
+                'shifts' => $event->shifts->map(fn ($shift) => $this->shiftPayload($shift, $member->id))->values(),
             ])->values(),
         ]);
     }
@@ -270,22 +283,11 @@ class MobileAppController extends Controller
         ]);
     }
 
-    private function memberFor(User $user): ?Member
+    private function memberFor(MobileAppUser $user): ?Member
     {
-        if ($user->member_id) {
-            $member = Member::query()
-                ->where('tenant_id', $user->tenant_id)
-                ->whereKey($user->member_id)
-                ->first();
-
-            if ($member) {
-                return $member;
-            }
-        }
-
         return Member::query()
             ->where('tenant_id', $user->tenant_id)
-            ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
+            ->whereKey($user->member_id)
             ->first();
     }
 
@@ -294,16 +296,17 @@ class MobileAppController extends Controller
         abort_unless((int) $event->tenant_id === (int) $request->user()->tenant_id, 404);
     }
 
-    private function userPayload(User $user): array
+    private function userPayload(MobileAppUser $user): array
     {
         return [
             'id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
+            'name' => $user->member?->full_name ?: $user->username,
+            'username' => $user->username,
+            'email' => $user->member?->email,
         ];
     }
 
-    private function tenantPayload(User $user): array
+    private function tenantPayload(MobileAppUser $user): array
     {
         return [
             'id' => $user->tenant?->id,
@@ -364,7 +367,7 @@ class MobileAppController extends Controller
         ];
     }
 
-    private function shiftPayload($shift): array
+    private function shiftPayload($shift, ?int $currentMemberId): array
     {
         return [
             'id' => $shift->id,
@@ -381,7 +384,7 @@ class MobileAppController extends Controller
                 ->map(fn (EventShiftAssignment $assignment) => [
                     'id' => $assignment->id,
                     'name' => $assignment->display_name,
-                    'is_me' => $assignment->member_id && Auth::user()?->member_id === $assignment->member_id,
+                    'is_me' => $assignment->member_id && $currentMemberId === $assignment->member_id,
                 ])
                 ->values(),
         ];

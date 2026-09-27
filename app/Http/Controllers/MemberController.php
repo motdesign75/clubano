@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MemberCredit;
 use App\Models\Member;
 use App\Models\MemberCommunicationLog;
+use App\Models\MobileAppUser;
 use App\Models\EventAttendance;
 use App\Models\CustomMemberField;
 use App\Models\Invoice;
@@ -459,7 +460,7 @@ class MemberController extends Controller
     {
         $this->authorizeMember($member);
         $memberships = $membershipService->getForTenant();
-        $member->load(['customValues', 'familyPayer', 'familyMembers']);
+        $member->load(['customValues', 'familyPayer', 'familyMembers', 'mobileAppUser']);
 
         $customFields = CustomMemberField::where('tenant_id', $member->tenant_id)
             ->where('visible', true)
@@ -482,6 +483,7 @@ class MemberController extends Controller
     {
         $this->authorizeMember($member);
         $this->memberService->update($request, $member);
+        $this->updateMobileAppAccess($request, $member);
 
         if ($request->has('tags')) {
             $member->tags()->sync($request->input('tags'));
@@ -490,6 +492,49 @@ class MemberController extends Controller
         }
 
         return redirect()->route('members.index')->with('success', 'Mitglied erfolgreich aktualisiert.');
+    }
+
+    private function updateMobileAppAccess(UpdateMemberRequest $request, Member $member): void
+    {
+        $validated = $request->validated();
+        $username = trim((string) ($validated['mobile_app_username'] ?? ''));
+        $password = (string) ($validated['mobile_app_password'] ?? '');
+        $isActive = $request->boolean('mobile_app_is_active');
+        $existing = $member->mobileAppUser;
+
+        if ($username === '' && $password === '' && ! $isActive) {
+            $existing?->tokens()->delete();
+            $existing?->delete();
+
+            return;
+        }
+
+        if ($username === '' && $existing) {
+            $username = $existing->username;
+        }
+
+        if ($username === '') {
+            return;
+        }
+
+        $appUser = $existing ?: new MobileAppUser([
+            'tenant_id' => $member->tenant_id,
+            'member_id' => $member->id,
+        ]);
+
+        $appUser->fill([
+            'tenant_id' => $member->tenant_id,
+            'member_id' => $member->id,
+            'username' => $username,
+            'is_active' => $isActive,
+        ]);
+
+        if ($password !== '') {
+            $appUser->password = $password;
+            $appUser->tokens()->delete();
+        }
+
+        $appUser->save();
     }
 
     public function destroy(Member $member)

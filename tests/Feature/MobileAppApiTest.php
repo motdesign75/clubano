@@ -8,9 +8,9 @@ use App\Models\EventInvitation;
 use App\Models\EventShift;
 use App\Models\EventShiftAssignment;
 use App\Models\Member;
+use App\Models\MobileAppUser;
 use App\Models\Tenant;
 use App\Models\User;
-use Illuminate\Support\Facades\Hash;
 
 test('member can login and read own mobile profile', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
@@ -35,12 +35,26 @@ test('member can login and read own mobile profile', function () {
         'member_id' => $member->id,
         'name' => 'Mara Mobil',
         'email' => 'mara@example.test',
-        'password' => Hash::make('secret-password'),
+        'password' => 'web-password',
         'email_verified_at' => now(),
     ]);
 
+    MobileAppUser::create([
+        'tenant_id' => $tenant->id,
+        'member_id' => $member->id,
+        'username' => 'mara-app',
+        'password' => 'secret-password',
+        'is_active' => true,
+    ]);
+
+    $this->postJson('/api/mobile/login', [
+        'username' => 'mara@example.test',
+        'password' => 'web-password',
+        'device_name' => 'iPhone',
+    ])->assertStatus(422);
+
     $login = $this->postJson('/api/mobile/login', [
-        'email' => 'mara@example.test',
+        'username' => 'mara-app',
         'password' => 'secret-password',
         'device_name' => 'iPhone',
     ])->assertOk();
@@ -78,10 +92,11 @@ test('member can submit profile changes without directly updating master data', 
         ->assertJsonPath('changes_count', 3);
 
     $member->refresh();
+    $dataUpdateRequest = DataUpdateRequest::query()->where('member_id', $member->id)->firstOrFail();
 
     expect($member->email)->toBe('mara@example.test')
-        ->and(DataUpdateRequest::query()->where('member_id', $member->id)->firstOrFail()->status)
-        ->toBe(DataUpdateRequest::STATUS_SUBMITTED);
+        ->and($dataUpdateRequest->created_by)->toBeNull()
+        ->and($dataUpdateRequest->status)->toBe(DataUpdateRequest::STATUS_SUBMITTED);
 });
 
 test('member can see events and respond without using paid booking flow', function () {
@@ -230,12 +245,12 @@ function mobileUserFixture(): array
         'entry_date' => now()->subYear()->toDateString(),
     ]);
 
-    $user = User::factory()->create([
+    $user = MobileAppUser::create([
         'tenant_id' => $tenant->id,
         'member_id' => $member->id,
-        'name' => 'Mara Mobil',
-        'email' => 'mara@example.test',
-        'email_verified_at' => now(),
+        'username' => 'mara-app-' . bin2hex(random_bytes(3)),
+        'password' => 'secret-password',
+        'is_active' => true,
     ]);
 
     return [$user, $member, $tenant];

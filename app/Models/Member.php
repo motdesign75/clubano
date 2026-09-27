@@ -194,6 +194,11 @@ class Member extends Model
         return $this->hasMany(EventAttendance::class);
     }
 
+    public function mobileAppUser()
+    {
+        return $this->hasOne(MobileAppUser::class);
+    }
+
     public function availableCredits()
     {
         return $this->credits()->where('remaining_amount', '>', 0);

@@ -38,7 +38,7 @@ function normalizeSession(value: unknown): Session | null {
 
   const tenant = {
     ...value.tenant,
-    name: valueOrEmpty(value.tenant.name) || "Clubano"
+    name: valueOrEmpty(value.tenant.name) || "Mein Clubano"
   } as Tenant;
   const member = {
     ...value.member,
@@ -103,7 +103,7 @@ export default function App() {
       <View style={styles.header}>
         <View>
           <Text style={styles.kicker}>{session.tenant.name}</Text>
-          <Text style={styles.title}>Clubano</Text>
+          <Text style={styles.title}>Mein Clubano</Text>
         </View>
         <Pressable onPress={async () => {
           await apiFetch("/api/mobile/logout", { method: "POST" }).catch(() => null);
@@ -142,7 +142,7 @@ export default function App() {
 }
 
 function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -151,7 +151,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
       setBusy(true);
       const data = await apiFetch<unknown>("/api/mobile/login", {
         method: "POST",
-        body: JSON.stringify({ email, password, device_name: "Clubano App" })
+        body: JSON.stringify({ username, password, device_name: "Mein Clubano App" })
       });
       if (!isRecord(data) || typeof data.token !== "string") {
         throw new Error("Die Anmeldung wurde vom Server unvollständig beantwortet.");
@@ -169,11 +169,11 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   return (
     <SafeAreaView style={styles.shell}>
       <View style={styles.login}>
-        <Text style={styles.title}>Clubano</Text>
-        <Text style={styles.muted}>Mit deinem Vereinszugang anmelden.</Text>
-        <TextInput style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="E-Mail" value={email} onChangeText={setEmail} />
+        <Text style={styles.title}>Mein Clubano</Text>
+        <Text style={styles.muted}>Mit deinem App-Zugang anmelden.</Text>
+        <TextInput style={styles.input} autoCapitalize="none" autoCorrect={false} placeholder="Benutzername" value={username} onChangeText={setUsername} />
         <TextInput style={styles.input} secureTextEntry placeholder="Passwort" value={password} onChangeText={setPassword} />
-        <Button title={busy ? "Bitte warten..." : "Anmelden"} onPress={login} disabled={busy || !email || !password} />
+        <Button title={busy ? "Bitte warten..." : "Anmelden"} onPress={login} disabled={busy || !username || !password} />
       </View>
     </SafeAreaView>
   );
