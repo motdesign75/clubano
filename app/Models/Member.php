@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use App\Scopes\CurrentTenantScope;
+use Illuminate\Support\Str;
 
 class Member extends Model
 {
@@ -24,6 +25,10 @@ class Member extends Model
         'organization',
         'birthday',
         'photo',
+        'mobile_identity_uuid',
+        'mobile_identity_secret',
+        'mobile_identity_rotated_at',
+        'mobile_identity_revoked_at',
 
         // Block: Mitgliedschaft
         'member_id',
@@ -95,6 +100,8 @@ class Member extends Model
         'last_contacted_at'=> 'datetime',
         'deletion_requested_at' => 'datetime',
         'archived_at' => 'datetime',
+        'mobile_identity_rotated_at' => 'datetime',
+        'mobile_identity_revoked_at' => 'datetime',
         'required_service_hours' => 'decimal:2',
     ];
 
@@ -197,6 +204,41 @@ class Member extends Model
     public function mobileAppUser()
     {
         return $this->hasOne(MobileAppUser::class);
+    }
+
+    public function ensureMobileIdentity(): void
+    {
+        if ($this->mobile_identity_uuid && $this->mobile_identity_secret && ! $this->mobile_identity_revoked_at) {
+            return;
+        }
+
+        $this->rotateMobileIdentity();
+    }
+
+    public function rotateMobileIdentity(): void
+    {
+        $this->forceFill([
+            'mobile_identity_uuid' => (string) Str::uuid(),
+            'mobile_identity_secret' => Str::random(64),
+            'mobile_identity_rotated_at' => now(),
+            'mobile_identity_revoked_at' => null,
+        ])->save();
+    }
+
+    public function mobileIdentityPayload(): string
+    {
+        $this->ensureMobileIdentity();
+
+        $tenantPublicId = $this->tenant?->invite_code ?: (string) $this->tenant_id;
+        $payload = implode('|', [
+            'clubano-member',
+            'v1',
+            $tenantPublicId,
+            $this->mobile_identity_uuid,
+        ]);
+        $signature = hash_hmac('sha256', $payload, config('app.key') . '|' . $this->mobile_identity_secret);
+
+        return 'clubano://member/v1/' . $tenantPublicId . '/' . $this->mobile_identity_uuid . '/' . $signature;
     }
 
     public function availableCredits()

@@ -268,6 +268,31 @@ test('mobile news only exposes published items from own tenant', function () {
         ->assertJsonPath('news.0.push_enabled', true);
 });
 
+test('member card exposes signed identity qr without personal contact data', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$user, $member] = mobileUserFixture();
+
+    $response = $this->actingAs($user, 'sanctum')
+        ->getJson('/api/mobile/member-card')
+        ->assertOk()
+        ->assertJsonPath('card.full_name', 'Mara Mobil');
+
+    $payload = $response->json('card.qr_payload');
+
+    expect(str_starts_with($payload, 'clubano://member/v1/'))->toBeTrue()
+        ->and(str_contains($payload, 'mara@example.test'))->toBeFalse()
+        ->and(str_starts_with($response->json('card.qr_code_data_uri'), 'data:image/png;base64,'))->toBeTrue();
+
+    $member->refresh();
+    $oldPayload = $member->mobileIdentityPayload();
+
+    $member->rotateMobileIdentity();
+    $member->refresh();
+
+    expect($member->mobileIdentityPayload())->not->toBe($oldPayload);
+});
+
 function mobileUserFixture(): array
 {
     $tenant = Tenant::create([

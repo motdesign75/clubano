@@ -560,6 +560,17 @@ class MemberController extends Controller
         return redirect()->route('members.show', $member)->with('success', 'Mitglied wurde reaktiviert.');
     }
 
+    public function rotateMobileIdentity(Member $member)
+    {
+        $this->authorizeMember($member);
+
+        $member->rotateMobileIdentity();
+
+        return redirect()
+            ->route('members.edit', $member)
+            ->with('success', 'Der Ausweis-QR wurde erneuert. Der bisherige QR-Code ist damit ungültig.');
+    }
+
     public function exportDatenauskunft(Member $member)
     {
         $this->authorizeMember($member);
