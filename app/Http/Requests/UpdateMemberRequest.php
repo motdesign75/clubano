@@ -73,7 +73,6 @@ class UpdateMemberRequest extends FormRequest
                 'string',
                 'max:120',
                 Rule::unique('mobile_app_users', 'username')
-                    ->where(fn ($query) => $query->where('tenant_id', $tenantId))
                     ->ignore($this->route('member')?->mobileAppUser?->id),
             ],
             'mobile_app_password' => [

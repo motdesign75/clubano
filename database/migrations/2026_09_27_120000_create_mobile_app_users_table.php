@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('last_login_ip', 45)->nullable();
             $table->timestamps();
 
-            $table->unique(['tenant_id', 'username']);
+            $table->unique('username');
             $table->unique(['tenant_id', 'member_id']);
         });
 
