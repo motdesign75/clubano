@@ -1,9 +1,9 @@
 import { StatusBar } from "expo-status-bar";
+import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Button,
   FlatList,
   Pressable,
   SafeAreaView,
@@ -17,6 +17,7 @@ import { apiFetch, clearToken, readToken, saveToken } from "./src/api";
 import type { ClubEvent, DocumentItem, Member, Shift, Tenant } from "./src/types";
 
 type Screen = "home" | "profile" | "events" | "shifts" | "documents" | "news" | "contact";
+type IconName = keyof typeof Ionicons.glyphMap;
 
 type Session = {
   tenant: Tenant;
@@ -60,6 +61,32 @@ function arrayOrEmpty<T>(value: T[] | null | undefined) {
   return Array.isArray(value) ? value : [];
 }
 
+const navItems: Array<[Screen, string, IconName]> = [
+  ["home", "Start", "home-outline"],
+  ["profile", "Daten", "person-circle-outline"],
+  ["events", "Termine", "calendar-outline"],
+  ["shifts", "Dienste", "people-outline"],
+  ["documents", "Satzung", "document-text-outline"],
+  ["news", "News", "megaphone-outline"],
+  ["contact", "Kontakt", "mail-outline"]
+];
+
+const tileTones = {
+  blue: { bg: "#EAF4FF", icon: "#1D4ED8", accent: "#BBD7FF" },
+  green: { bg: "#EAF8EF", icon: "#047857", accent: "#BFE8CC" },
+  amber: { bg: "#FFF5D8", icon: "#B45309", accent: "#F7D88B" },
+  indigo: { bg: "#EEF2FF", icon: "#4338CA", accent: "#C7D2FE" },
+  rose: { bg: "#FFF1F2", icon: "#BE123C", accent: "#FDA4AF" }
+};
+
+const homeTiles: Array<{ screen: Screen; title: string; text: string; icon: IconName; tone: keyof typeof tileTones }> = [
+  { screen: "profile", title: "Stammdaten", text: "Daten prüfen und Änderungen einreichen", icon: "person-outline", tone: "blue" },
+  { screen: "events", title: "Termine", text: "Veranstaltungen und Rückmeldungen", icon: "calendar-clear-outline", tone: "green" },
+  { screen: "shifts", title: "Dienstplan", text: "Freigegebene Dienste im Blick behalten", icon: "people-outline", tone: "amber" },
+  { screen: "documents", title: "Dokumente", text: "Satzung und Beitragsordnung", icon: "reader-outline", tone: "indigo" },
+  { screen: "contact", title: "Kontakt", text: "Direkter Draht zum Verein", icon: "mail-outline", tone: "rose" }
+];
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,30 +128,28 @@ export default function App() {
     <SafeAreaView style={styles.shell}>
       <StatusBar style="dark" />
       <View style={styles.header}>
-        <View>
-          <Text style={styles.kicker}>{session.tenant.name}</Text>
-          <Text style={styles.title}>Mein Clubano</Text>
+        <View style={styles.brandRow}>
+          <View style={styles.appMark}>
+            <Ionicons name="people" size={20} color="#ffffff" />
+          </View>
+          <View>
+            <Text style={styles.kicker}>{session.tenant.name}</Text>
+            <Text style={styles.title}>Mein Clubano</Text>
+          </View>
         </View>
         <Pressable onPress={async () => {
           await apiFetch("/api/mobile/logout", { method: "POST" }).catch(() => null);
           await clearToken();
           setSession(null);
-        }}>
-          <Text style={styles.link}>Abmelden</Text>
+        }} style={styles.iconButton}>
+          <Ionicons name="log-out-outline" size={20} color="#1E3A8A" />
         </Pressable>
       </View>
 
       <View style={styles.tabs}>
-        {([
-          ["home", "Start"],
-          ["profile", "Daten"],
-          ["events", "Termine"],
-          ["shifts", "Dienste"],
-          ["documents", "Satzung"],
-          ["news", "News"],
-          ["contact", "Kontakt"]
-        ] as Array<[Screen, string]>).map(([key, label]) => (
+        {navItems.map(([key, label, icon]) => (
           <Pressable key={key} onPress={() => setScreen(key)} style={[styles.tab, screen === key && styles.tabActive]}>
+            <Ionicons name={icon} size={16} color={screen === key ? "#ffffff" : "#52708F"} />
             <Text style={[styles.tabText, screen === key && styles.tabTextActive]}>{label}</Text>
           </Pressable>
         ))}
@@ -169,11 +194,20 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   return (
     <SafeAreaView style={styles.shell}>
       <View style={styles.login}>
-        <Text style={styles.title}>Mein Clubano</Text>
-        <Text style={styles.muted}>Mit deinem App-Zugang anmelden.</Text>
-        <TextInput style={styles.input} autoCapitalize="none" autoCorrect={false} placeholder="Benutzername" value={username} onChangeText={setUsername} />
-        <TextInput style={styles.input} secureTextEntry placeholder="Passwort" value={password} onChangeText={setPassword} />
-        <Button title={busy ? "Bitte warten..." : "Anmelden"} onPress={login} disabled={busy || !username || !password} />
+        <View style={styles.loginHero}>
+          <View style={styles.loginMark}>
+            <Ionicons name="people" size={34} color="#ffffff" />
+          </View>
+          <Text style={styles.loginTitle}>Mein Clubano</Text>
+          <Text style={styles.loginText}>Dein Verein, Termine und wichtige Informationen an einem ruhigen Ort.</Text>
+        </View>
+        <View style={styles.loginPanel}>
+          <Text style={styles.panelTitle}>Willkommen zurück</Text>
+          <Text style={styles.muted}>Mit deinem App-Zugang anmelden.</Text>
+          <TextInput style={styles.input} autoCapitalize="none" autoCorrect={false} placeholder="Benutzername" placeholderTextColor="#94A3B8" value={username} onChangeText={setUsername} />
+          <TextInput style={styles.input} secureTextEntry placeholder="Passwort" placeholderTextColor="#94A3B8" value={password} onChangeText={setPassword} />
+          <PrimaryButton label={busy ? "Bitte warten..." : "Anmelden"} icon="arrow-forward" onPress={login} disabled={busy || !username || !password} />
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -182,19 +216,23 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
 function Home({ session, setScreen }: { session: Session; setScreen: (screen: Screen) => void }) {
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.heading}>Hallo {session.member.first_name || session.member.full_name || "Mitglied"}</Text>
-      <Text style={styles.muted}>Hier findest du die wichtigsten Vereinsfunktionen ohne Chat und ohne Rechnungen.</Text>
-      {[
-        ["profile", "Stammdaten prüfen"],
-        ["events", "Veranstaltungen"],
-        ["shifts", "Dienstplan"],
-        ["documents", "Satzung & Beitragsordnung"],
-        ["contact", "Kontakt zum Verein"]
-      ].map(([target, label]) => (
-        <Pressable key={target} style={styles.card} onPress={() => setScreen(target as Screen)}>
-          <Text style={styles.cardTitle}>{label}</Text>
+      <View style={styles.welcomeCard}>
+        <Text style={styles.welcomeKicker}>Schön, dass du da bist</Text>
+        <Text style={styles.welcomeTitle}>Hallo {session.member.first_name || session.member.full_name || "Mitglied"}</Text>
+        <Text style={styles.welcomeText}>Hier findest du die wichtigsten Vereinsfunktionen ohne Chat und ohne Rechnungen.</Text>
+      </View>
+      <View style={styles.tileGrid}>
+        {homeTiles.map((tile) => (
+          <Pressable key={tile.screen} style={[styles.tile, { backgroundColor: tileTones[tile.tone].bg }]} onPress={() => setScreen(tile.screen)}>
+            <View style={[styles.tileIcon, { backgroundColor: tileTones[tile.tone].accent }]}>
+              <Ionicons name={tile.icon} size={22} color={tileTones[tile.tone].icon} />
+            </View>
+            <Text style={styles.tileTitle}>{tile.title}</Text>
+            <Text style={styles.tileText}>{tile.text}</Text>
+            <Ionicons name="chevron-forward" size={18} color={tileTones[tile.tone].icon} />
         </Pressable>
       ))}
+      </View>
     </ScrollView>
   );
 }
@@ -232,7 +270,7 @@ function Profile({ member, refresh }: { member: Member; refresh: () => void }) {
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.heading}>Meine Stammdaten</Text>
+      <SectionHeader icon="person-circle-outline" title="Meine Stammdaten" text="Prüfe deine gespeicherten Daten und reiche Änderungen zur Prüfung ein." />
       {Object.entries({
         first_name: "Vorname",
         last_name: "Nachname",
@@ -249,10 +287,10 @@ function Profile({ member, refresh }: { member: Member; refresh: () => void }) {
       }).map(([key, label]) => (
         <View key={key} style={styles.field}>
           <Text style={styles.label}>{label}</Text>
-          <TextInput style={styles.input} value={(form as any)[key]} onChangeText={(value) => setForm({ ...form, [key]: value })} />
+          <TextInput style={styles.input} placeholderTextColor="#94A3B8" value={(form as any)[key]} onChangeText={(value) => setForm({ ...form, [key]: value })} />
         </View>
       ))}
-      <Button title="Änderungen zur Prüfung senden" onPress={submit} />
+      <PrimaryButton label="Änderungen zur Prüfung senden" icon="send" onPress={submit} />
     </ScrollView>
   );
 }
@@ -284,16 +322,28 @@ function Events() {
   }
 
   return (
-    <FlatList contentContainerStyle={styles.content} data={events} keyExtractor={(item) => String(item.id)} renderItem={({ item }) => (
-      <View style={styles.card}>
+    <FlatList
+      contentContainerStyle={styles.content}
+      data={events}
+      keyExtractor={(item) => String(item.id)}
+      ListHeaderComponent={<SectionHeader icon="calendar-outline" title="Termine" text="Alles, was für deinen Verein ansteht." />}
+      ListEmptyComponent={<EmptyState icon="calendar-clear-outline" title="Keine Termine" text="Aktuell sind keine kommenden Veranstaltungen für die App freigegeben." />}
+      renderItem={({ item }) => (
+      <View style={styles.surfaceCard}>
+        <View style={styles.cardTopline}>
+          <View style={styles.smallIcon}>
+            <Ionicons name="calendar-clear-outline" size={18} color="#1D4ED8" />
+          </View>
+          <Text style={styles.statusBadge}>{item.invitation?.label ?? "Keine Rückmeldung"}</Text>
+        </View>
         <Text style={styles.cardTitle}>{item.title}</Text>
-        <Text style={styles.muted}>{formatDate(item.starts_at)} · {item.location ?? "Ort offen"}</Text>
-        <Text style={styles.muted}>{item.price_label}</Text>
-        <Text style={styles.badge}>{item.invitation?.label ?? "Keine Rückmeldung"}</Text>
-        <View style={styles.actions}>
-          <Button title="Zusage" onPress={() => respond(item, "accepted")} />
-          <Button title="Vielleicht" onPress={() => respond(item, "maybe")} />
-          <Button title="Absage" onPress={() => respond(item, "declined")} />
+        <InfoRow icon="time-outline" text={formatDate(item.starts_at)} />
+        <InfoRow icon="location-outline" text={item.location ?? "Ort offen"} />
+        {!!item.price_label && <InfoRow icon="pricetag-outline" text={item.price_label} />}
+        <View style={styles.responseGrid}>
+          <ActionChip label="Zusage" icon="checkmark" tone="positive" onPress={() => respond(item, "accepted")} />
+          <ActionChip label="Vielleicht" icon="help" tone="neutral" onPress={() => respond(item, "maybe")} />
+          <ActionChip label="Absage" icon="close" tone="danger" onPress={() => respond(item, "declined")} />
         </View>
       </View>
     )} />
@@ -323,16 +373,17 @@ function Shifts() {
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.heading}>Dienstplan</Text>
-      {events.length === 0 && <Text style={styles.muted}>Aktuell ist kein Dienstplan für die App freigegeben.</Text>}
+      <SectionHeader icon="people-outline" title="Dienstplan" text="Freigegebene Dienste und Besetzungen auf einen Blick." />
+      {events.length === 0 && <EmptyState icon="people-outline" title="Kein Dienstplan" text="Aktuell ist kein Dienstplan für die App freigegeben." />}
       {events.map((event) => (
-        <View key={event.id} style={styles.card}>
+        <View key={event.id} style={styles.surfaceCard}>
           <Text style={styles.cardTitle}>{event.title}</Text>
           {arrayOrEmpty(event.shifts).map((shift) => (
             <View key={shift.id} style={styles.shift}>
               <Text style={styles.label}>{shift.title}</Text>
-              <Text style={styles.muted}>{formatDate(shift.starts_at)} · offen: {shift.open_slots}</Text>
-              <Text>{arrayOrEmpty(shift.assignments).map((a) => a.is_me ? `${a.name} (du)` : a.name).join(", ") || "Noch niemand eingetragen"}</Text>
+              <InfoRow icon="time-outline" text={formatDate(shift.starts_at)} />
+              <InfoRow icon="person-add-outline" text={`Offen: ${shift.open_slots}`} />
+              <Text style={styles.bodyText}>{arrayOrEmpty(shift.assignments).map((a) => a.is_me ? `${a.name} (du)` : a.name).join(", ") || "Noch niemand eingetragen"}</Text>
             </View>
           ))}
         </View>
@@ -357,8 +408,17 @@ function Documents() {
     };
   }, []);
   return (
-    <FlatList contentContainerStyle={styles.content} data={documents} keyExtractor={(item) => String(item.id)} ListHeaderComponent={<Text style={styles.heading}>Satzung & Beitragsordnung</Text>} renderItem={({ item }) => (
-      <View style={styles.card}>
+    <FlatList
+      contentContainerStyle={styles.content}
+      data={documents}
+      keyExtractor={(item) => String(item.id)}
+      ListHeaderComponent={<SectionHeader icon="document-text-outline" title="Satzung & Beitragsordnung" text="Die wichtigsten Vereinsgrundlagen griffbereit." />}
+      ListEmptyComponent={<EmptyState icon="document-outline" title="Keine Dokumente" text="Aktuell sind keine Dokumente für die App freigegeben." />}
+      renderItem={({ item }) => (
+      <View style={styles.surfaceCard}>
+        <View style={styles.smallIcon}>
+          <Ionicons name="reader-outline" size={18} color="#4338CA" />
+        </View>
         <Text style={styles.cardTitle}>{item.title}</Text>
         <Text style={styles.muted}>{item.description ?? "Freigegebenes Vereinsdokument"}</Text>
       </View>
@@ -369,8 +429,8 @@ function Documents() {
 function News() {
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.heading}>Vereinsnews</Text>
-      <Text style={styles.muted}>Dieser Bereich ist für offizielle Mitteilungen des Vereins vorbereitet. Keine Kommentare, kein Chat.</Text>
+      <SectionHeader icon="megaphone-outline" title="Vereinsnews" text="Offizielle Mitteilungen des Vereins, ruhig und ohne Chat." />
+      <EmptyState icon="megaphone-outline" title="Noch keine Mitteilungen" text="Dieser Bereich ist vorbereitet, sobald offizielle News veröffentlicht werden." />
     </ScrollView>
   );
 }
@@ -392,14 +452,70 @@ function Contact() {
   }, []);
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.heading}>Kontakt zum Verein</Text>
-      <View style={styles.card}>
+      <SectionHeader icon="mail-outline" title="Kontakt zum Verein" text="Wenn etwas unklar ist, findest du hier die offiziellen Kontaktdaten." />
+      <View style={styles.surfaceCard}>
+        <View style={styles.smallIcon}>
+          <Ionicons name="business-outline" size={18} color="#047857" />
+        </View>
         <Text style={styles.cardTitle}>{contact?.club_name ?? "Verein"}</Text>
-        <Text>{contact?.email ?? "Keine E-Mail hinterlegt"}</Text>
-        <Text>{contact?.phone ?? ""}</Text>
-        <Text>{[contact?.address, contact?.zip, contact?.city].filter(Boolean).join(", ")}</Text>
+        <InfoRow icon="mail-outline" text={contact?.email ?? "Keine E-Mail hinterlegt"} />
+        {!!contact?.phone && <InfoRow icon="call-outline" text={contact.phone} />}
+        <InfoRow icon="location-outline" text={[contact?.address, contact?.zip, contact?.city].filter(Boolean).join(", ") || "Keine Anschrift hinterlegt"} />
       </View>
     </ScrollView>
+  );
+}
+
+function SectionHeader({ icon, title, text }: { icon: IconName; title: string; text: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionIcon}>
+        <Ionicons name={icon} size={22} color="#1E3A8A" />
+      </View>
+      <View style={styles.sectionCopy}>
+        <Text style={styles.heading}>{title}</Text>
+        <Text style={styles.muted}>{text}</Text>
+      </View>
+    </View>
+  );
+}
+
+function EmptyState({ icon, title, text }: { icon: IconName; title: string; text: string }) {
+  return (
+    <View style={styles.emptyState}>
+      <Ionicons name={icon} size={26} color="#52708F" />
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyText}>{text}</Text>
+    </View>
+  );
+}
+
+function InfoRow({ icon, text }: { icon: IconName; text: string }) {
+  return (
+    <View style={styles.infoRow}>
+      <Ionicons name={icon} size={16} color="#52708F" />
+      <Text style={styles.infoText}>{text}</Text>
+    </View>
+  );
+}
+
+function PrimaryButton({ label, icon, onPress, disabled = false }: { label: string; icon: IconName; onPress: () => void; disabled?: boolean }) {
+  return (
+    <Pressable onPress={onPress} disabled={disabled} style={[styles.primaryButton, disabled && styles.primaryButtonDisabled]}>
+      <Text style={styles.primaryButtonText}>{label}</Text>
+      <Ionicons name={icon} size={18} color="#ffffff" />
+    </Pressable>
+  );
+}
+
+function ActionChip({ label, icon, tone, onPress }: { label: string; icon: IconName; tone: "positive" | "neutral" | "danger"; onPress: () => void }) {
+  const toneStyle = actionTones[tone];
+
+  return (
+    <Pressable onPress={onPress} style={[styles.actionChip, { backgroundColor: toneStyle.bg, borderColor: toneStyle.border }]}>
+      <Ionicons name={icon} size={16} color={toneStyle.text} />
+      <Text style={[styles.actionChipText, { color: toneStyle.text }]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -419,28 +535,67 @@ function formatDate(value?: string | null) {
   return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+const actionTones = {
+  positive: { bg: "#EAF8EF", border: "#BFE8CC", text: "#047857" },
+  neutral: { bg: "#FFF8E6", border: "#F7D88B", text: "#92400E" },
+  danger: { bg: "#FFF1F2", border: "#FDA4AF", text: "#BE123C" }
+};
+
 const styles = StyleSheet.create({
-  shell: { flex: 1, backgroundColor: "#f8fafc" },
-  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
-  login: { flex: 1, justifyContent: "center", padding: 24, gap: 14 },
-  header: { padding: 18, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  kicker: { color: "#64748b", fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
-  title: { fontSize: 28, fontWeight: "800", color: "#0f172a" },
-  heading: { fontSize: 24, fontWeight: "800", color: "#0f172a", marginBottom: 8 },
-  muted: { color: "#64748b", lineHeight: 20 },
-  link: { color: "#4f46e5", fontWeight: "700" },
+  shell: { flex: 1, backgroundColor: "#F4F8FB" },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#F4F8FB" },
+  login: { flex: 1, justifyContent: "center", padding: 18, gap: 14 },
+  loginHero: { backgroundColor: "#123E69", borderRadius: 8, padding: 22, gap: 10 },
+  loginMark: { width: 58, height: 58, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#1D75BD" },
+  loginTitle: { fontSize: 30, fontWeight: "900", color: "#FFFFFF" },
+  loginText: { color: "#DDEBFA", fontSize: 15, lineHeight: 22 },
+  loginPanel: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 18, gap: 12, borderWidth: 1, borderColor: "#D9E6F2" },
+  panelTitle: { color: "#102A43", fontSize: 20, fontWeight: "800" },
+  header: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  appMark: { width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#1D75BD" },
+  iconButton: { width: 40, height: 40, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#EAF4FF", borderWidth: 1, borderColor: "#CFE3F7" },
+  kicker: { color: "#52708F", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
+  title: { fontSize: 24, fontWeight: "900", color: "#102A43" },
+  heading: { fontSize: 22, fontWeight: "900", color: "#102A43" },
+  muted: { color: "#52708F", lineHeight: 20 },
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingHorizontal: 16, paddingBottom: 12 },
-  tab: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12 },
-  tabActive: { backgroundColor: "#0f172a", borderColor: "#0f172a" },
-  tabText: { color: "#334155", fontWeight: "700" },
-  tabTextActive: { color: "#fff" },
+  tab: { minHeight: 36, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#D1E0EE", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10, backgroundColor: "#FFFFFF" },
+  tabActive: { backgroundColor: "#123E69", borderColor: "#123E69" },
+  tabText: { color: "#52708F", fontWeight: "800", fontSize: 13 },
+  tabTextActive: { color: "#FFFFFF" },
   content: { padding: 16, gap: 14 },
-  card: { backgroundColor: "#fff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#e2e8f0", gap: 8 },
-  cardTitle: { fontSize: 18, fontWeight: "800", color: "#0f172a" },
-  field: { gap: 6 },
-  label: { fontWeight: "700", color: "#334155" },
-  input: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 12, padding: 12 },
-  badge: { alignSelf: "flex-start", backgroundColor: "#eef2ff", color: "#3730a3", borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, fontWeight: "700" },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  shift: { borderTopWidth: 1, borderTopColor: "#e2e8f0", paddingTop: 10, gap: 4 }
+  welcomeCard: { backgroundColor: "#123E69", borderRadius: 8, padding: 18, gap: 8 },
+  welcomeKicker: { color: "#A7F3D0", fontSize: 12, fontWeight: "900", textTransform: "uppercase" },
+  welcomeTitle: { color: "#FFFFFF", fontSize: 26, fontWeight: "900" },
+  welcomeText: { color: "#DDEBFA", lineHeight: 21 },
+  tileGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  tile: { width: "48%", minHeight: 154, borderRadius: 8, padding: 14, gap: 8, borderWidth: 1, borderColor: "rgba(16, 42, 67, 0.08)" },
+  tileIcon: { width: 42, height: 42, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  tileTitle: { color: "#102A43", fontWeight: "900", fontSize: 17 },
+  tileText: { color: "#46627F", lineHeight: 19, flex: 1 },
+  surfaceCard: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 16, borderWidth: 1, borderColor: "#D9E6F2", gap: 9 },
+  cardTopline: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  smallIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#EAF4FF" },
+  cardTitle: { fontSize: 18, fontWeight: "900", color: "#102A43" },
+  sectionHeader: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#FFFFFF", borderRadius: 8, padding: 14, borderWidth: 1, borderColor: "#D9E6F2" },
+  sectionIcon: { width: 42, height: 42, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#EAF4FF" },
+  sectionCopy: { flex: 1, gap: 3 },
+  field: { gap: 6, backgroundColor: "#FFFFFF", borderRadius: 8, padding: 12, borderWidth: 1, borderColor: "#D9E6F2" },
+  label: { fontWeight: "800", color: "#274563" },
+  input: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#C9D8E6", borderRadius: 8, padding: 12, color: "#102A43" },
+  primaryButton: { minHeight: 48, borderRadius: 8, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8, backgroundColor: "#1D75BD" },
+  primaryButtonDisabled: { opacity: 0.55 },
+  primaryButtonText: { color: "#FFFFFF", fontWeight: "900" },
+  statusBadge: { alignSelf: "flex-start", backgroundColor: "#EEF8F3", color: "#047857", borderRadius: 8, paddingVertical: 5, paddingHorizontal: 9, fontWeight: "800", fontSize: 12 },
+  responseGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingTop: 4 },
+  actionChip: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, borderWidth: 1, paddingVertical: 8, paddingHorizontal: 10 },
+  actionChipText: { fontWeight: "900", fontSize: 13 },
+  infoRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  infoText: { color: "#46627F", flex: 1, lineHeight: 20 },
+  bodyText: { color: "#102A43", lineHeight: 20 },
+  emptyState: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 18, borderWidth: 1, borderColor: "#D9E6F2", alignItems: "flex-start", gap: 8 },
+  emptyTitle: { color: "#102A43", fontWeight: "900", fontSize: 18 },
+  emptyText: { color: "#52708F", lineHeight: 20 },
+  shift: { borderTopWidth: 1, borderTopColor: "#E4EDF5", paddingTop: 12, gap: 5 }
 });
