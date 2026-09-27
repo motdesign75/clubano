@@ -65,3 +65,12 @@ export type DocumentItem = {
   mime_type: string | null;
   size: number;
 };
+
+export type NewsItem = {
+  id: number;
+  title: string;
+  teaser: string | null;
+  body: string | null;
+  published_at: string | null;
+  push_enabled: boolean;
+};

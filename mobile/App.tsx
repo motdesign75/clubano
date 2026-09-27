@@ -14,7 +14,7 @@ import {
   View
 } from "react-native";
 import { apiFetch, clearToken, readToken, saveToken } from "./src/api";
-import type { ClubEvent, DocumentItem, Member, Shift, Tenant } from "./src/types";
+import type { ClubEvent, DocumentItem, Member, NewsItem, Shift, Tenant } from "./src/types";
 
 type Screen = "home" | "profile" | "events" | "shifts" | "documents" | "news" | "contact";
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -83,6 +83,7 @@ const homeTiles: Array<{ screen: Screen; title: string; text: string; icon: Icon
   { screen: "profile", title: "Stammdaten", text: "Daten prüfen und Änderungen einreichen", icon: "person-outline", tone: "blue" },
   { screen: "events", title: "Termine", text: "Veranstaltungen und Rückmeldungen", icon: "calendar-clear-outline", tone: "green" },
   { screen: "shifts", title: "Dienstplan", text: "Freigegebene Dienste im Blick behalten", icon: "people-outline", tone: "amber" },
+  { screen: "news", title: "News", text: "Wichtige Mitteilungen sofort lesen", icon: "megaphone-outline", tone: "rose" },
   { screen: "documents", title: "Dokumente", text: "Satzung und Beitragsordnung", icon: "reader-outline", tone: "indigo" },
   { screen: "contact", title: "Kontakt", text: "Direkter Draht zum Verein", icon: "mail-outline", tone: "rose" }
 ];
@@ -427,11 +428,42 @@ function Documents() {
 }
 
 function News() {
+  const [news, setNews] = useState<NewsItem[]>([]);
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ news?: NewsItem[] }>("/api/mobile/news")
+      .then((data) => {
+        if (active) setNews(arrayOrEmpty(data.news));
+      })
+      .catch(() => {
+        if (active) setNews([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <SectionHeader icon="megaphone-outline" title="Vereinsnews" text="Offizielle Mitteilungen des Vereins, ruhig und ohne Chat." />
-      <EmptyState icon="megaphone-outline" title="Noch keine Mitteilungen" text="Dieser Bereich ist vorbereitet, sobald offizielle News veröffentlicht werden." />
-    </ScrollView>
+    <FlatList
+      contentContainerStyle={styles.content}
+      data={news}
+      keyExtractor={(item) => String(item.id)}
+      ListHeaderComponent={<SectionHeader icon="megaphone-outline" title="Vereinsnews" text="Offizielle Mitteilungen des Vereins, ruhig und ohne Chat." />}
+      ListEmptyComponent={<EmptyState icon="megaphone-outline" title="Noch keine Mitteilungen" text="Aktuell gibt es keine veröffentlichten Mitteilungen." />}
+      renderItem={({ item }) => (
+        <View style={styles.newsCard}>
+          <View style={styles.cardTopline}>
+            <View style={styles.smallIcon}>
+              <Ionicons name="megaphone-outline" size={18} color="#1D4ED8" />
+            </View>
+            <Text style={styles.newsDate}>{formatDate(item.published_at)}</Text>
+          </View>
+          <Text style={styles.cardTitle}>{item.title}</Text>
+          {item.teaser ? <Text style={styles.muted}>{item.teaser}</Text> : null}
+          {item.body ? <Text style={styles.bodyText}>{item.body}</Text> : null}
+        </View>
+      )}
+    />
   );
 }
 
@@ -575,7 +607,9 @@ const styles = StyleSheet.create({
   tileTitle: { color: "#102A43", fontWeight: "900", fontSize: 17 },
   tileText: { color: "#46627F", lineHeight: 19, flex: 1 },
   surfaceCard: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 16, borderWidth: 1, borderColor: "#D9E6F2", gap: 9 },
+  newsCard: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 16, borderWidth: 1, borderColor: "#CFE3F7", gap: 10, shadowColor: "#123E69", shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   cardTopline: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
+  newsDate: { color: "#52708F", fontWeight: "800", fontSize: 12 },
   smallIcon: { width: 34, height: 34, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#EAF4FF" },
   cardTitle: { fontSize: 18, fontWeight: "900", color: "#102A43" },
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#FFFFFF", borderRadius: 8, padding: 14, borderWidth: 1, borderColor: "#D9E6F2" },

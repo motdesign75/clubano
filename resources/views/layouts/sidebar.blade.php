@@ -140,6 +140,14 @@
             'minRole' => 'Lesen',
         ],
         [
+            'label' => 'App-News',
+            'hint' => 'Mitteilungen für Mein Clubano',
+            'route' => route('app-news.index'),
+            'active' => request()->routeIs('app-news.*'),
+            'icon' => 'megaphone',
+            'minRole' => 'Mitarbeiter',
+        ],
+        [
             'label' => 'E-Mail schreiben',
             'hint' => 'Direkte Nachricht mit Anhängen senden',
             'route' => route('mail.create'),
@@ -465,19 +473,21 @@
                 'children' => $financeNav,
             ],
             [
-                'label' => 'Nachrichten & Vorlagen',
-                'hint' => 'Formulare, Protokolle, E-Mails',
+                'label' => 'Kommunikation',
+                'hint' => 'App-News, E-Mails, Formulare',
                 'icon' => 'paper-airplane',
                 'route' => route('templates.index'),
                 'active' => request()->routeIs('forms.*')
                     || request()->routeIs('protocols.*')
                     || request()->routeIs('templates.*')
+                    || request()->routeIs('app-news.*')
                     || request()->routeIs('mail.*')
                     || request()->routeIs('automated-mails.*')
                     || request()->routeIs('letters.*'),
                 'children' => collect([
                     collect($workNav)->firstWhere('label', 'Formulare'),
                     collect($workNav)->firstWhere('label', 'Protokolle'),
+                    collect($workNav)->firstWhere('label', 'App-News'),
                     collect($workNav)->firstWhere('label', 'E-Mail schreiben'),
                     collect($workNav)->firstWhere('label', 'Automatische Mails'),
                     collect($workNav)->firstWhere('label', 'Vorlagen'),
