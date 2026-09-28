@@ -3,11 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppNewsItem;
+use App\Services\MobileNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class AppNewsController extends Controller
 {
+    public function __construct(private MobileNotificationService $mobileNotificationService)
+    {
+    }
+
     public function index(Request $request)
     {
         $status = $request->query('status');
@@ -46,7 +51,8 @@ class AppNewsController extends Controller
         $data = $this->validated($request);
         $data = $this->normalizePublishingData($data);
 
-        AppNewsItem::create($data);
+        $item = AppNewsItem::create($data);
+        $this->sendIfPublished($item);
 
         return redirect()
             ->route('app-news.index')
@@ -66,7 +72,14 @@ class AppNewsController extends Controller
         $data = $this->validated($request);
         $data = $this->normalizePublishingData($data);
 
+        $wasSent = filled($appNews->push_sent_at);
+
         $appNews->update($data);
+        $appNews->refresh();
+
+        if (! $wasSent) {
+            $this->sendIfPublished($appNews);
+        }
 
         return redirect()
             ->route('app-news.index')
@@ -107,5 +120,12 @@ class AppNewsController extends Controller
         }
 
         return $data;
+    }
+
+    private function sendIfPublished(AppNewsItem $item): void
+    {
+        if ($item->status === AppNewsItem::STATUS_PUBLISHED && $item->push_enabled && blank($item->push_sent_at)) {
+            $this->mobileNotificationService->notifyNews($item);
+        }
     }
 }

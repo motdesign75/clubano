@@ -43,4 +43,14 @@ class MobileAppUser extends Authenticatable
     {
         return $this->belongsTo(Member::class);
     }
+
+    public function pushTokens()
+    {
+        return $this->hasMany(MobilePushToken::class);
+    }
+
+    public function notifications()
+    {
+        return $this->hasMany(AppNotification::class);
+    }
 }
