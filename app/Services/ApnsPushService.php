@@ -147,14 +147,16 @@ class ApnsPushService
             throw new \RuntimeException('Invalid APNs signature R value.');
         }
 
-        $r = substr($signature, $offset, $this->readLength($signature, $offset));
-        $offset += strlen($r);
+        $rLength = $this->readLength($signature, $offset);
+        $r = substr($signature, $offset, $rLength);
+        $offset += $rLength;
 
         if (ord($signature[$offset++]) !== 0x02) {
             throw new \RuntimeException('Invalid APNs signature S value.');
         }
 
-        $s = substr($signature, $offset, $this->readLength($signature, $offset));
+        $sLength = $this->readLength($signature, $offset);
+        $s = substr($signature, $offset, $sLength);
 
         return $this->normalizeInteger($r) . $this->normalizeInteger($s);
     }
