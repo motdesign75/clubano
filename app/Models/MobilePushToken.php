@@ -11,6 +11,7 @@ class MobilePushToken extends Model
         'mobile_app_user_id',
         'member_id',
         'token',
+        'provider',
         'platform',
         'device_name',
         'last_seen_at',

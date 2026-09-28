@@ -344,6 +344,7 @@ test('mobile app can register push token and read notifications', function () {
     $this->actingAs($user, 'sanctum')
         ->postJson('/api/mobile/push-token', [
             'token' => 'ExponentPushToken[test-token]',
+            'provider' => 'expo',
             'platform' => 'ios',
             'device_name' => 'iPhone',
         ])
@@ -352,6 +353,22 @@ test('mobile app can register push token and read notifications', function () {
     expect(MobilePushToken::query()
         ->where('mobile_app_user_id', $user->id)
         ->where('token', 'ExponentPushToken[test-token]')
+        ->where('provider', 'expo')
+        ->exists())->toBeTrue();
+
+    $this->actingAs($user, 'sanctum')
+        ->postJson('/api/mobile/push-token', [
+            'token' => 'abc123native',
+            'provider' => 'apns',
+            'platform' => 'ios',
+            'device_name' => 'iPhone',
+        ])
+        ->assertOk();
+
+    expect(MobilePushToken::query()
+        ->where('mobile_app_user_id', $user->id)
+        ->where('token', 'abc123native')
+        ->where('provider', 'apns')
         ->exists())->toBeTrue();
 
     $notification = AppNotification::create([
@@ -374,6 +391,27 @@ test('mobile app can register push token and read notifications', function () {
         ->postJson("/api/mobile/notifications/{$notification->id}/read")
         ->assertOk()
         ->assertJsonPath('notification.read_at', fn ($value) => filled($value));
+});
+
+test('published app news is not marked as pushed when no device tokens exist', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Http::fake();
+
+    [, , $tenant] = mobileUserFixture();
+
+    $news = AppNewsItem::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Wichtige News ohne Token',
+        'teaser' => 'Kurze Zusammenfassung',
+        'status' => AppNewsItem::STATUS_PUBLISHED,
+        'published_at' => now(),
+        'push_enabled' => true,
+    ]);
+
+    app(MobileNotificationService::class)->notifyNews($news);
+
+    expect($news->fresh()->push_sent_at)->toBeNull();
+    Http::assertNothingSent();
 });
 
 test('published app news creates mobile notifications and sends expo push', function () {

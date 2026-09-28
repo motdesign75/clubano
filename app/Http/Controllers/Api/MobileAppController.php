@@ -154,15 +154,20 @@ class MobileAppController extends Controller
 
         $validated = $request->validate([
             'token' => ['required', 'string', 'max:255'],
+            'provider' => ['nullable', 'string', 'in:expo,apns,fcm'],
             'platform' => ['nullable', 'string', 'max:40'],
             'device_name' => ['nullable', 'string', 'max:120'],
         ]);
+
+        $provider = $validated['provider']
+            ?? (str_starts_with($validated['token'], 'ExponentPushToken[') ? 'expo' : ($validated['platform'] === 'ios' ? 'apns' : 'fcm'));
 
         $user->pushTokens()->updateOrCreate(
             ['token' => $validated['token']],
             [
                 'tenant_id' => $user->tenant_id,
                 'member_id' => $member->id,
+                'provider' => $provider,
                 'platform' => $validated['platform'] ?? null,
                 'device_name' => $validated['device_name'] ?? null,
                 'last_seen_at' => now(),

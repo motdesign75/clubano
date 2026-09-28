@@ -49,4 +49,13 @@ return [
         'integration_token' => env('TRINKWERT_INTEGRATION_TOKEN'),
     ],
 
+    'apns' => [
+        'key_id' => env('APNS_KEY_ID'),
+        'team_id' => env('APNS_TEAM_ID'),
+        'bundle_id' => env('APNS_BUNDLE_ID', env('IOS_BUNDLE_ID', 'de.clubano.app')),
+        'private_key_path' => env('APNS_PRIVATE_KEY_PATH'),
+        'private_key' => env('APNS_PRIVATE_KEY'),
+        'environment' => env('APNS_ENVIRONMENT', 'production'),
+    ],
+
 ];
