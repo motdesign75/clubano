@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class ApnsPushService
@@ -38,22 +37,15 @@ class ApnsPushService
         ];
 
         try {
-            $response = Http::withToken($this->jwt())
-                ->withHeaders([
-                    'apns-topic' => (string) config('services.apns.bundle_id'),
-                    'apns-push-type' => 'alert',
-                    'apns-priority' => '10',
-                ])
-                ->timeout(10)
-                ->post("{$host}/3/device/{$deviceToken}", $payload);
+            $response = $this->postHttp2("{$host}/3/device/{$deviceToken}", $payload);
 
-            if ($response->successful()) {
+            if ($response['status'] >= 200 && $response['status'] < 300) {
                 return true;
             }
 
             Log::warning('APNs push delivery failed', [
-                'status' => $response->status(),
-                'body' => $response->body(),
+                'status' => $response['status'],
+                'body' => $response['body'],
             ]);
         } catch (\Throwable $exception) {
             Log::warning('APNs push delivery failed', [
@@ -62,6 +54,43 @@ class ApnsPushService
         }
 
         return false;
+    }
+
+    private function postHttp2(string $url, array $payload): array
+    {
+        $curl = curl_init($url);
+
+        curl_setopt_array($curl, [
+            CURLOPT_POST => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_2_0,
+            CURLOPT_HTTPHEADER => [
+                'authorization: bearer ' . $this->jwt(),
+                'apns-topic: ' . config('services.apns.bundle_id'),
+                'apns-push-type: alert',
+                'apns-priority: 10',
+                'content-type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_THROW_ON_ERROR),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 10,
+        ]);
+
+        $body = curl_exec($curl);
+
+        if ($body === false) {
+            $message = curl_error($curl);
+            curl_close($curl);
+
+            throw new \RuntimeException($message);
+        }
+
+        $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+        curl_close($curl);
+
+        return [
+            'status' => $status,
+            'body' => $body,
+        ];
     }
 
     private function jwt(): string
