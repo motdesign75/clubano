@@ -110,6 +110,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
+  const [pushStatus, setPushStatus] = useState<string | null>(null);
 
   async function loadSession() {
     try {
@@ -144,19 +145,48 @@ export default function App() {
         return;
       }
 
-      const token = await Notifications.getExpoPushTokenAsync();
+      const registered: string[] = [];
+      const errors: string[] = [];
 
-      await apiFetch("/api/mobile/push-token", {
-        method: "POST",
-        body: JSON.stringify({
-          token: token.data,
-          platform: Platform.OS,
-          device_name: "Mein Clubano App"
-        })
-      });
-    } catch {
-      // Push ist Komfortfunktion. Die App bleibt auch ohne Token vollständig nutzbar.
+      try {
+        const token = await Notifications.getExpoPushTokenAsync();
+        await registerToken(token.data, "expo");
+        registered.push("Expo");
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : "Expo-Token konnte nicht erzeugt werden.");
+      }
+
+      try {
+        const token = await Notifications.getDevicePushTokenAsync();
+        const nativeToken = typeof token.data === "string" ? token.data : String(token.data);
+        await registerToken(nativeToken, Platform.OS === "ios" ? "apns" : "fcm");
+        registered.push(Platform.OS === "ios" ? "APNs" : "FCM");
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : "Geräte-Token konnte nicht erzeugt werden.");
+      }
+
+      if (registered.length === 0) {
+        throw new Error(errors.join(" / "));
+      }
+
+      setPushStatus(`Push vorbereitet: ${registered.join(", ")}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Push konnte nicht eingerichtet werden.";
+      setPushStatus(`Push-Hinweis: ${message}`);
+      console.warn("Push registration failed", error);
     }
+  }
+
+  async function registerToken(token: string, provider: "expo" | "apns" | "fcm") {
+    await apiFetch("/api/mobile/push-token", {
+      method: "POST",
+      body: JSON.stringify({
+        token,
+        provider,
+        platform: Platform.OS,
+        device_name: "Mein Clubano App"
+      })
+    });
   }
 
   useEffect(() => {
@@ -211,7 +241,7 @@ export default function App() {
         ))}
       </View>
 
-      {screen === "home" && <Home session={session} setScreen={setScreen} />}
+      {screen === "home" && <Home session={session} pushStatus={pushStatus} setScreen={setScreen} />}
       {screen === "notifications" && <NotificationsScreen />}
       {screen === "card" && <MemberCardScreen />}
       {screen === "profile" && <Profile member={session.member} refresh={loadSession} />}
@@ -272,7 +302,7 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   );
 }
 
-function Home({ session, setScreen }: { session: Session; setScreen: (screen: Screen) => void }) {
+function Home({ session, pushStatus, setScreen }: { session: Session; pushStatus: string | null; setScreen: (screen: Screen) => void }) {
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.welcomeCard}>
@@ -280,6 +310,11 @@ function Home({ session, setScreen }: { session: Session; setScreen: (screen: Sc
         <Text style={styles.welcomeTitle}>Hallo {session.member.first_name || session.member.full_name || "Mitglied"}</Text>
         <Text style={styles.welcomeText}>Hier findest du die wichtigsten Vereinsfunktionen ohne Chat und ohne Rechnungen.</Text>
       </View>
+      {pushStatus ? (
+        <View style={styles.surfaceCard}>
+          <InfoRow icon="notifications-outline" text={pushStatus} />
+        </View>
+      ) : null}
       <View style={styles.tileGrid}>
         {homeTiles.map((tile) => (
           <Pressable key={tile.screen} style={[styles.tile, { backgroundColor: tileTones[tile.tone].bg }]} onPress={() => setScreen(tile.screen)}>
