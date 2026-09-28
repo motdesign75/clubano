@@ -5,13 +5,17 @@
 @section('content')
 @php
     $currentMeta = $receiptMeta ?? [];
+    $selectedReceiptDirection = old('receipt_direction', $currentMeta['receipt_direction'] ?? $defaultReceiptDirection ?? 'expense');
+    $reasonLabel = $selectedReceiptDirection === 'income'
+        ? 'Wofür wurde das Geld eingenommen?'
+        : 'Wofür wurde das Geld ausgegeben?';
 @endphp
 
 <div class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
     <div class="space-y-2">
         <h1 class="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Eigenbeleg erstellen</h1>
         <p class="text-sm text-slate-500">
-            Wenn kein externer Beleg vorliegt, kannst du hier direkt einen vereinsinternen Eigenbeleg erzeugen.
+            Wenn kein externer Beleg vorliegt, kannst du hier direkt einen vereinsinternen Eigenbeleg für eine Einnahme oder Ausgabe erzeugen.
         </p>
     </div>
 
@@ -28,6 +32,26 @@
                 </div>
             </div>
 
+            <div>
+                <label class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Art des Eigenbelegs</label>
+                <div class="mt-2 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Art des Eigenbelegs">
+                    <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 has-[:checked]:border-emerald-300 has-[:checked]:bg-emerald-50 has-[:checked]:text-emerald-950">
+                        <input type="radio" name="receipt_direction" value="income" class="mt-1 border-slate-300 text-emerald-600 focus:ring-emerald-500" data-reason-label="Wofür wurde das Geld eingenommen?" @checked($selectedReceiptDirection === 'income') required>
+                        <span>
+                            <span class="block font-semibold">Einnahme</span>
+                            <span class="mt-1 block text-xs leading-5 text-slate-500">Zum Beispiel Spende, Barzahlung oder sonstige Einnahme ohne Fremdbeleg.</span>
+                        </span>
+                    </label>
+                    <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 has-[:checked]:border-rose-300 has-[:checked]:bg-rose-50 has-[:checked]:text-rose-950">
+                        <input type="radio" name="receipt_direction" value="expense" class="mt-1 border-slate-300 text-rose-600 focus:ring-rose-500" data-reason-label="Wofür wurde das Geld ausgegeben?" @checked($selectedReceiptDirection === 'expense') required>
+                        <span>
+                            <span class="block font-semibold">Ausgabe</span>
+                            <span class="mt-1 block text-xs leading-5 text-slate-500">Zum Beispiel Barauslage, verlorener Kassenbon oder kleine Ausgabe ohne Beleg.</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
             <div class="grid gap-4 md:grid-cols-2">
                 <div>
                     <label class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Aussteller</label>
@@ -40,7 +64,7 @@
             </div>
 
             <div>
-                <label class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Wofür wurde das Geld ausgegeben?</label>
+                <label id="expense-reason-label" class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{{ $reasonLabel }}</label>
                 <textarea name="expense_reason" rows="4" class="mt-2 w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-slate-900 focus:ring-slate-900" required>{{ old('expense_reason', $currentMeta['expense_reason'] ?? $transaction->description) }}</textarea>
             </div>
 
@@ -108,10 +132,21 @@
             <div class="rounded-3xl border border-violet-200 bg-violet-50 p-5 text-sm text-violet-900 shadow-sm">
                 <div class="font-semibold">Wann ist ein Eigenbeleg sinnvoll?</div>
                 <div class="mt-2 leading-6">
-                    Zum Beispiel bei verlorenen Belegen, kleinen Barauslagen oder Vorgängen, bei denen kein Fremdbeleg ausgestellt wurde.
+                    Zum Beispiel bei verlorenen Belegen, kleinen Barauslagen, Bareinnahmen oder Vorgängen, bei denen kein Fremdbeleg ausgestellt wurde.
                 </div>
             </div>
         </aside>
     </div>
 </div>
+<script>
+    document.querySelectorAll('input[name="receipt_direction"][data-reason-label]').forEach((input) => {
+        input.addEventListener('change', () => {
+            const label = document.getElementById('expense-reason-label');
+
+            if (label) {
+                label.textContent = input.dataset.reasonLabel;
+            }
+        });
+    });
+</script>
 @endsection
