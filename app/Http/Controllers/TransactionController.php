@@ -432,8 +432,9 @@ class TransactionController extends Controller
 
         $tenant = auth()->user()->tenant;
         $receiptMeta = $transaction->receipt_meta ?? [];
+        $defaultReceiptDirection = $receiptMeta['receipt_direction'] ?? $this->inferOwnReceiptDirection($transaction);
 
-        return view('transactions.own-receipt', compact('transaction', 'tenant', 'receiptMeta'));
+        return view('transactions.own-receipt', compact('transaction', 'tenant', 'receiptMeta', 'defaultReceiptDirection'));
     }
 
     public function storeOwnReceipt(Request $request, Transaction $transaction)
@@ -443,6 +444,7 @@ class TransactionController extends Controller
         $validated = $request->validate([
             'issuer_name' => ['required', 'string', 'max:255'],
             'issuer_role' => ['nullable', 'string', 'max:255'],
+            'receipt_direction' => ['required', Rule::in(['income', 'expense'])],
             'expense_reason' => ['required', 'string', 'max:1000'],
             'missing_receipt_reason' => ['required', 'string', 'max:1000'],
             'location' => ['nullable', 'string', 'max:255'],
@@ -466,6 +468,7 @@ class TransactionController extends Controller
             'transaction' => $transaction,
             'tenant' => $tenant,
             'receiptMeta' => $receiptMeta,
+            'receiptDirection' => $validated['receipt_direction'],
             'logoPath' => $tenant?->logo_storage_path && file_exists(storage_path('app/public/' . $tenant->logo_storage_path))
                 ? storage_path('app/public/' . $tenant->logo_storage_path)
                 : null,
@@ -1596,6 +1599,21 @@ class TransactionController extends Controller
     private function isStornoTransaction(Transaction $transaction): bool
     {
         return $transaction->isCancelled();
+    }
+
+    private function inferOwnReceiptDirection(Transaction $transaction): string
+    {
+        $transaction->loadMissing(['account_from', 'account_to']);
+
+        if ($transaction->account_from?->type === 'einnahme') {
+            return 'income';
+        }
+
+        if ($transaction->account_to?->type === 'ausgabe') {
+            return 'expense';
+        }
+
+        return 'expense';
     }
 
     private function stornoPrefix(Transaction $transaction): string

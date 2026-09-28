@@ -23,6 +23,14 @@
     </style>
 </head>
 <body>
+    @php
+        $receiptDirection = $receiptDirection ?? ($receiptMeta['receipt_direction'] ?? 'expense');
+        $receiptDirectionLabel = $receiptDirection === 'income' ? 'Einnahme' : 'Ausgabe';
+        $receiptReasonLabel = $receiptDirection === 'income'
+            ? 'Wofür wurde das Geld eingenommen?'
+            : 'Wofür wurde das Geld ausgegeben?';
+    @endphp
+
     <table class="header-table">
         <tr>
             <td style="width: 62%;">
@@ -60,6 +68,7 @@
                 <div class="box">
                     <div class="label">Eigenbeleg</div>
                     <div><strong>Belegnummer:</strong> {{ $receiptDocumentNumber }}</div>
+                    <div><strong>Art:</strong> {{ $receiptDirectionLabel }}</div>
                     <div><strong>Erstellt am:</strong> {{ now()->format('d.m.Y H:i') }}</div>
                     <div><strong>Aussteller:</strong> {{ $receiptMeta['issuer_name'] }}</div>
                     @if(!empty($receiptMeta['issuer_role']))
@@ -75,7 +84,7 @@
 
     <div class="section">
         <div class="box">
-            <div class="label">Wofür wurde das Geld ausgegeben?</div>
+            <div class="label">{{ $receiptReasonLabel }}</div>
             <div class="copy">{{ $receiptMeta['expense_reason'] }}</div>
         </div>
     </div>
