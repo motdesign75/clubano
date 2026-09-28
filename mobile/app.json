@@ -8,7 +8,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "de.clubano.app"
+      "bundleIdentifier": "de.clubano.app",
+      "entitlements": {
+        "aps-environment": "development"
+      }
     },
     "android": {
       "package": "de.clubano.app",
