@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
+use App\Models\AppNotification;
 use App\Models\AppNewsItem;
 use App\Models\DataUpdateRequest;
 use App\Models\Document;
@@ -10,8 +11,11 @@ use App\Models\EventShift;
 use App\Models\EventShiftAssignment;
 use App\Models\Member;
 use App\Models\MobileAppUser;
+use App\Models\MobilePushToken;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\MobileNotificationService;
+use Illuminate\Support\Facades\Http;
 
 test('member can login and read own mobile profile', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
@@ -330,6 +334,80 @@ test('trinkwert rejects manipulated clubano member identity payloads', function 
         ->assertNotFound()
         ->assertJsonPath('valid', false)
         ->assertJsonPath('reason', 'invalid_signature');
+});
+
+test('mobile app can register push token and read notifications', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$user, $member, $tenant] = mobileUserFixture();
+
+    $this->actingAs($user, 'sanctum')
+        ->postJson('/api/mobile/push-token', [
+            'token' => 'ExponentPushToken[test-token]',
+            'platform' => 'ios',
+            'device_name' => 'iPhone',
+        ])
+        ->assertOk();
+
+    expect(MobilePushToken::query()
+        ->where('mobile_app_user_id', $user->id)
+        ->where('token', 'ExponentPushToken[test-token]')
+        ->exists())->toBeTrue();
+
+    $notification = AppNotification::create([
+        'tenant_id' => $tenant->id,
+        'mobile_app_user_id' => $user->id,
+        'member_id' => $member->id,
+        'type' => AppNotification::TYPE_APP_NEWS,
+        'title' => 'Neue Info',
+        'body' => 'Bitte lesen.',
+        'sent_at' => now(),
+    ]);
+
+    $this->actingAs($user, 'sanctum')
+        ->getJson('/api/mobile/notifications')
+        ->assertOk()
+        ->assertJsonPath('unread_count', 1)
+        ->assertJsonPath('notifications.0.title', 'Neue Info');
+
+    $this->actingAs($user, 'sanctum')
+        ->postJson("/api/mobile/notifications/{$notification->id}/read")
+        ->assertOk()
+        ->assertJsonPath('notification.read_at', fn ($value) => filled($value));
+});
+
+test('published app news creates mobile notifications and sends expo push', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Http::fake([
+        'https://exp.host/--/api/v2/push/send' => Http::response([['status' => 'ok']], 200),
+    ]);
+
+    [$user, , $tenant] = mobileUserFixture();
+
+    MobilePushToken::create([
+        'tenant_id' => $tenant->id,
+        'mobile_app_user_id' => $user->id,
+        'member_id' => $user->member_id,
+        'token' => 'ExponentPushToken[test-token]',
+        'platform' => 'ios',
+        'last_seen_at' => now(),
+    ]);
+
+    $news = AppNewsItem::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Wichtige News',
+        'teaser' => 'Kurze Zusammenfassung',
+        'status' => AppNewsItem::STATUS_PUBLISHED,
+        'published_at' => now(),
+        'push_enabled' => true,
+    ]);
+
+    $created = app(MobileNotificationService::class)->notifyNews($news);
+
+    expect($created)->toBe(1)
+        ->and(AppNotification::query()->where('app_news_item_id', $news->id)->count())->toBe(1);
+
+    Http::assertSent(fn ($request) => $request->url() === 'https://exp.host/--/api/v2/push/send');
 });
 
 function mobileUserFixture(): array

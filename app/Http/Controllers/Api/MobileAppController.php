@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppNewsItem;
+use App\Models\AppNotification;
 use App\Models\DataUpdateRequest;
 use App\Models\Document;
 use App\Models\Event;
@@ -142,6 +143,76 @@ class MobileAppController extends Controller
             'request_id' => $updateRequest->id,
             'changes_count' => count($changes),
         ], 201);
+    }
+
+    public function registerPushToken(Request $request)
+    {
+        $user = $request->user();
+        $member = $this->memberFor($user);
+
+        abort_if(! $member, 403, 'Für diesen Zugang ist kein Mitglied verknüpft.');
+
+        $validated = $request->validate([
+            'token' => ['required', 'string', 'max:255'],
+            'platform' => ['nullable', 'string', 'max:40'],
+            'device_name' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $user->pushTokens()->updateOrCreate(
+            ['token' => $validated['token']],
+            [
+                'tenant_id' => $user->tenant_id,
+                'member_id' => $member->id,
+                'platform' => $validated['platform'] ?? null,
+                'device_name' => $validated['device_name'] ?? null,
+                'last_seen_at' => now(),
+                'revoked_at' => null,
+            ],
+        );
+
+        return response()->json(['message' => 'Push-Benachrichtigungen sind vorbereitet.']);
+    }
+
+    public function notifications(Request $request)
+    {
+        $notifications = AppNotification::query()
+            ->where('tenant_id', $request->user()->tenant_id)
+            ->where('mobile_app_user_id', $request->user()->id)
+            ->latest()
+            ->limit(80)
+            ->get()
+            ->map(fn (AppNotification $notification) => $this->notificationPayload($notification));
+
+        return response()->json([
+            'notifications' => $notifications,
+            'unread_count' => $notifications->whereNull('read_at')->count(),
+        ]);
+    }
+
+    public function markNotificationRead(Request $request, AppNotification $notification)
+    {
+        abort_unless(
+            (int) $notification->tenant_id === (int) $request->user()->tenant_id
+            && (int) $notification->mobile_app_user_id === (int) $request->user()->id,
+            404,
+        );
+
+        $notification->forceFill(['read_at' => now()])->save();
+
+        return response()->json([
+            'notification' => $this->notificationPayload($notification->fresh()),
+        ]);
+    }
+
+    public function markNotificationsRead(Request $request)
+    {
+        AppNotification::query()
+            ->where('tenant_id', $request->user()->tenant_id)
+            ->where('mobile_app_user_id', $request->user()->id)
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        return response()->json(['message' => 'Mitteilungen wurden als gelesen markiert.']);
     }
 
     public function memberCard(Request $request)
@@ -438,6 +509,20 @@ class MobileAppController extends Controller
                     'is_me' => $assignment->member_id && $currentMemberId === $assignment->member_id,
                 ])
                 ->values(),
+        ];
+    }
+
+    private function notificationPayload(AppNotification $notification): array
+    {
+        return [
+            'id' => $notification->id,
+            'type' => $notification->type,
+            'title' => $notification->title,
+            'body' => $notification->body,
+            'data' => $notification->data ?? [],
+            'created_at' => optional($notification->created_at)->toIso8601String(),
+            'sent_at' => optional($notification->sent_at)->toIso8601String(),
+            'read_at' => optional($notification->read_at)->toIso8601String(),
         ];
     }
 

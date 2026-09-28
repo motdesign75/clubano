@@ -87,3 +87,14 @@ export type MemberCard = {
   qr_code_data_uri: string;
   logo_data_uri: string | null;
 };
+
+export type AppNotification = {
+  id: number;
+  type: string;
+  title: string;
+  body: string | null;
+  data: Record<string, unknown>;
+  created_at: string | null;
+  sent_at: string | null;
+  read_at: string | null;
+};

@@ -20,7 +20,8 @@
       "apiBaseUrl": "https://app.clubano.de"
     },
     "plugins": [
-      "expo-asset"
+      "expo-asset",
+      "expo-notifications"
     ]
   }
 }

@@ -18,6 +18,10 @@ Route::prefix('mobile')->name('api.mobile.')->group(function () {
         Route::post('/logout', [MobileAppController::class, 'logout'])->name('logout');
         Route::get('/me', [MobileAppController::class, 'me'])->name('me');
         Route::post('/me/profile-change', [MobileAppController::class, 'submitProfileChange'])->name('profile-change');
+        Route::post('/push-token', [MobileAppController::class, 'registerPushToken'])->name('push-token');
+        Route::get('/notifications', [MobileAppController::class, 'notifications'])->name('notifications.index');
+        Route::post('/notifications/read-all', [MobileAppController::class, 'markNotificationsRead'])->name('notifications.read-all');
+        Route::post('/notifications/{notification}/read', [MobileAppController::class, 'markNotificationRead'])->name('notifications.read');
         Route::get('/member-card', [MobileAppController::class, 'memberCard'])->name('member-card');
         Route::get('/events', [MobileAppController::class, 'events'])->name('events.index');
         Route::get('/events/{event}', [MobileAppController::class, 'event'])->name('events.show');

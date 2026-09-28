@@ -1,11 +1,13 @@
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
+import * as Notifications from "expo-notifications";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -15,15 +17,23 @@ import {
   View
 } from "react-native";
 import { apiFetch, clearToken, readToken, saveToken } from "./src/api";
-import type { ClubEvent, DocumentItem, Member, MemberCard, NewsItem, Shift, Tenant } from "./src/types";
+import type { AppNotification, ClubEvent, DocumentItem, Member, MemberCard, NewsItem, Shift, Tenant } from "./src/types";
 
-type Screen = "home" | "card" | "profile" | "events" | "shifts" | "documents" | "news" | "contact";
+type Screen = "home" | "notifications" | "card" | "profile" | "events" | "shifts" | "documents" | "news" | "contact";
 type IconName = keyof typeof Ionicons.glyphMap;
 
 type Session = {
   tenant: Tenant;
   member: Member;
 };
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false
+  })
+});
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -64,6 +74,7 @@ function arrayOrEmpty<T>(value: T[] | null | undefined) {
 
 const navItems: Array<[Screen, string, IconName]> = [
   ["home", "Start", "home-outline"],
+  ["notifications", "Mitteilungen", "notifications-outline"],
   ["card", "Ausweis", "qr-code-outline"],
   ["profile", "Daten", "person-circle-outline"],
   ["events", "Termine", "calendar-outline"],
@@ -82,6 +93,7 @@ const tileTones = {
 };
 
 const homeTiles: Array<{ screen: Screen; title: string; text: string; icon: IconName; tone: keyof typeof tileTones }> = [
+  { screen: "notifications", title: "Mitteilungen", text: "News und Hinweise auf einen Blick", icon: "notifications-outline", tone: "amber" },
   { screen: "card", title: "Ausweis", text: "Mitgliedskarte mit sicherem QR-Code", icon: "qr-code-outline", tone: "blue" },
   { screen: "profile", title: "Stammdaten", text: "Daten prüfen und Änderungen einreichen", icon: "person-outline", tone: "blue" },
   { screen: "events", title: "Termine", text: "Veranstaltungen und Rückmeldungen", icon: "calendar-clear-outline", tone: "green" },
@@ -113,9 +125,46 @@ export default function App() {
     }
   }
 
+  async function registerPushToken() {
+    try {
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("default", {
+          name: "Mein Clubano",
+          importance: Notifications.AndroidImportance.DEFAULT
+        });
+      }
+
+      const current = await Notifications.getPermissionsAsync();
+      const permission = current.granted ? current : await Notifications.requestPermissionsAsync();
+
+      if (!permission.granted) {
+        return;
+      }
+
+      const token = await Notifications.getExpoPushTokenAsync();
+
+      await apiFetch("/api/mobile/push-token", {
+        method: "POST",
+        body: JSON.stringify({
+          token: token.data,
+          platform: Platform.OS,
+          device_name: "Mein Clubano App"
+        })
+      });
+    } catch {
+      // Push ist Komfortfunktion. Die App bleibt auch ohne Token vollständig nutzbar.
+    }
+  }
+
   useEffect(() => {
     loadSession();
   }, []);
+
+  useEffect(() => {
+    if (session) {
+      registerPushToken();
+    }
+  }, [session?.member.id]);
 
   if (loading) {
     return <Centered><ActivityIndicator /></Centered>;
@@ -160,6 +209,7 @@ export default function App() {
       </View>
 
       {screen === "home" && <Home session={session} setScreen={setScreen} />}
+      {screen === "notifications" && <NotificationsScreen />}
       {screen === "card" && <MemberCardScreen />}
       {screen === "profile" && <Profile member={session.member} refresh={loadSession} />}
       {screen === "events" && <Events />}
@@ -239,6 +289,71 @@ function Home({ session, setScreen }: { session: Session; setScreen: (screen: Sc
       ))}
       </View>
     </ScrollView>
+  );
+}
+
+function NotificationsScreen() {
+  const [items, setItems] = useState<AppNotification[]>([]);
+
+  async function load() {
+    try {
+      const data = await apiFetch<{ notifications?: AppNotification[] }>("/api/mobile/notifications");
+      setItems(arrayOrEmpty(data.notifications));
+    } catch {
+      setItems([]);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function markRead(notification: AppNotification) {
+    try {
+      await apiFetch(`/api/mobile/notifications/${notification.id}/read`, { method: "POST" });
+      await load();
+    } catch {
+      Alert.alert("Nicht gespeichert", "Die Mitteilung konnte nicht als gelesen markiert werden.");
+    }
+  }
+
+  async function markAllRead() {
+    try {
+      await apiFetch("/api/mobile/notifications/read-all", { method: "POST" });
+      await load();
+    } catch {
+      Alert.alert("Nicht gespeichert", "Die Mitteilungen konnten nicht aktualisiert werden.");
+    }
+  }
+
+  const unreadCount = items.filter((item) => !item.read_at).length;
+
+  return (
+    <FlatList
+      contentContainerStyle={styles.content}
+      data={items}
+      keyExtractor={(item) => String(item.id)}
+      ListHeaderComponent={(
+        <View style={styles.notificationHeader}>
+          <SectionHeader icon="notifications-outline" title="Mitteilungen" text="Wichtige Hinweise deines Vereins an einem Ort." />
+          {unreadCount > 0 && <PrimaryButton label={`${unreadCount} als gelesen markieren`} icon="checkmark-done" onPress={markAllRead} />}
+        </View>
+      )}
+      ListEmptyComponent={<EmptyState icon="notifications-outline" title="Keine Mitteilungen" text="Hier erscheinen App-News und spätere Erinnerungen." />}
+      renderItem={({ item }) => (
+        <Pressable onPress={() => markRead(item)} style={[styles.notificationCard, !item.read_at && styles.notificationUnread]}>
+          <View style={styles.cardTopline}>
+            <View style={styles.smallIcon}>
+              <Ionicons name="notifications-outline" size={18} color="#1D4ED8" />
+            </View>
+            {!item.read_at ? <Text style={styles.unreadBadge}>Neu</Text> : <Text style={styles.newsDate}>{formatDate(item.created_at)}</Text>}
+          </View>
+          <Text style={styles.cardTitle}>{item.title}</Text>
+          {item.body ? <Text style={styles.bodyText}>{item.body}</Text> : null}
+          {!item.read_at ? <Text style={styles.notificationHint}>Antippen, um als gelesen zu markieren.</Text> : null}
+        </Pressable>
+      )}
+    />
   );
 }
 
@@ -669,6 +784,11 @@ const styles = StyleSheet.create({
   tileTitle: { color: "#102A43", fontWeight: "900", fontSize: 17 },
   tileText: { color: "#46627F", lineHeight: 19, flex: 1 },
   surfaceCard: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 16, borderWidth: 1, borderColor: "#D9E6F2", gap: 9 },
+  notificationHeader: { gap: 12 },
+  notificationCard: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 16, borderWidth: 1, borderColor: "#D9E6F2", gap: 9 },
+  notificationUnread: { borderColor: "#BBD7FF", backgroundColor: "#F8FBFF" },
+  unreadBadge: { alignSelf: "flex-start", backgroundColor: "#EAF4FF", color: "#1D4ED8", borderRadius: 8, paddingVertical: 5, paddingHorizontal: 9, fontWeight: "900", fontSize: 12 },
+  notificationHint: { color: "#52708F", fontSize: 12, fontWeight: "800" },
   memberPass: { backgroundColor: "#123E69", borderRadius: 8, padding: 18, gap: 18, borderWidth: 1, borderColor: "#0D2C4A" },
   passTop: { flexDirection: "row", alignItems: "center", gap: 12 },
   passLogo: { width: 60, height: 60, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#1D75BD", overflow: "hidden" },
