@@ -3,6 +3,13 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\MobileAppController;
+use App\Http\Controllers\Api\TrinkwertIdentityController;
+
+Route::prefix('integrations/trinkwert')->name('api.integrations.trinkwert.')->group(function () {
+    Route::post('/resolve-member', [TrinkwertIdentityController::class, 'resolveMember'])
+        ->middleware('throttle:120,1')
+        ->name('resolve-member');
+});
 
 Route::prefix('mobile')->name('api.mobile.')->group(function () {
     Route::post('/login', [MobileAppController::class, 'login'])->name('login');
