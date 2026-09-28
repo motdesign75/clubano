@@ -7,6 +7,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Linking,
   Platform,
   Pressable,
   SafeAreaView,
@@ -19,7 +20,7 @@ import {
 import { apiFetch, clearToken, readToken, saveToken } from "./src/api";
 import type { AppNotification, ClubEvent, DocumentItem, Member, MemberCard, NewsItem, Shift, Tenant } from "./src/types";
 
-type Screen = "home" | "notifications" | "card" | "profile" | "events" | "shifts" | "documents" | "news" | "contact";
+type Screen = "home" | "notifications" | "card" | "profile" | "events" | "shifts" | "documents" | "news" | "contact" | "legal";
 type IconName = keyof typeof Ionicons.glyphMap;
 
 type Session = {
@@ -81,7 +82,8 @@ const navItems: Array<[Screen, string, IconName]> = [
   ["shifts", "Dienste", "people-outline"],
   ["documents", "Satzung", "document-text-outline"],
   ["news", "News", "megaphone-outline"],
-  ["contact", "Kontakt", "mail-outline"]
+  ["contact", "Kontakt", "mail-outline"],
+  ["legal", "Rechtliches", "shield-checkmark-outline"]
 ];
 
 const tileTones = {
@@ -100,7 +102,8 @@ const homeTiles: Array<{ screen: Screen; title: string; text: string; icon: Icon
   { screen: "shifts", title: "Dienstplan", text: "Freigegebene Dienste im Blick behalten", icon: "people-outline", tone: "amber" },
   { screen: "news", title: "News", text: "Wichtige Mitteilungen sofort lesen", icon: "megaphone-outline", tone: "rose" },
   { screen: "documents", title: "Dokumente", text: "Satzung und Beitragsordnung", icon: "reader-outline", tone: "indigo" },
-  { screen: "contact", title: "Kontakt", text: "Direkter Draht zum Verein", icon: "mail-outline", tone: "rose" }
+  { screen: "contact", title: "Kontakt", text: "Direkter Draht zum Verein", icon: "mail-outline", tone: "rose" },
+  { screen: "legal", title: "Rechtliches", text: "Datenschutz und App-Support", icon: "shield-checkmark-outline", tone: "indigo" }
 ];
 
 export default function App() {
@@ -217,6 +220,7 @@ export default function App() {
       {screen === "documents" && <Documents />}
       {screen === "news" && <News />}
       {screen === "contact" && <Contact />}
+      {screen === "legal" && <Legal />}
     </SafeAreaView>
   );
 }
@@ -675,6 +679,58 @@ function Contact() {
   );
 }
 
+function Legal() {
+  return (
+    <ScrollView contentContainerStyle={styles.content}>
+      <SectionHeader icon="shield-checkmark-outline" title="Rechtliches & Support" text="Datenschutz und Hilfe zur Mein Clubano App." />
+      <LinkCard
+        icon="lock-closed-outline"
+        title="Datenschutzerklärung"
+        text="Hier findest du die Datenschutzhinweise zu Clubano."
+        actionLabel="Datenschutz öffnen"
+        onPress={() => openExternal("https://clubano.de/datenschutzerklaerung/")}
+      />
+      <LinkCard
+        icon="help-circle-outline"
+        title="Support"
+        text="Bei technischen Fragen zur App erreichst du den Support per E-Mail."
+        actionLabel="kontakt@motdesign.de"
+        onPress={() => openExternal("mailto:kontakt@motdesign.de?subject=Support%20Mein%20Clubano")}
+      />
+    </ScrollView>
+  );
+}
+
+function LinkCard({ icon, title, text, actionLabel, onPress }: { icon: IconName; title: string; text: string; actionLabel: string; onPress: () => void }) {
+  return (
+    <View style={styles.surfaceCard}>
+      <View style={styles.cardTopline}>
+        <View style={styles.smallIcon}>
+          <Ionicons name={icon} size={18} color="#1D4ED8" />
+        </View>
+        <Ionicons name="open-outline" size={18} color="#52708F" />
+      </View>
+      <Text style={styles.cardTitle}>{title}</Text>
+      <Text style={styles.bodyText}>{text}</Text>
+      <Pressable onPress={onPress} style={styles.linkButton}>
+        <Text style={styles.linkButtonText}>{actionLabel}</Text>
+        <Ionicons name="arrow-forward" size={16} color="#1D4ED8" />
+      </Pressable>
+    </View>
+  );
+}
+
+async function openExternal(url: string) {
+  const supported = await Linking.canOpenURL(url);
+
+  if (!supported) {
+    Alert.alert("Nicht verfügbar", "Dieser Link kann auf dem Gerät nicht geöffnet werden.");
+    return;
+  }
+
+  await Linking.openURL(url);
+}
+
 function SectionHeader({ icon, title, text }: { icon: IconName; title: string; text: string }) {
   return (
     <View style={styles.sectionHeader}>
@@ -823,6 +879,8 @@ const styles = StyleSheet.create({
   infoRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   infoText: { color: "#46627F", flex: 1, lineHeight: 20 },
   bodyText: { color: "#102A43", lineHeight: 20 },
+  linkButton: { minHeight: 44, borderRadius: 8, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#EAF4FF", borderWidth: 1, borderColor: "#CFE3F7" },
+  linkButtonText: { color: "#1D4ED8", fontWeight: "900" },
   emptyState: { backgroundColor: "#FFFFFF", borderRadius: 8, padding: 18, borderWidth: 1, borderColor: "#D9E6F2", alignItems: "flex-start", gap: 8 },
   emptyTitle: { color: "#102A43", fontWeight: "900", fontSize: 18 },
   emptyText: { color: "#52708F", lineHeight: 20 },
