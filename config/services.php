@@ -45,4 +45,8 @@ return [
         'measurement_id' => env('GOOGLE_ANALYTICS_MEASUREMENT_ID'),
     ],
 
+    'trinkwert' => [
+        'integration_token' => env('TRINKWERT_INTEGRATION_TOKEN'),
+    ],
+
 ];

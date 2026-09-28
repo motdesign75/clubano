@@ -293,6 +293,45 @@ test('member card exposes signed identity qr without personal contact data', fun
     expect($member->mobileIdentityPayload())->not->toBe($oldPayload);
 });
 
+test('trinkwert can resolve a valid clubano member identity with integration token', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    config(['services.trinkwert.integration_token' => 'test-trinkwert-token']);
+
+    [, $member, $tenant] = mobileUserFixture();
+    $payload = $member->mobileIdentityPayload();
+
+    $this->postJson('/api/integrations/trinkwert/resolve-member', [
+        'qr_payload' => $payload,
+    ])->assertUnauthorized();
+
+    $this->withToken('test-trinkwert-token')
+        ->postJson('/api/integrations/trinkwert/resolve-member', [
+            'qr_payload' => $payload,
+        ])
+        ->assertOk()
+        ->assertJsonPath('valid', true)
+        ->assertJsonPath('tenant.name', $tenant->name)
+        ->assertJsonPath('member.full_name', 'Mara Mobil')
+        ->assertJsonPath('member.identity_uuid', $member->fresh()->mobile_identity_uuid);
+});
+
+test('trinkwert rejects manipulated clubano member identity payloads', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    config(['services.trinkwert.integration_token' => 'test-trinkwert-token']);
+
+    [, $member] = mobileUserFixture();
+    $payload = $member->mobileIdentityPayload();
+    $manipulated = preg_replace('/[a-f0-9]{64}$/', str_repeat('0', 64), $payload);
+
+    $this->withToken('test-trinkwert-token')
+        ->postJson('/api/integrations/trinkwert/resolve-member', [
+            'qr_payload' => $manipulated,
+        ])
+        ->assertNotFound()
+        ->assertJsonPath('valid', false)
+        ->assertJsonPath('reason', 'invalid_signature');
+});
+
 function mobileUserFixture(): array
 {
     $tenant = Tenant::create([
