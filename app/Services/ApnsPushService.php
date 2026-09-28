@@ -181,6 +181,10 @@ class ApnsPushService
     {
         $value = ltrim($value, "\x00");
 
+        if (strlen($value) > 32) {
+            $value = substr($value, -32);
+        }
+
         return str_pad($value, 32, "\x00", STR_PAD_LEFT);
     }
 
