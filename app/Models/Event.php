@@ -29,6 +29,10 @@ class Event extends Model
         'organization_bookings_free',
         'currency',
         'max_participants_per_booking',
+        'max_participants_total',
+        'min_participants',
+        'registration_deadline',
+        'show_remaining_spots',
         'image_path',
         'tenant_id',
         'category_id',
@@ -57,6 +61,10 @@ class Event extends Model
         'member_price_per_person' => 'decimal:2',
         'organization_bookings_free' => 'boolean',
         'max_participants_per_booking' => 'integer',
+        'max_participants_total' => 'integer',
+        'min_participants' => 'integer',
+        'registration_deadline' => 'datetime',
+        'show_remaining_spots' => 'boolean',
         'recurrence_interval' => 'integer',
         'recurrence_until' => 'date',
     ];
@@ -208,6 +216,84 @@ class Event extends Model
         }
 
         return 'Ab ' . number_format($prices->min(), 2, ',', '.') . ' ' . strtoupper($this->currency ?: 'EUR');
+    }
+
+    public function getBookedParticipantsCountAttribute(): int
+    {
+        return EventBookingParticipant::query()
+            ->active()
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $this->id)
+                ->where('tenant_id', $this->tenant_id)
+                ->where(fn ($statusQuery) => $statusQuery
+                    ->whereNull('booking_status')
+                    ->orWhere('booking_status', '!=', 'cancelled')))
+            ->count();
+    }
+
+    public function getRemainingSpotsAttribute(): ?int
+    {
+        if (!$this->max_participants_total) {
+            return null;
+        }
+
+        return max(0, (int) $this->max_participants_total - $this->booked_participants_count);
+    }
+
+    public function getIsFullyBookedAttribute(): bool
+    {
+        return $this->remaining_spots !== null && $this->remaining_spots <= 0;
+    }
+
+    public function getRegistrationDeadlinePassedAttribute(): bool
+    {
+        return $this->registration_deadline?->isPast() ?? false;
+    }
+
+    public function getBookingClosedReasonAttribute(): ?string
+    {
+        if (!$this->booking_enabled) {
+            return 'Die Anmeldung ist aktuell nicht geöffnet.';
+        }
+
+        if ($this->registration_deadline_passed) {
+            return 'Der Anmeldeschluss ist erreicht.';
+        }
+
+        if ($this->is_fully_booked) {
+            return 'Der Termin ist ausgebucht.';
+        }
+
+        return null;
+    }
+
+    public function getEffectiveMaxParticipantsPerBookingAttribute(): int
+    {
+        $maxPerBooking = max(1, (int) ($this->max_participants_per_booking ?: 1));
+
+        if ($this->remaining_spots === null) {
+            return $maxPerBooking;
+        }
+
+        return max(1, min($maxPerBooking, $this->remaining_spots));
+    }
+
+    public function getMinimumParticipantsMissingAttribute(): ?int
+    {
+        if (!$this->min_participants) {
+            return null;
+        }
+
+        return max(0, (int) $this->min_participants - $this->booked_participants_count);
+    }
+
+    public function getMinimumParticipantsReachedAttribute(): ?bool
+    {
+        if (!$this->min_participants) {
+            return null;
+        }
+
+        return $this->minimum_participants_missing === 0;
     }
 
     public function priceForParticipantType(string $participantType): float

@@ -558,9 +558,17 @@ class PublicFormController extends Controller
 
         $rules = [];
         $isEventBooking = $form->form_type === 'event' && $form->event;
-        $maxParticipants = max(1, (int) ($form->event?->max_participants_per_booking ?: 1));
+        $maxParticipants = $isEventBooking
+            ? $form->event->effective_max_participants_per_booking
+            : max(1, (int) ($form->event?->max_participants_per_booking ?: 1));
         $fieldSlugs = $form->fields->pluck('slug');
         $bookingMode = $isEventBooking && $request->input('booking_mode') === 'organization' ? 'organization' : 'person';
+
+        if ($isEventBooking && $form->event?->booking_closed_reason) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'event' => $form->event->booking_closed_reason,
+            ]);
+        }
 
         foreach ($form->fields as $field) {
             if ($field->isDisplayOnly()) {
@@ -661,6 +669,8 @@ class PublicFormController extends Controller
             $answers['use_booker_as_participant'] = $bookingMode === 'organization' ? true : (bool) ($validated['use_booker_as_participant'] ?? false);
             $answers['booking_claims_membership'] = (bool) ($validated['booking_claims_membership'] ?? false);
             $answers['organization_booking_type'] = $bookingMode === 'organization' ? ($validated['organization_booking_type'] ?? null) : null;
+
+            $this->ensureEventBookingCanAccept($form->event, (int) $answers['participant_count']);
         }
 
         $bookerMember = null;
@@ -683,6 +693,12 @@ class PublicFormController extends Controller
         }
 
         $submission = DB::transaction(function () use ($form, $answers, $validated, $isEventBooking, $bookerMember) {
+            if ($isEventBooking && $form->event_id) {
+                $event = Event::query()->whereKey($form->event_id)->lockForUpdate()->firstOrFail();
+                $form->setRelation('event', $event);
+                $this->ensureEventBookingCanAccept($event, (int) ($answers['participant_count'] ?? 1));
+            }
+
             $submission = PublicFormSubmission::create([
                 'public_form_id' => $form->id,
                 'tenant_id' => $form->tenant_id,
@@ -1645,6 +1661,27 @@ class PublicFormController extends Controller
         return $form->success_message ?: ($formal
             ? 'Danke für Ihre Anmeldung. Wir haben Ihren Platz vorgemerkt.'
             : 'Danke für die Anmeldung. Wir haben euren Platz vorgemerkt.');
+    }
+
+    private function ensureEventBookingCanAccept(?Event $event, int $requestedParticipants): void
+    {
+        if (! $event) {
+            return;
+        }
+
+        if ($event->booking_closed_reason) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'event' => $event->booking_closed_reason,
+            ]);
+        }
+
+        if ($event->remaining_spots !== null && $requestedParticipants > $event->remaining_spots) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'participant_count' => $event->remaining_spots > 0
+                    ? 'Für diesen Termin sind nur noch ' . $event->remaining_spots . ' ' . ($event->remaining_spots === 1 ? 'Platz' : 'Plätze') . ' verfügbar.'
+                    : 'Der Termin ist ausgebucht.',
+            ]);
+        }
     }
 
     private function seedStarterFields(PublicForm $form): void
