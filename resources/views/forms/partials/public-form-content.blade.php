@@ -4,8 +4,8 @@
         $event = $form->event;
         $currency = strtoupper($event?->currency ?: 'EUR');
         $externalPrice = (float) ($event?->price_per_person ?? 0);
-        $memberPrice = (float) ($event?->member_price_per_person ?? 0);
-        $hasMemberRate = $isEventBooking && $externalPrice > 0 && $memberPrice < $externalPrice;
+        $memberPrice = (float) ($event?->effective_member_price_per_person ?? $event?->price_per_person ?? 0);
+        $hasMemberRate = $isEventBooking && ($event?->member_pricing_enabled ?? false) && $externalPrice > 0 && $memberPrice < $externalPrice;
         $clubBookingsFree = $isEventBooking && (bool) ($event?->organization_bookings_free ?? false);
         $tenant = $form->tenant;
         $tenantLogoUrl = $tenant?->logo_url;

@@ -353,7 +353,7 @@
                                         <form method="POST" action="{{ route('forms.submissions.convert-participant', [$form, $submission]) }}" class="rounded-2xl border border-slate-200 bg-white p-4" x-data="{
                                             participantType: 'guest',
                                             externalPrice: {{ json_encode((float) ($form->event?->price_per_person ?? 0)) }},
-                                            memberPrice: {{ json_encode((float) ($form->event?->member_price_per_person ?? 0)) }},
+                                            memberPrice: {{ json_encode((float) ($form->event?->effective_member_price_per_person ?? $form->event?->price_per_person ?? 0)) }},
                                             priceAmount: 0,
                                             paymentRequired: false,
                                             paymentStatus: 'not_required',

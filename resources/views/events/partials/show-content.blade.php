@@ -2,8 +2,8 @@
     $canManageEvents = ! $isPublicPreview && (auth()->user()?->canManageEvents() ?? false);
     $eventHasEnded = $event->end?->isPast() ?? false;
     $externalPrice = (float) ($event->price_per_person ?? 0);
-    $memberPrice = (float) ($event->member_price_per_person ?? 0);
-    $hasMemberRate = $event->is_paid && $externalPrice > 0 && $memberPrice < $externalPrice;
+    $memberPrice = (float) ($event->effective_member_price_per_person ?? $event->price_per_person ?? 0);
+    $hasMemberRate = $event->is_paid && $event->member_pricing_enabled && $externalPrice > 0 && $memberPrice < $externalPrice;
     $isEmbed = $isEmbed ?? false;
     $bookingUrl = $event->activeBookingForm
         ? ($isEmbed ? route('forms.public.embed', $event->activeBookingForm->slug) : route('forms.public.show', $event->activeBookingForm->slug))

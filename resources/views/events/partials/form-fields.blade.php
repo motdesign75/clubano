@@ -356,12 +356,29 @@
                     <p class="mt-1 text-xs text-slate-500">Dieser Preis gilt für externe Teilnehmer, Firmen, Organisationen und Einzelpersonen.</p>
                 </div>
 
-                <div>
-                    <label for="member_price_per_person" class="{{ $labelClass }}">Preis für Mitglieder</label>
-                    <input type="number" step="0.01" min="0" name="member_price_per_person" id="member_price_per_person"
-                           value="{{ old('member_price_per_person', number_format((float) ($event->member_price_per_person ?? 0), 2, '.', '')) }}"
-                           class="{{ $inputClass }}">
-                    <p class="mt-1 text-xs text-slate-500">0,00 bedeutet: Mitglieder nehmen kostenfrei teil.</p>
+                @php
+                    $memberPricingEnabled = (bool) old('member_pricing_enabled', $event->member_pricing_enabled ?? true);
+                @endphp
+                <div x-data="{ enabled: {{ $memberPricingEnabled ? 'true' : 'false' }} }" class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <label class="flex items-start gap-3">
+                        <input type="checkbox"
+                               name="member_pricing_enabled"
+                               value="1"
+                               x-model="enabled"
+                               class="mt-1 h-5 w-5 rounded border-slate-300 text-blue-700">
+                        <span>
+                            <span class="block text-sm font-semibold text-slate-950">Eigenen Mitgliederpreis verwenden</span>
+                            <span class="mt-1 block text-xs leading-5 text-slate-500">Deaktivieren, wenn der Termin nicht speziell für Mitglieder bepreist wird. Mitglieder zahlen dann den Normalpreis.</span>
+                        </span>
+                    </label>
+
+                    <div x-show="enabled" x-transition class="mt-4">
+                        <label for="member_price_per_person" class="{{ $labelClass }}">Preis für Mitglieder</label>
+                        <input type="number" step="0.01" min="0" name="member_price_per_person" id="member_price_per_person"
+                               value="{{ old('member_price_per_person', number_format((float) ($event->member_price_per_person ?? 0), 2, '.', '')) }}"
+                               class="{{ $inputClass }}">
+                        <p class="mt-1 text-xs text-slate-500">0,00 bedeutet: Mitglieder nehmen kostenfrei teil.</p>
+                    </div>
                 </div>
 
                 <label class="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">

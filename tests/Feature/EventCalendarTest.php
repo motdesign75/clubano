@@ -67,6 +67,84 @@ test('event managers can create calendar event and audit log is written', functi
     expect($log)->not->toBeNull();
 });
 
+test('event managers can disable separate member pricing for an event', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Preisverein',
+        'slug' => 'preisverein-' . Str::random(5),
+        'email' => 'preise-' . Str::random(5) . '@example.test',
+    ]);
+
+    $eventManager = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_EVENT_MANAGER,
+    ]);
+
+    $this->actingAs($eventManager)->post(route('events.store'), [
+        'title' => 'Externer Workshop',
+        'description' => 'Ein Workshop ohne gesonderten Mitgliederpreis.',
+        'location' => 'Vereinsheim',
+        'start' => now()->addWeek()->setTime(18, 0)->toDateTimeString(),
+        'end' => now()->addWeek()->setTime(20, 0)->toDateTimeString(),
+        'is_public' => 1,
+        'booking_enabled' => 1,
+        'price_per_person' => 40,
+        'member_price_per_person' => 0,
+        'currency' => 'EUR',
+    ])->assertRedirect();
+
+    $event = Event::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('title', 'Externer Workshop')
+        ->firstOrFail();
+
+    expect($event->member_pricing_enabled)->toBeFalse();
+    expect((float) $event->member_price_per_person)->toBe(0.0);
+    expect($event->priceForParticipantType('member'))->toBe(40.0);
+    expect($event->priceForParticipantType('guest'))->toBe(40.0);
+    expect($event->price_label)->toBe('Ab 40,00 EUR');
+});
+
+test('event managers can keep a separate member price for an event', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Mitgliederpreisverein',
+        'slug' => 'mitgliederpreisverein-' . Str::random(5),
+        'email' => 'mitgliederpreis-' . Str::random(5) . '@example.test',
+    ]);
+
+    $eventManager = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_EVENT_MANAGER,
+    ]);
+
+    $this->actingAs($eventManager)->post(route('events.store'), [
+        'title' => 'Mitgliederabend',
+        'description' => 'Ein Termin mit eigenem Mitgliederpreis.',
+        'location' => 'Vereinsheim',
+        'start' => now()->addWeek()->setTime(18, 0)->toDateTimeString(),
+        'end' => now()->addWeek()->setTime(20, 0)->toDateTimeString(),
+        'is_public' => 1,
+        'booking_enabled' => 1,
+        'member_pricing_enabled' => 1,
+        'price_per_person' => 40,
+        'member_price_per_person' => 10,
+        'currency' => 'EUR',
+    ])->assertRedirect();
+
+    $event = Event::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('title', 'Mitgliederabend')
+        ->firstOrFail();
+
+    expect($event->member_pricing_enabled)->toBeTrue();
+    expect($event->priceForParticipantType('member'))->toBe(10.0);
+    expect($event->priceForParticipantType('guest'))->toBe(40.0);
+    expect($event->price_label)->toBe('Ab 10,00 EUR');
+});
+
 test('event managers can add custom registration fields to event bookings', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
@@ -292,6 +370,7 @@ test('event booking form can use formal address tone for public copy', function 
         'end' => $event->end->toDateTimeString(),
         'is_public' => 1,
         'booking_enabled' => 1,
+        'member_pricing_enabled' => 1,
         'price_per_person' => 70,
         'member_price_per_person' => 0,
         'currency' => 'EUR',

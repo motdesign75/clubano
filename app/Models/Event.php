@@ -24,6 +24,7 @@ class Event extends Model
         'reminders_enabled',
         'mobile_shifts_enabled',
         'price_per_person',
+        'member_pricing_enabled',
         'member_price_per_person',
         'organization_bookings_free',
         'currency',
@@ -52,6 +53,7 @@ class Event extends Model
         'reminders_enabled' => 'boolean',
         'mobile_shifts_enabled' => 'boolean',
         'price_per_person' => 'decimal:2',
+        'member_pricing_enabled' => 'boolean',
         'member_price_per_person' => 'decimal:2',
         'organization_bookings_free' => 'boolean',
         'max_participants_per_booking' => 'integer',
@@ -167,7 +169,22 @@ class Event extends Model
 
     public function getIsPaidAttribute(): bool
     {
-        return max((float) $this->price_per_person, (float) $this->member_price_per_person) > 0;
+        return max((float) $this->price_per_person, (float) $this->effective_member_price_per_person) > 0;
+    }
+
+    public function getEffectiveMemberPricePerPersonAttribute(): float
+    {
+        if (! $this->member_pricing_enabled) {
+            return round((float) $this->price_per_person, 2);
+        }
+
+        return round((float) $this->member_price_per_person, 2);
+    }
+
+    public function hasSeparateMemberPrice(): bool
+    {
+        return (bool) $this->member_pricing_enabled
+            && round((float) $this->member_price_per_person, 2) !== round((float) $this->price_per_person, 2);
     }
 
     public function getPriceLabelAttribute(): string
@@ -177,7 +194,7 @@ class Event extends Model
         }
 
         $prices = collect([
-            (float) $this->member_price_per_person,
+            (float) $this->effective_member_price_per_person,
             $this->organization_bookings_free ? 0.0 : null,
             (float) $this->price_per_person,
         ])->filter(fn ($price) => $price !== null);
@@ -195,7 +212,7 @@ class Event extends Model
 
     public function priceForParticipantType(string $participantType): float
     {
-        return round((float) ($participantType === 'member' ? $this->member_price_per_person : $this->price_per_person), 2);
+        return round((float) ($participantType === 'member' ? $this->effective_member_price_per_person : $this->price_per_person), 2);
     }
 
     public function priceForPublicBookingParticipant(array $participant, string $bookingMode): float
