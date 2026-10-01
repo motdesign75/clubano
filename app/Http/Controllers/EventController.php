@@ -574,6 +574,7 @@ class EventController extends Controller
             'target_tag_id' => ['nullable', Rule::exists('tags', 'id')->where('tenant_id', $tenantId)],
             'is_public'   => 'required|boolean',
             'booking_enabled' => 'nullable|boolean',
+            'member_pricing_enabled' => 'nullable|boolean',
             'organization_bookings_free' => 'nullable|boolean',
             'attendance_enabled' => 'nullable|boolean',
             'response_required' => 'nullable|boolean',
@@ -609,7 +610,10 @@ class EventController extends Controller
             'reminders_enabled' => $request->boolean('reminders_enabled'),
             'mobile_shifts_enabled' => $request->boolean('mobile_shifts_enabled'),
             'price_per_person' => $request->boolean('booking_enabled') ? ($validated['price_per_person'] ?? 0) : 0,
-            'member_price_per_person' => $request->boolean('booking_enabled') ? ($validated['member_price_per_person'] ?? 0) : 0,
+            'member_pricing_enabled' => $request->boolean('booking_enabled') && $request->boolean('member_pricing_enabled'),
+            'member_price_per_person' => $request->boolean('booking_enabled') && $request->boolean('member_pricing_enabled')
+                ? ($validated['member_price_per_person'] ?? 0)
+                : 0,
             'currency' => strtoupper($validated['currency'] ?? ($event?->currency ?: 'EUR')),
             'max_participants_per_booking' => $validated['max_participants_per_booking'] ?? ($event?->max_participants_per_booking ?: 1),
             'image_path'  => array_key_exists('image_path', $validated) ? $validated['image_path'] : $event?->image_path,
@@ -2928,12 +2932,12 @@ class EventController extends Controller
         }
 
         $externalPrice = (float) $event->price_per_person;
-        $memberPrice = (float) $event->member_price_per_person;
+        $memberPrice = (float) $event->effective_member_price_per_person;
         $invoiceHint = $formal
             ? ' Nach der Buchung erhalten Sie automatisch eine Rechnung per E-Mail, wenn eine Zahlung fällig ist.'
             : ' Nach der Buchung erhältst du automatisch eine Rechnung per E-Mail, wenn eine Zahlung fällig ist.';
 
-        if ($externalPrice > 0 && $memberPrice < $externalPrice) {
+        if ($event->member_pricing_enabled && $externalPrice > 0 && $memberPrice < $externalPrice) {
             $memberText = $memberPrice > 0
                 ? 'Für Mitglieder kostet die Teilnahme ' . $this->formatEventPriceForText($memberPrice, $event) . '.'
                 : 'Für Mitglieder ist die Teilnahme kostenlos.';

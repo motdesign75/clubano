@@ -71,7 +71,7 @@
         guestMode: 'person',
         organizationBookingType: '',
         externalPrice: {{ json_encode((float) ($event->price_per_person ?? 0)) }},
-        memberPrice: {{ json_encode((float) ($event->member_price_per_person ?? 0)) }},
+        memberPrice: {{ json_encode((float) ($event->effective_member_price_per_person ?? $event->price_per_person ?? 0)) }},
         clubBookingsFree: {{ ($event->organization_bookings_free ?? false) ? 'true' : 'false' }},
         paymentRequired: false,
         priceAmount: 0,
