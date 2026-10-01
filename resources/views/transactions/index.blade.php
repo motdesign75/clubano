@@ -366,6 +366,10 @@
                     'wirtschaftlich' => 'Wirtschaftlich',
                     default => ucfirst((string) $transaction->tax_area),
                 };
+                $budgetCategory = $transaction->budgetCategory
+                    ?: (optional($transaction->account_from)->type === 'einnahme'
+                        ? $transaction->account_from?->budgetCategory
+                        : (optional($transaction->account_to)->type === 'ausgabe' ? $transaction->account_to?->budgetCategory : null));
             @endphp
             <article class="grid grid-cols-[72px_minmax(0,2.25fr)_230px_220px_130px] gap-0 border-b border-slate-100 px-4 py-4 transition hover:bg-slate-50/80 last:border-b-0">
                 <div class="flex items-start justify-center pt-1">
@@ -398,6 +402,11 @@
                                 <span class="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
                                     {{ $taxAreaLabel }}
                                 </span>
+                                @if($budgetCategory)
+                                    <span class="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
+                                        {{ $budgetCategory->name }}
+                                    </span>
+                                @endif
                                 @if($transaction->hasOwnReceipt())
                                     <span class="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
                                         Eigenbeleg
@@ -599,6 +608,10 @@
                     'storno' => 'border-amber-200 bg-amber-50 text-amber-700',
                     default => 'border-slate-200 bg-slate-100 text-slate-600',
                 };
+                $budgetCategory = $transaction->budgetCategory
+                    ?: (optional($transaction->account_from)->type === 'einnahme'
+                        ? $transaction->account_from?->budgetCategory
+                        : (optional($transaction->account_to)->type === 'ausgabe' ? $transaction->account_to?->budgetCategory : null));
             @endphp
 
             <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -609,6 +622,11 @@
                                 {{ $filterChips[$direction === 'neutral' ? 'all' : $direction]['label'] ?? 'Umbuchung' }}
                             </span>
                             <span class="text-xs text-slate-400">{{ \Carbon\Carbon::parse($transaction->date)->format('d.m.Y') }}</span>
+                            @if($budgetCategory)
+                                <span class="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700">
+                                    {{ $budgetCategory->name }}
+                                </span>
+                            @endif
                         </div>
                         <div class="mt-2 text-base font-semibold text-slate-900">{{ $transaction->description }}</div>
                     </div>

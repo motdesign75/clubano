@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\BudgetCategory;
 use App\Models\Document;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -47,7 +48,7 @@ class TransactionController extends Controller
         $search = trim((string) $request->input('search'));
 
         $transactions = Transaction::forCurrentTenant()
-            ->with(['account_from', 'account_to', 'creator', 'updater', 'finalizer', 'invoice'])
+            ->with(['account_from.budgetCategory', 'account_to.budgetCategory', 'budgetCategory', 'creator', 'updater', 'finalizer', 'invoice'])
             ->orderByDesc('date');
 
         if ($filter === 'income') {
@@ -418,12 +419,14 @@ class TransactionController extends Controller
         }
 
         $accounts = Account::forCurrentTenant()
+            ->with('budgetCategory')
             ->orderBy('number')
             ->get();
+        $budgetCategories = $this->budgetCategoryChoices();
         $invoices = $this->invoiceChoices($transaction->invoice_id);
         $contractDocuments = $this->contractDocumentChoices($transaction->receipt_meta['contract_document_id'] ?? null);
 
-        return view('transactions.edit', compact('transaction', 'accounts', 'invoices', 'contractDocuments'));
+        return view('transactions.edit', compact('transaction', 'accounts', 'budgetCategories', 'invoices', 'contractDocuments'));
     }
 
     public function ownReceipt(Transaction $transaction)
@@ -515,6 +518,7 @@ class TransactionController extends Controller
             'account_to_id' => ['required', 'different:account_from_id', Rule::exists('accounts', 'id')->where('tenant_id', $tenantId)],
             'invoice_id' => ['nullable', Rule::exists('invoices', 'id')->where('tenant_id', $tenantId)->where('document_type', 'invoice')],
             'tax_area' => ['required', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
+            'budget_category_id' => ['nullable', Rule::exists('budget_categories', 'id')->where('tenant_id', $tenantId)->where('active', true)],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
             'receipt_kind' => ['nullable', Rule::in(['none', 'vertrag'])],
             'contract_document_id' => ['nullable', Rule::exists('documents', 'id')->where('tenant_id', $tenantId)->where('category', Document::CATEGORY_CONTRACTS)],
@@ -538,6 +542,7 @@ class TransactionController extends Controller
             'account_to_id' => $validated['account_to_id'],
             'invoice_id' => $validated['invoice_id'] ?? null,
             'tax_area' => $validated['tax_area'],
+            'budget_category_id' => ($validated['budget_category_id'] ?? null) ?: $this->suggestBudgetCategoryId($validated['account_from_id'], $validated['account_to_id']),
             'updated_by' => auth()->id(),
         ]);
 
@@ -999,7 +1004,7 @@ class TransactionController extends Controller
 
         $transactions = Transaction::where('tenant_id', $tenantId)
             ->whereBetween('date', [$start, $end])
-            ->with(['account_from', 'account_to', 'creator', 'updater', 'finalizer', 'invoice'])
+            ->with(['account_from.budgetCategory', 'account_to.budgetCategory', 'budgetCategory', 'creator', 'updater', 'finalizer', 'invoice'])
             ->orderByDesc('date')
             ->get();
 
@@ -1022,6 +1027,7 @@ class TransactionController extends Controller
             ->filter(fn ($transaction) => !$transaction->hasAnyReceipt())
             ->take(5)
             ->values();
+        $categorySummaries = $this->transactionCategorySummaries($transactions);
 
         return view('transactions.summary', [
             'transactions' => $transactions,
@@ -1033,6 +1039,7 @@ class TransactionController extends Controller
             'systemReceiptCount' => $systemReceiptCount,
             'pendingTransactions' => $pendingTransactions,
             'missingReceiptTransactions' => $missingReceiptTransactions,
+            'categorySummaries' => $categorySummaries,
             'start' => $start,
             'end' => $end,
         ]);
@@ -1054,11 +1061,12 @@ class TransactionController extends Controller
 
     public function create(Request $request)
     {
-        $accounts = Account::forCurrentTenant()->orderBy('number')->get();
+        $accounts = Account::forCurrentTenant()->with('budgetCategory')->orderBy('number')->get();
         $cashAccounts = $accounts->where('type', 'kasse')->values();
         $bankAccounts = $accounts->where('type', 'bank')->values();
         $incomeAccounts = $accounts->where('type', 'einnahme')->values();
         $expenseAccounts = $accounts->where('type', 'ausgabe')->values();
+        $budgetCategories = $this->budgetCategoryChoices();
         $invoices = $this->invoiceChoices();
         $contractDocuments = $this->contractDocumentChoices();
 
@@ -1069,6 +1077,7 @@ class TransactionController extends Controller
             'description' => $request->input('description'),
             'amount' => $request->input('amount'),
             'tax_area' => $request->input('tax_area'),
+            'budget_category_id' => $request->input('budget_category_id') ?: $this->suggestBudgetCategoryId($request->input('account_from_id'), $request->input('account_to_id')),
             'account_from_id' => $request->input('account_from_id'),
             'account_to_id' => $request->input('account_to_id'),
         ];
@@ -1082,6 +1091,7 @@ class TransactionController extends Controller
             'bankAccounts',
             'incomeAccounts',
             'expenseAccounts',
+            'budgetCategories',
             'invoices',
             'contractDocuments',
             'prefill',
@@ -1102,6 +1112,7 @@ class TransactionController extends Controller
             'invoice_id' => ['nullable', Rule::exists('invoices', 'id')->where('tenant_id', $tenantId)->where('document_type', 'invoice')],
             'status' => ['required', Rule::in(['entwurf', 'abgeschlossen'])],
             'tax_area' => ['required', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
+            'budget_category_id' => ['nullable', Rule::exists('budget_categories', 'id')->where('tenant_id', $tenantId)->where('active', true)],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
             'receipt_kind' => ['nullable', Rule::in(['none', 'vertrag'])],
             'receipt_document_id' => [
@@ -1134,6 +1145,7 @@ class TransactionController extends Controller
         $transaction->finalized_at = $validated['status'] === 'abgeschlossen' ? now() : null;
         $transaction->finalized_by = $validated['status'] === 'abgeschlossen' ? auth()->id() : null;
         $transaction->tax_area = $validated['tax_area'];
+        $transaction->budget_category_id = ($validated['budget_category_id'] ?? null) ?: $this->suggestBudgetCategoryId($validated['account_from_id'], $validated['account_to_id']);
         $transaction->receipt_number = $receiptNumber;
 
         if ($request->hasFile('receipt_file')) {
@@ -1202,6 +1214,97 @@ class TransactionController extends Controller
         if (!$transaction || $transaction->tenant_id != auth()->user()->tenant_id) {
             abort(403, 'Kein Zugriff auf diese Buchung.');
         }
+    }
+
+    private function budgetCategoryChoices()
+    {
+        BudgetCategory::ensureDefaultsForTenant(auth()->user()->tenant_id);
+
+        return BudgetCategory::query()
+            ->where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+    }
+
+    private function suggestBudgetCategoryId(mixed $accountFromId, mixed $accountToId): ?int
+    {
+        $accountIds = collect([$accountFromId, $accountToId])
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        if ($accountIds->isEmpty()) {
+            return null;
+        }
+
+        $accounts = Account::query()
+            ->whereIn('id', $accountIds)
+            ->get()
+            ->keyBy('id');
+
+        $from = $accounts->get((int) $accountFromId);
+        $to = $accounts->get((int) $accountToId);
+
+        if ($from?->type === 'einnahme' && $from->budget_category_id) {
+            return (int) $from->budget_category_id;
+        }
+
+        if ($to?->type === 'ausgabe' && $to->budget_category_id) {
+            return (int) $to->budget_category_id;
+        }
+
+        return null;
+    }
+
+    private function categoryForTransaction(Transaction $transaction): ?BudgetCategory
+    {
+        if ($transaction->budgetCategory) {
+            return $transaction->budgetCategory;
+        }
+
+        if ($transaction->account_from?->type === 'einnahme') {
+            return $transaction->account_from->budgetCategory;
+        }
+
+        if ($transaction->account_to?->type === 'ausgabe') {
+            return $transaction->account_to->budgetCategory;
+        }
+
+        return null;
+    }
+
+    private function transactionCategorySummaries($transactions)
+    {
+        return $transactions
+            ->filter(fn (Transaction $transaction) => $transaction->account_from?->type === 'einnahme' || $transaction->account_to?->type === 'ausgabe')
+            ->groupBy(function (Transaction $transaction) {
+                $category = $this->categoryForTransaction($transaction);
+
+                return $category ? 'category-' . $category->id : 'uncategorized';
+            })
+            ->map(function ($categoryTransactions) {
+                $first = $categoryTransactions->first();
+                $category = $this->categoryForTransaction($first);
+                $income = $categoryTransactions
+                    ->filter(fn (Transaction $transaction) => $transaction->account_from?->type === 'einnahme')
+                    ->sum('amount');
+                $expense = $categoryTransactions
+                    ->filter(fn (Transaction $transaction) => $transaction->account_to?->type === 'ausgabe')
+                    ->sum('amount');
+
+                return [
+                    'id' => $category?->id,
+                    'name' => $category?->name ?? 'Ohne Bereich',
+                    'income' => $income,
+                    'expense' => $expense,
+                    'result' => $income - $expense,
+                    'transactions_count' => $categoryTransactions->count(),
+                ];
+            })
+            ->sortBy(fn (array $summary) => $summary['name'] === 'Ohne Bereich' ? 'zzzz' : $summary['name'])
+            ->values();
     }
 
     private function contractReceiptMeta(array $validated): array
