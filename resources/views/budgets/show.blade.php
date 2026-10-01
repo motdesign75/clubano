@@ -66,6 +66,54 @@
         </div>
     </section>
 
+    <section class="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div class="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h2 class="text-2xl font-semibold tracking-tight text-slate-950">Ergebnis nach Haushaltsbereich</h2>
+                <p class="mt-2 text-sm leading-6 text-slate-600">So erkennst du, welche Bereiche einen Ueberschuss erwirtschaften und wo ein Defizit entsteht.</p>
+            </div>
+            <a href="{{ route('budget-categories.index') }}" class="inline-flex items-center justify-center rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                Bereiche verwalten
+            </a>
+        </div>
+
+        <div class="mt-5 grid gap-4 lg:grid-cols-2">
+            @forelse($categorySummaries as $group)
+                @php($categorySummary = $group['summary'])
+                <div class="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h3 class="text-lg font-semibold text-slate-950">{{ $group['name'] }}</h3>
+                            <p class="mt-1 text-sm text-slate-500">{{ $group['items']->count() }} Positionen und Ist-Werte</p>
+                        </div>
+                        <div class="rounded-full px-3 py-1 text-xs font-semibold {{ $categorySummary['actual_result'] >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700' }}">
+                            {{ $categorySummary['actual_result'] >= 0 ? 'Ueberschuss' : 'Defizit' }}
+                        </div>
+                    </div>
+
+                    <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Plan Ergebnis</div>
+                            <div class="mt-2 text-lg font-semibold text-slate-950">{{ number_format($categorySummary['planned_result'], 2, ',', '.') }} €</div>
+                        </div>
+                        <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ist Ergebnis</div>
+                            <div class="mt-2 text-lg font-semibold {{ $categorySummary['actual_result'] >= 0 ? 'text-emerald-700' : 'text-rose-700' }}">{{ number_format($categorySummary['actual_result'], 2, ',', '.') }} €</div>
+                        </div>
+                        <div class="rounded-2xl border px-4 py-3 {{ $categorySummary['variance_result'] >= 0 ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50' }}">
+                            <div class="text-xs font-semibold uppercase tracking-[0.18em] {{ $categorySummary['variance_result'] >= 0 ? 'text-emerald-700' : 'text-rose-700' }}">Abweichung</div>
+                            <div class="mt-2 text-lg font-semibold {{ $categorySummary['variance_result'] >= 0 ? 'text-emerald-700' : 'text-rose-700' }}">{{ number_format($categorySummary['variance_result'], 2, ',', '.') }} €</div>
+                        </div>
+                    </div>
+                </div>
+            @empty
+                <div class="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-sm text-slate-500 lg:col-span-2">
+                    Noch keine Bereiche auswertbar.
+                </div>
+            @endforelse
+        </div>
+    </section>
+
     <section class="grid gap-6 xl:grid-cols-2">
         @foreach (['income' => 'Einnahmen', 'expense' => 'Ausgaben'] as $type => $label)
             <div class="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -91,6 +139,10 @@
                                         {{ $item['account']->name }}
                                     </h3>
                                     <div class="mt-1 flex flex-wrap gap-2 text-sm text-slate-500">
+                                        <span class="rounded-full bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">{{ $item['category_name'] }}</span>
+                                        @if($item['is_unplanned_actual'])
+                                            <span class="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">Nicht geplant</span>
+                                        @endif
                                         {{ $item['account']->number ?: 'Ohne Kontonummer' }}
                                         <span>·</span>
                                         <span>{{ number_format($item['period_amount'], 2, ',', '.') }} € {{ $item['planning_cycle_label'] }}</span>

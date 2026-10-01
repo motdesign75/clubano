@@ -18,6 +18,7 @@
         $account->name,
         $account->type,
         $account->tax_area,
+        $account->budgetCategory?->name,
         $account->chart_name,
         $account->tax_key,
         $account->datev_automatic ? 'DATEV Automatik' : null,
@@ -360,6 +361,9 @@
                                 @if($account->tax_area)
                                     <span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">{{ str_replace('_', ' ', $account->tax_area) }}</span>
                                 @endif
+                                @if($account->budgetCategory)
+                                    <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{{ $account->budgetCategory->name }}</span>
+                                @endif
                                 @if($account->chart_name)
                                     <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{{ $account->chart_name }}</span>
                                 @endif
@@ -427,6 +431,7 @@
                             <th class="w-12 px-4 py-3"></th>
                             <th class="px-4 py-3">Konto</th>
                             <th class="px-4 py-3">Typ</th>
+                            <th class="px-4 py-3">Haushaltsbereich</th>
                             <th class="px-4 py-3">Kontenrahmen</th>
                             <th class="px-4 py-3">DATEV</th>
                             <th class="px-4 py-3">Buchbar</th>
@@ -438,6 +443,7 @@
                                 <td class="px-4 py-3"><input type="checkbox" name="account_ids[]" value="{{ $account->id }}" class="rounded border-slate-300 text-slate-950"></td>
                                 <td class="px-4 py-3"><div class="font-semibold text-slate-950">{{ $account->number ?: 'ohne Nummer' }}</div><div class="max-w-xl text-slate-600">{{ $account->name }}</div></td>
                                 <td class="px-4 py-3 text-slate-600">{{ $account->type }}</td>
+                                <td class="px-4 py-3 text-slate-600">{{ $account->budgetCategory?->name ?: 'Ohne Bereich' }}</td>
                                 <td class="px-4 py-3 text-slate-600">{{ $account->chart_name ?: 'Eigene Konten' }}</td>
                                 <td class="px-4 py-3 text-slate-600">{{ collect([$account->tax_key, $account->datev_automatic ? 'Automatik' : null])->filter()->implode(' · ') ?: 'Keine' }}</td>
                                 <td class="px-4 py-3">
@@ -447,7 +453,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">Noch keine Buchhaltungskonten angelegt.</td></tr>
+                            <tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">Noch keine Buchhaltungskonten angelegt.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -585,6 +591,17 @@
                             </select>
                         </div>
 
+                        <div class="md:col-span-2" x-show="['einnahme', 'ausgabe'].includes(account.type)">
+                            <label class="text-sm font-medium text-slate-700">Haushaltsbereich</label>
+                            <select x-model="account.budget_category_id" class="mt-2 w-full rounded-2xl border-slate-200 text-sm shadow-sm focus:border-slate-400 focus:ring-slate-300">
+                                <option value="">Ohne Bereich</option>
+                                @foreach($budgetCategories as $category)
+                                    <option value="{{ $category->id }}">{{ $category->name }}</option>
+                                @endforeach
+                            </select>
+                            <p class="mt-2 text-xs text-slate-500">Dieser Bereich wird im Haushaltsplan automatisch vorgeschlagen und fuer Ist-Auswertungen genutzt.</p>
+                        </div>
+
                         <div class="md:col-span-2">
                             <label class="text-sm font-medium text-slate-700">IBAN</label>
                             <input type="text" x-model="account.iban" class="mt-2 w-full rounded-2xl border-slate-200 text-sm shadow-sm focus:border-slate-400 focus:ring-slate-300" placeholder="Nur bei Bankkonten nötig">
@@ -676,7 +693,8 @@
                     balance_start: 0,
                     balance_date: '',
                     active: true,
-                    online: false
+                    online: false,
+                    budget_category_id: ''
                 };
                 this.open = true;
             },
@@ -684,7 +702,8 @@
                 this.account = {
                     ...data,
                     active: Boolean(Number(data.active)),
-                    online: Boolean(Number(data.online))
+                    online: Boolean(Number(data.online)),
+                    budget_category_id: data.budget_category_id ? String(data.budget_category_id) : ''
                 };
                 this.open = true;
             },

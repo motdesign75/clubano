@@ -8,11 +8,16 @@
         'id' => $account->id,
         'label' => trim(($account->number ? $account->number . ' · ' : '') . $account->name),
         'type' => $account->type === 'einnahme' ? 'income' : 'expense',
+        'budget_category_id' => $account->budget_category_id,
+    ])->values();
+    $categoryOptions = $categories->map(fn ($category) => [
+        'id' => $category->id,
+        'label' => $category->name,
     ])->values();
     $initialItems = old('items', $items);
 @endphp
 
-<div class="mx-auto max-w-6xl space-y-8" x-data="budgetPlanForm(@js($accountOptions), @js($initialItems))" x-init="init()">
+<div class="mx-auto max-w-6xl space-y-8" x-data="budgetPlanForm(@js($accountOptions), @js($categoryOptions), @js($initialItems))" x-init="init()">
     <section class="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
         <div class="flex flex-col gap-6 bg-slate-950 px-6 py-7 text-white md:px-8 lg:flex-row lg:items-end lg:justify-between">
             <div class="max-w-3xl space-y-3">
@@ -79,8 +84,9 @@
             <aside class="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
                 <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">So bleibt es einfach</p>
                 <div class="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-                    <p>Pro Position nur ein Konto. Dadurch bleibt der spaetere Ist-Vergleich sauber.</p>
+                    <p>Pro Position ein Bereich und ein Konto. Dadurch bleibt der spaetere Ist-Vergleich sauber.</p>
                     <p>Betrag und Rhythmus reichen. Den Jahreswert rechnet Clubano automatisch hoch.</p>
+                    <p>Bereiche zeigen spaeter, wo Ueberschuesse entstehen und wo Defizite drohen.</p>
                     <p>Freigeben lohnt sich erst, wenn die Zahlen stabil sind.</p>
                 </div>
             </aside>
@@ -111,6 +117,8 @@
                                     <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Position</div>
                                     <div class="mt-1 text-lg font-semibold text-slate-950" x-text="item.account_id ? selectedAccountLabel(item) : `Neue Position ${index + 1}`"></div>
                                     <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-500">
+                                        <span x-text="item.budget_category_id ? selectedCategoryLabel(item) : 'Ohne Haushaltsbereich'"></span>
+                                        <span>·</span>
                                         <span x-text="item.account_id ? selectedCycleSummary(item) : 'Bitte Konto, Betrag und Rhythmus festlegen'"></span>
                                         <span class="rounded-full px-2.5 py-0.5 text-xs font-medium" :class="item.type === 'income' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'" x-text="item.type === 'income' ? 'Einnahme' : 'Ausgabe'"></span>
                                     </div>
@@ -123,7 +131,21 @@
                                 </button>
                             </div>
 
-                            <div class="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_9rem_10rem_11rem]">
+                            <div class="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_9rem_10rem_11rem]">
+                                <div>
+                                    <label class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Haushaltsbereich</label>
+                                    <select :name="`items[${index}][budget_category_id]`" x-model="item.budget_category_id"
+                                            class="mt-2 w-full rounded-2xl border-slate-200 bg-white text-sm shadow-sm focus:border-slate-400 focus:ring-slate-300">
+                                        <option value="">Ohne Bereich</option>
+                                        <template x-for="category in categoryOptions" :key="category.id">
+                                            <option :value="String(category.id)"
+                                                    :selected="String(item.budget_category_id) === String(category.id)"
+                                                    x-text="category.label"></option>
+                                        </template>
+                                    </select>
+                                    @error('items.*.budget_category_id')<p class="mt-2 text-sm text-rose-600">{{ $message }}</p>@enderror
+                                </div>
+
                                 <div>
                                     <label class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Konto</label>
                                     <select :name="`items[${index}][account_id]`" x-model="item.account_id" @change="syncTypeFromAccount(item)"
@@ -195,9 +217,10 @@
 </div>
 
 <script>
-    function budgetPlanForm(accountOptions, initialItems) {
+    function budgetPlanForm(accountOptions, categoryOptions, initialItems) {
         return {
             accountOptions,
+            categoryOptions,
             cycleFactors: {
                 monthly: 12,
                 quarterly: 4,
@@ -206,6 +229,7 @@
             },
             items: (initialItems.length ? initialItems : [{
                 account_id: '',
+                budget_category_id: '',
                 type: 'income',
                 period_amount: '',
                 planning_cycle: 'monthly',
@@ -213,6 +237,7 @@
                 notes: '',
             }]).map((item) => ({
                 account_id: item.account_id !== null && item.account_id !== undefined && item.account_id !== '' ? String(item.account_id) : '',
+                budget_category_id: item.budget_category_id !== null && item.budget_category_id !== undefined && item.budget_category_id !== '' ? String(item.budget_category_id) : '',
                 type: item.type ?? 'income',
                 period_amount: item.period_amount ?? item.planned_amount ?? '',
                 planning_cycle: item.planning_cycle ?? 'monthly',
@@ -222,6 +247,7 @@
             addItem() {
                 this.items.push({
                     account_id: '',
+                    budget_category_id: '',
                     type: 'income',
                     period_amount: '',
                     planning_cycle: 'monthly',
@@ -233,6 +259,7 @@
                 if (this.items.length === 1) {
                     this.items = [{
                         account_id: '',
+                        budget_category_id: '',
                         type: 'income',
                         period_amount: '',
                         planning_cycle: 'monthly',
@@ -250,6 +277,9 @@
 
                 if (selected) {
                     item.type = selected.type;
+                    if (!item.budget_category_id && selected.budget_category_id) {
+                        item.budget_category_id = String(selected.budget_category_id);
+                    }
                 }
             },
             annualAmount(item) {
@@ -281,6 +311,11 @@
                 const selected = this.accountOptions.find((account) => String(account.id) === String(item.account_id));
 
                 return selected ? selected.label : 'Neue Position';
+            },
+            selectedCategoryLabel(item) {
+                const selected = this.categoryOptions.find((category) => String(category.id) === String(item.budget_category_id));
+
+                return selected ? selected.label : 'Ohne Bereich';
             },
             selectedCycleSummary(item) {
                 const base = parseFloat(item.period_amount || 0);

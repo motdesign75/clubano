@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\BudgetCategory;
 use App\Models\BudgetPlan;
 use App\Models\BudgetPlanItem;
 use App\Models\Transaction;
@@ -35,11 +36,12 @@ class BudgetPlanController extends Controller
     public function create(Request $request)
     {
         $accounts = $this->budgetAccounts();
+        $categories = $this->budgetCategories();
         $sourcePlan = null;
 
         if ($request->filled('copy_from')) {
             $sourcePlan = BudgetPlan::query()
-                ->with('items.account')
+                ->with('items.account.budgetCategory', 'items.budgetCategory')
                 ->findOrFail($request->integer('copy_from'));
         }
 
@@ -52,6 +54,7 @@ class BudgetPlanController extends Controller
         $items = $sourcePlan
             ? $sourcePlan->items->map(fn (BudgetPlanItem $item) => [
                 'account_id' => $item->account_id,
+                'budget_category_id' => $item->budget_category_id ?: $item->account?->budget_category_id,
                 'type' => $item->type,
                 'period_amount' => number_format((float) ($item->period_amount ?? $item->planned_amount), 2, '.', ''),
                 'planning_cycle' => $item->planning_cycle ?? 'yearly',
@@ -60,6 +63,7 @@ class BudgetPlanController extends Controller
             ])->values()->all()
             : [[
                 'account_id' => '',
+                'budget_category_id' => '',
                 'type' => 'income',
                 'period_amount' => '',
                 'planning_cycle' => 'monthly',
@@ -69,7 +73,7 @@ class BudgetPlanController extends Controller
 
         $mode = 'create';
 
-        return view('budgets.form', compact('plan', 'accounts', 'items', 'mode', 'sourcePlan'));
+        return view('budgets.form', compact('plan', 'accounts', 'categories', 'items', 'mode', 'sourcePlan'));
     }
 
     public function store(Request $request)
@@ -109,11 +113,13 @@ class BudgetPlanController extends Controller
 
     public function edit(BudgetPlan $budget)
     {
-        $budget->load('items.account');
+        $budget->load('items.account.budgetCategory', 'items.budgetCategory');
 
         $accounts = $this->budgetAccounts();
+        $categories = $this->budgetCategories();
         $items = $budget->items->map(fn (BudgetPlanItem $item) => [
             'account_id' => $item->account_id,
+            'budget_category_id' => $item->budget_category_id ?: $item->account?->budget_category_id,
             'type' => $item->type,
             'period_amount' => number_format((float) ($item->period_amount ?? $item->planned_amount), 2, '.', ''),
             'planning_cycle' => $item->planning_cycle ?? 'yearly',
@@ -124,6 +130,7 @@ class BudgetPlanController extends Controller
         if ($items === []) {
             $items = [[
                 'account_id' => '',
+                'budget_category_id' => '',
                 'type' => 'income',
                 'period_amount' => '',
                 'planning_cycle' => 'monthly',
@@ -136,7 +143,7 @@ class BudgetPlanController extends Controller
         $mode = 'edit';
         $sourcePlan = null;
 
-        return view('budgets.form', compact('plan', 'accounts', 'items', 'mode', 'sourcePlan'));
+        return view('budgets.form', compact('plan', 'accounts', 'categories', 'items', 'mode', 'sourcePlan'));
     }
 
     public function update(Request $request, BudgetPlan $budget)
@@ -177,16 +184,21 @@ class BudgetPlanController extends Controller
 
     protected function buildShowData(BudgetPlan $budget): array
     {
-        $budget->load('items.account');
+        $budget->load('items.account.budgetCategory', 'items.budgetCategory');
 
         $actuals = $this->actualAmountsForYear($budget->year);
+        $plannedAccountIds = $budget->items->pluck('account_id')->filter()->unique();
         $items = $budget->items->map(function (BudgetPlanItem $item) use ($actuals) {
             $actual = (float) ($actuals[$item->account_id] ?? 0);
+            $category = $item->budgetCategory ?: $item->account?->budgetCategory;
 
             return [
                 'id' => $item->id,
                 'type' => $item->type,
                 'account' => $item->account,
+                'category' => $category,
+                'category_id' => $category?->id,
+                'category_name' => $category?->name ?? 'Ohne Bereich',
                 'period_amount' => (float) ($item->period_amount ?? $item->planned_amount),
                 'planning_cycle' => $item->planning_cycle ?? 'yearly',
                 'planning_cycle_label' => $item->planning_cycle_label,
@@ -194,12 +206,15 @@ class BudgetPlanController extends Controller
                 'actual_amount' => $actual,
                 'variance' => $actual - (float) $item->planned_amount,
                 'notes' => $item->notes,
+                'is_unplanned_actual' => false,
             ];
         });
 
+        $items = $items->concat($this->unplannedActualItems($actuals, $plannedAccountIds))->values();
         $summary = $this->buildItemSummary($items);
+        $categorySummaries = $this->buildCategorySummaries($items);
 
-        return compact('budget', 'items', 'summary');
+        return compact('budget', 'items', 'summary', 'categorySummaries');
     }
 
     protected function validatePlan(Request $request, ?BudgetPlan $budget = null): array
@@ -225,6 +240,12 @@ class BudgetPlanController extends Controller
                     ->where('tenant_id', $tenantId)
                     ->whereIn('type', ['einnahme', 'ausgabe'])),
             ],
+            'items.*.budget_category_id' => [
+                'nullable',
+                Rule::exists('budget_categories', 'id')->where(fn ($query) => $query
+                    ->where('tenant_id', $tenantId)
+                    ->where('active', true)),
+            ],
             'items.*.type' => ['required', Rule::in(['income', 'expense'])],
             'items.*.period_amount' => ['required', 'numeric', 'min:0'],
             'items.*.planning_cycle' => ['required', Rule::in(array_keys(BudgetPlanItem::PLANNING_CYCLES))],
@@ -249,6 +270,7 @@ class BudgetPlanController extends Controller
 
             $plan->items()->create([
                 'account_id' => $item['account_id'],
+                'budget_category_id' => ($item['budget_category_id'] ?? null) ?: $account->budget_category_id,
                 'type' => $account->type === 'einnahme' ? 'income' : 'expense',
                 'period_amount' => $item['period_amount'],
                 'planning_cycle' => $item['planning_cycle'],
@@ -265,10 +287,22 @@ class BudgetPlanController extends Controller
     protected function budgetAccounts()
     {
         return Account::query()
+            ->with('budgetCategory')
             ->where('active', true)
             ->whereIn('type', ['einnahme', 'ausgabe'])
             ->orderBy('type')
             ->orderBy('number')
+            ->get();
+    }
+
+    protected function budgetCategories()
+    {
+        BudgetCategory::ensureDefaultsForTenant(auth()->user()->tenant_id);
+
+        return BudgetCategory::query()
+            ->where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
             ->get();
     }
 
@@ -331,5 +365,63 @@ class BudgetPlanController extends Controller
             'actual_result' => $actualIncome - $actualExpense,
             'variance_result' => ($actualIncome - $actualExpense) - ($plannedIncome - $plannedExpense),
         ];
+    }
+
+    protected function buildCategorySummaries(Collection $items): Collection
+    {
+        return $items
+            ->groupBy(fn (array $item) => $item['category_id'] ? 'category-' . $item['category_id'] : 'uncategorized')
+            ->map(function (Collection $categoryItems) {
+                $first = $categoryItems->first();
+
+                return [
+                    'id' => $first['category_id'],
+                    'name' => $first['category_name'] ?? 'Ohne Bereich',
+                    'summary' => $this->buildItemSummary($categoryItems),
+                    'items' => $categoryItems->values(),
+                ];
+            })
+            ->sortBy(fn (array $group) => $group['name'] === 'Ohne Bereich' ? 'zzzz' : $group['name'])
+            ->values();
+    }
+
+    protected function unplannedActualItems(array $actuals, Collection $plannedAccountIds): Collection
+    {
+        $ids = collect(array_keys($actuals))
+            ->map(fn ($id) => (int) $id)
+            ->diff($plannedAccountIds->map(fn ($id) => (int) $id))
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return Account::query()
+            ->with('budgetCategory')
+            ->whereIn('id', $ids)
+            ->whereIn('type', ['einnahme', 'ausgabe'])
+            ->get()
+            ->map(function (Account $account) use ($actuals) {
+                $actual = (float) ($actuals[$account->id] ?? 0);
+                $category = $account->budgetCategory;
+                $type = $account->type === 'einnahme' ? 'income' : 'expense';
+
+                return [
+                    'id' => null,
+                    'type' => $type,
+                    'account' => $account,
+                    'category' => $category,
+                    'category_id' => $category?->id,
+                    'category_name' => $category?->name ?? 'Ohne Bereich',
+                    'period_amount' => 0.0,
+                    'planning_cycle' => 'yearly',
+                    'planning_cycle_label' => 'Nicht geplant',
+                    'planned_amount' => 0.0,
+                    'actual_amount' => $actual,
+                    'variance' => $actual,
+                    'notes' => 'Ist-Buchung ohne Planposition im Haushaltsplan.',
+                    'is_unplanned_actual' => true,
+                ];
+            });
     }
 }

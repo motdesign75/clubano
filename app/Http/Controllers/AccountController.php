@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\BudgetCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class AccountController extends Controller
 {
@@ -17,23 +19,34 @@ class AccountController extends Controller
         }
 
         $balanceAccounts = Account::forCurrentTenant()
+            ->with('budgetCategory')
             ->where('active', true)
             ->whereIn('type', ['bank', 'kasse'])
             ->orderBy('number')
             ->get();
 
         $chartAccounts = Account::forCurrentTenant()
+            ->with('budgetCategory')
             ->where('active', true)
             ->whereIn('type', ['einnahme', 'ausgabe'])
             ->orderBy('number')
             ->get();
 
         $inactiveAccounts = Account::forCurrentTenant()
+            ->with('budgetCategory')
             ->where('active', false)
             ->orderBy('number')
             ->get();
 
-        return view('accounts.index', compact('balanceAccounts', 'chartAccounts', 'inactiveAccounts', 'tab'));
+        BudgetCategory::ensureDefaultsForTenant(auth()->user()->tenant_id);
+
+        $budgetCategories = BudgetCategory::query()
+            ->where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        return view('accounts.index', compact('balanceAccounts', 'chartAccounts', 'inactiveAccounts', 'tab', 'budgetCategories'));
     }
 
     public function useSimpleChart()
@@ -172,7 +185,15 @@ class AccountController extends Controller
 
     public function create()
     {
-        return view('accounts.create');
+        BudgetCategory::ensureDefaultsForTenant(auth()->user()->tenant_id);
+
+        $budgetCategories = BudgetCategory::query()
+            ->where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        return view('accounts.create', compact('budgetCategories'));
     }
 
     public function store(Request $request)
@@ -193,6 +214,7 @@ class AccountController extends Controller
             'balance_start'  => ['nullable', 'numeric'],
             'balance_date'   => ['nullable', 'date'],
             'tax_area'       => ['nullable', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
+            'budget_category_id' => ['nullable', 'integer', $this->budgetCategoryRule()],
             'chart_name'     => ['nullable', 'string', 'max:120'],
             'tax_key'        => ['nullable', 'string', 'max:40'],
             'is_postable'    => ['nullable', 'boolean'],
@@ -221,7 +243,15 @@ class AccountController extends Controller
     {
         $this->authorizeAccount($account);
 
-        return view('accounts.edit', compact('account'));
+        BudgetCategory::ensureDefaultsForTenant(auth()->user()->tenant_id);
+
+        $budgetCategories = BudgetCategory::query()
+            ->where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        return view('accounts.edit', compact('account', 'budgetCategories'));
     }
 
     public function update(Request $request, Account $account)
@@ -244,6 +274,7 @@ class AccountController extends Controller
             'balance_start'  => ['nullable', 'numeric'],
             'balance_date'   => ['nullable', 'date'],
             'tax_area'       => ['nullable', 'in:ideell,zweckbetrieb,vermoegensverwaltung,wirtschaftlich'],
+            'budget_category_id' => ['nullable', 'integer', $this->budgetCategoryRule()],
             'chart_name'     => ['nullable', 'string', 'max:120'],
             'tax_key'        => ['nullable', 'string', 'max:40'],
             'is_postable'    => ['nullable', 'boolean'],
@@ -328,6 +359,12 @@ class AccountController extends Controller
         if ((string) $account->tenant_id !== (string) auth()->user()->tenant_id) {
             abort(403, 'Kein Zugriff auf dieses Konto.');
         }
+    }
+
+    protected function budgetCategoryRule(): \Illuminate\Validation\Rules\Exists
+    {
+        return Rule::exists('budget_categories', 'id')
+            ->where(fn ($query) => $query->where('tenant_id', auth()->user()->tenant_id));
     }
 
     protected function normalizeHeader(string $value): string

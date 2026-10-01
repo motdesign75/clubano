@@ -12,6 +12,7 @@ class BudgetPlanItem extends Model
     protected $fillable = [
         'budget_plan_id',
         'account_id',
+        'budget_category_id',
         'type',
         'period_amount',
         'planning_cycle',
@@ -47,6 +48,11 @@ class BudgetPlanItem extends Model
     public function account()
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function budgetCategory()
+    {
+        return $this->belongsTo(BudgetCategory::class);
     }
 
     public static function annualAmountFor(string $cycle, float $periodAmount): float
