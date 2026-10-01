@@ -558,6 +558,15 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         });
     });
 
+    $when($C.'BudgetCategoryController', function($cls){
+        Route::middleware('tenant.role:finance')->group(function () use ($cls) {
+            Route::get('/haushaltsbereiche', [$cls, 'index'])->name('budget-categories.index');
+            Route::post('/haushaltsbereiche', [$cls, 'store'])->name('budget-categories.store');
+            Route::put('/haushaltsbereiche/{budgetCategory}', [$cls, 'update'])->name('budget-categories.update');
+            Route::delete('/haushaltsbereiche/{budgetCategory}', [$cls, 'destroy'])->name('budget-categories.destroy');
+        });
+    });
+
     // Nummernkreise
     $when($C.'InvoiceNumberRangeController', function($cls){
         Route::middleware('tenant.role:Admin')->group(function () use ($cls) {

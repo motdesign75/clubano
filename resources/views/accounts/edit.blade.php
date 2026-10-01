@@ -42,6 +42,20 @@
                 @error('type') <p class="text-red-600 text-sm mt-1">{{ $message }}</p> @enderror
             </div>
 
+            {{-- Haushaltsbereich --}}
+            <div>
+                <label for="budget_category_id" class="block text-sm font-medium text-gray-700">Haushaltsbereich</label>
+                <select id="budget_category_id" name="budget_category_id"
+                        class="mt-1 block w-full rounded border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                    <option value="">Ohne Bereich</option>
+                    @foreach(($budgetCategories ?? collect()) as $category)
+                        <option value="{{ $category->id }}" {{ (string) old('budget_category_id', $account->budget_category_id) === (string) $category->id ? 'selected' : '' }}>{{ $category->name }}</option>
+                    @endforeach
+                </select>
+                <p class="mt-1 text-xs text-gray-500">Nur fuer Einnahme- und Ausgabekonten relevant.</p>
+                @error('budget_category_id') <p class="text-red-600 text-sm mt-1">{{ $message }}</p> @enderror
+            </div>
+
             {{-- IBAN --}}
             <div>
                 <label for="iban" class="block text-sm font-medium text-gray-700">IBAN</label>

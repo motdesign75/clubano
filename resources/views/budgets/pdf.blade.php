@@ -30,6 +30,11 @@
         .value { margin-top: 2mm; font-size: 15pt; font-weight: bold; }
         .section-title { margin: 9mm 0 3mm; font-size: 13pt; font-weight: bold; }
         .section-copy { margin: 0 0 4mm; font-size: 8.7pt; color: #475569; }
+        .category-card { border: 1px solid #dbe4ff; border-radius: 12px; padding: 8px 10px; margin-bottom: 3mm; background: #f8fafc; }
+        .category-title { font-size: 11pt; font-weight: bold; }
+        .category-grid { margin-top: 3mm; }
+        .category-metric { width: 31%; display: inline-block; vertical-align: top; margin-right: 2%; font-size: 8.4pt; }
+        .category-metric:nth-child(3n) { margin-right: 0; }
         .position-table { border: 1px solid #dbe4ff; border-radius: 12px; overflow: hidden; }
         .position-table th { padding: 8px 9px; text-align: left; background: #eef2ff; color: #334155; font-size: 7.8pt; font-weight: bold; letter-spacing: 0.12em; text-transform: uppercase; border-bottom: 1px solid #dbe4ff; }
         .position-table td { padding: 8px 9px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
@@ -95,6 +100,34 @@
         </div>
     </div>
 
+    <div class="section-title">Ergebnis nach Haushaltsbereich</div>
+    <p class="section-copy">
+        Bereiche zeigen, welche Teile des Vereins einen Ueberschuss erwirtschaften und wo ein Defizit entsteht.
+    </p>
+    @forelse($categorySummaries as $group)
+        @php($categorySummary = $group['summary'])
+        <div class="category-card">
+            <div class="category-title">{{ $group['name'] }}</div>
+            <div style="margin-top: 1mm; font-size: 8.2pt; color: #64748b;">{{ $group['items']->count() }} Positionen und Ist-Werte</div>
+            <div class="category-grid">
+                <div class="category-metric">
+                    <div class="label">Plan Ergebnis</div>
+                    <strong>{{ number_format($categorySummary['planned_result'], 2, ',', '.') }} €</strong>
+                </div>
+                <div class="category-metric">
+                    <div class="label">Ist Ergebnis</div>
+                    <strong>{{ number_format($categorySummary['actual_result'], 2, ',', '.') }} €</strong>
+                </div>
+                <div class="category-metric">
+                    <div class="label">Abweichung</div>
+                    <strong>{{ number_format($categorySummary['variance_result'], 2, ',', '.') }} €</strong>
+                </div>
+            </div>
+        </div>
+    @empty
+        <p class="section-copy">Noch keine Bereiche auswertbar.</p>
+    @endforelse
+
     @foreach (['income' => 'Einnahmen', 'expense' => 'Ausgaben'] as $type => $label)
         <div class="section-title">{{ $label }}</div>
         <p class="section-copy">
@@ -104,12 +137,13 @@
         <table class="position-table">
             <thead>
                 <tr>
-                    <th style="width: 33%;">Konto</th>
+                    <th style="width: 28%;">Konto</th>
+                    <th style="width: 16%;">Bereich</th>
                     <th style="width: 14%;">Nr.</th>
-                    <th style="width: 16%;">Rhythmus</th>
-                    <th style="width: 16%;" class="right">Plan</th>
-                    <th style="width: 16%;" class="right">Ist</th>
-                    <th style="width: 15%;" class="right">Abweichung</th>
+                    <th style="width: 14%;">Rhythmus</th>
+                    <th style="width: 14%;" class="right">Plan</th>
+                    <th style="width: 14%;" class="right">Ist</th>
+                    <th style="width: 14%;" class="right">Abweichung</th>
                 </tr>
             </thead>
             <tbody>
@@ -121,6 +155,12 @@
                                 <div class="note">{{ $item['notes'] }}</div>
                             @endif
                         </td>
+                        <td>
+                            {{ $item['category_name'] }}
+                            @if($item['is_unplanned_actual'])
+                                <div class="note">Nicht geplant</div>
+                            @endif
+                        </td>
                         <td>{{ $item['account']->number ?: '—' }}</td>
                         <td>{{ number_format($item['period_amount'], 2, ',', '.') }} € {{ $item['planning_cycle_label'] }}</td>
                         <td class="right">{{ number_format($item['planned_amount'], 2, ',', '.') }} €</td>
@@ -129,7 +169,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6">Noch keine Positionen vorhanden.</td>
+                        <td colspan="7">Noch keine Positionen vorhanden.</td>
                     </tr>
                 @endforelse
             </tbody>

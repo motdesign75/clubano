@@ -71,6 +71,21 @@
                     @error('tax_area') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                 </div>
 
+                {{-- Haushaltsbereich --}}
+                <div>
+                    <label for="budget_category_id" class="block text-sm font-medium text-slate-700">Haushaltsbereich</label>
+                    <select id="budget_category_id" name="budget_category_id"
+                            class="mt-1 block w-full rounded-lg border-slate-300 text-base shadow-sm
+                                   focus:border-indigo-400 focus:ring-indigo-400 @error('budget_category_id') border-red-300 focus:border-red-500 focus:ring-red-500 @enderror">
+                        <option value="">Ohne Bereich</option>
+                        @foreach(($budgetCategories ?? collect()) as $category)
+                            <option value="{{ $category->id }}" {{ (string) old('budget_category_id') === (string) $category->id ? 'selected' : '' }}>{{ $category->name }}</option>
+                        @endforeach
+                    </select>
+                    <p class="mt-1 text-xs text-slate-500">Nur fuer Einnahme- und Ausgabekonten relevant.</p>
+                    @error('budget_category_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                </div>
+
                 {{-- Kontonummer --}}
                 <div>
                     <label for="number" class="block text-sm font-medium text-slate-700">Kontonummer</label>

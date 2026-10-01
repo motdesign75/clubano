@@ -242,8 +242,16 @@
             'label' => 'Haushaltsplan',
             'hint' => 'Planen, vergleichen und dem Vorstand zeigen',
             'route' => route('budgets.index'),
-            'active' => request()->routeIs('budgets.*'),
+            'active' => request()->routeIs('budgets.*') || request()->routeIs('budget-categories.*'),
             'icon' => 'presentation-chart-line',
+            'minRole' => 'finance',
+        ],
+        [
+            'label' => 'Haushaltsbereiche',
+            'hint' => 'Bereiche fuer Plan und Ergebnis pflegen',
+            'route' => route('budget-categories.index'),
+            'active' => request()->routeIs('budget-categories.*'),
+            'icon' => 'squares-2x2',
             'minRole' => 'finance',
         ],
     ];

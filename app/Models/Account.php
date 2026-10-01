@@ -16,6 +16,7 @@ class Account extends Model
         'name',
         'type',
         'tax_area',
+        'budget_category_id',
         'chart_name',
         'tax_key',
         'is_postable',
@@ -56,6 +57,11 @@ class Account extends Model
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function budgetCategory()
+    {
+        return $this->belongsTo(BudgetCategory::class);
     }
 
     public function scopeForCurrentTenant($query)
