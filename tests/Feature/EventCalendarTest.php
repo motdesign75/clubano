@@ -369,6 +369,152 @@ test('event managers can add custom registration fields to event bookings', func
         ->and(EventBooking::query()->where('event_id', $event->id)->count())->toBe(1);
 });
 
+test('event bookings respect registration deadline', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Fristverein',
+        'slug' => 'fristverein-' . Str::random(5),
+        'email' => 'frist-' . Str::random(5) . '@example.test',
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Planungstreffen',
+        'start' => now()->addWeek()->setTime(18, 0),
+        'end' => now()->addWeek()->setTime(20, 0),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'registration_deadline' => now()->subHour(),
+        'price_per_person' => 0,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 2,
+    ]);
+
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'title' => 'Anmeldung: Planungstreffen',
+        'slug' => 'planungstreffen-' . Str::random(5),
+        'description' => 'Melde dich an.',
+        'form_type' => 'event',
+        'success_message' => 'Danke.',
+        'is_active' => true,
+    ]);
+
+    foreach ([
+        ['label' => 'Vorname Ansprechpartner', 'slug' => 'first_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 1],
+        ['label' => 'Nachname Ansprechpartner', 'slug' => 'last_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 2],
+        ['label' => 'E-Mail', 'slug' => 'email', 'field_type' => 'email', 'is_required' => true, 'sort_order' => 3],
+    ] as $field) {
+        PublicFormField::create($field + ['public_form_id' => $form->id]);
+    }
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertSee('Anmeldung nicht möglich')
+        ->assertSee('Der Anmeldeschluss ist erreicht.');
+
+    $this->from(route('forms.public.show', $form->slug))->post(route('forms.public.submit', $form->slug), [
+        'fields' => [
+            'first_name' => 'Anna',
+            'last_name' => 'Frist',
+            'email' => 'anna@example.test',
+        ],
+        'booking_mode' => 'person',
+        'participant_count' => 1,
+        'use_booker_as_participant' => 1,
+    ])->assertRedirect(route('forms.public.show', $form->slug))
+        ->assertSessionHasErrors('event');
+
+    expect(EventBooking::query()->where('event_id', $event->id)->count())->toBe(0);
+});
+
+test('event bookings respect total capacity and remaining spots', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Kapazitaetsverein',
+        'slug' => 'kapazitaetsverein-' . Str::random(5),
+        'email' => 'kapazitaet-' . Str::random(5) . '@example.test',
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Kleiner Workshop',
+        'start' => now()->addWeek()->setTime(18, 0),
+        'end' => now()->addWeek()->setTime(20, 0),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'price_per_person' => 0,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 5,
+        'max_participants_total' => 2,
+        'min_participants' => 2,
+        'show_remaining_spots' => true,
+    ]);
+
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'title' => 'Anmeldung: Kleiner Workshop',
+        'slug' => 'kleiner-workshop-' . Str::random(5),
+        'description' => 'Melde dich an.',
+        'form_type' => 'event',
+        'success_message' => 'Danke.',
+        'is_active' => true,
+    ]);
+
+    foreach ([
+        ['label' => 'Vorname Ansprechpartner', 'slug' => 'first_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 1],
+        ['label' => 'Nachname Ansprechpartner', 'slug' => 'last_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 2],
+        ['label' => 'E-Mail', 'slug' => 'email', 'field_type' => 'email', 'is_required' => true, 'sort_order' => 3],
+    ] as $field) {
+        PublicFormField::create($field + ['public_form_id' => $form->id]);
+    }
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertSeeText('Noch 2 Plätze frei');
+
+    $this->post(route('forms.public.submit', $form->slug), [
+        'fields' => [
+            'first_name' => 'Anna',
+            'last_name' => 'Kapazität',
+            'email' => 'anna@example.test',
+        ],
+        'booking_mode' => 'person',
+        'participant_count' => 2,
+        'use_booker_as_participant' => 1,
+        'participants' => [
+            ['first_name' => 'Ben', 'last_name' => 'Kapazität', 'email' => 'ben@example.test'],
+        ],
+    ])->assertRedirect();
+
+    $event->refresh();
+
+    expect($event->booked_participants_count)->toBe(2)
+        ->and($event->remaining_spots)->toBe(0)
+        ->and($event->minimum_participants_reached)->toBeTrue();
+
+    $this->get(route('forms.public.show', $form->slug))
+        ->assertOk()
+        ->assertSeeText('Ausgebucht')
+        ->assertSeeText('Anmeldung nicht möglich');
+
+    $this->from(route('forms.public.show', $form->slug))->post(route('forms.public.submit', $form->slug), [
+        'fields' => [
+            'first_name' => 'Clara',
+            'last_name' => 'Zu spät',
+            'email' => 'clara@example.test',
+        ],
+        'booking_mode' => 'person',
+        'participant_count' => 1,
+        'use_booker_as_participant' => 1,
+    ])->assertRedirect(route('forms.public.show', $form->slug))
+        ->assertSessionHasErrors('event');
+});
+
 test('event bookings can be submitted as organization without participant counter', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

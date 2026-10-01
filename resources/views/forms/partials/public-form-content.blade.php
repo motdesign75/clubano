@@ -7,9 +7,13 @@
         $memberPrice = (float) ($event?->effective_member_price_per_person ?? $event?->price_per_person ?? 0);
         $hasMemberRate = $isEventBooking && ($event?->member_pricing_enabled ?? false) && $externalPrice > 0 && $memberPrice < $externalPrice;
         $clubBookingsFree = $isEventBooking && (bool) ($event?->organization_bookings_free ?? false);
+        $bookingClosedReason = $isEventBooking ? $event->booking_closed_reason : null;
+        $canBookEvent = ! $bookingClosedReason;
+        $remainingSpots = $isEventBooking ? $event->remaining_spots : null;
+        $effectiveMaxParticipantsPerBooking = $isEventBooking ? $event->effective_max_participants_per_booking : max(1, (int) ($event?->max_participants_per_booking ?: 1));
         $tenant = $form->tenant;
         $tenantLogoUrl = $tenant?->logo_url;
-        $participantCountOld = max(1, min((int) old('participant_count', 1), max(1, (int) ($event?->max_participants_per_booking ?: 1))));
+        $participantCountOld = max(1, min((int) old('participant_count', 1), $effectiveMaxParticipantsPerBooking));
         $participantRowsOld = old('participants', []);
         $participantTemplate = [];
         $useBookerAsParticipantOld = (bool) old('use_booker_as_participant', 1);
@@ -111,8 +115,18 @@
                         @endif
 
                         <span class="rounded-full {{ ($embedded ?? false) ? 'bg-white text-slate-700 ring-indigo-100' : 'bg-white/15 text-white ring-white/15' }} px-3 py-1 font-medium ring-1">
-                            Max. {{ max(1, (int) $event->max_participants_per_booking) }} Person{{ max(1, (int) $event->max_participants_per_booking) === 1 ? '' : 'en' }} pro Anmeldung
+                            Max. {{ $effectiveMaxParticipantsPerBooking }} Person{{ $effectiveMaxParticipantsPerBooking === 1 ? '' : 'en' }} pro Anmeldung
                         </span>
+                        @if($event->registration_deadline)
+                            <span class="rounded-full {{ ($embedded ?? false) ? 'bg-white text-slate-700 ring-indigo-100' : 'bg-white/15 text-white ring-white/15' }} px-3 py-1 font-medium ring-1">
+                                Anmeldeschluss {{ $event->registration_deadline->format('d.m.Y H:i') }} Uhr
+                            </span>
+                        @endif
+                        @if($event->show_remaining_spots && $remainingSpots !== null)
+                            <span class="rounded-full {{ $remainingSpots > 0 ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-800' }} px-3 py-1 font-semibold">
+                                {{ $remainingSpots > 0 ? 'Noch '.$remainingSpots.' '.($remainingSpots === 1 ? 'Platz' : 'Plätze').' frei' : 'Ausgebucht' }}
+                            </span>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -144,6 +158,12 @@
             </div>
         @endif
 
+        @if($isEventBooking && !$canBookEvent)
+            <div class="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
+                <div class="font-semibold">Anmeldung nicht möglich</div>
+                <p class="mt-1">{{ $bookingClosedReason }}</p>
+            </div>
+        @else
     <form method="POST"
           action="{{ ($embedded ?? false) ? route('forms.public.embed.submit', $form->slug) : route('forms.public.submit', $form->slug) }}"
           class="space-y-7"
@@ -154,7 +174,7 @@
                   hasMemberRate: {{ $hasMemberRate ? 'true' : 'false' }},
                   clubBookingsFree: {{ $clubBookingsFree ? 'true' : 'false' }},
                   organizationBookingType: {{ json_encode(old('organization_booking_type', '')) }},
-                  maxParticipants: {{ max(1, (int) ($event->max_participants_per_booking ?: 1)) }},
+                  maxParticipants: {{ $effectiveMaxParticipantsPerBooking }},
                   participantCount: {{ $participantCountOld }},
                   voucherCode: {{ json_encode(old('voucher_code', '')) }},
                   participants: {{ json_encode($participantTemplate) }},
@@ -465,14 +485,14 @@
                                type="number"
                                name="participant_count"
                                min="1"
-                               max="{{ max(1, (int) $event->max_participants_per_booking) }}"
+                               max="{{ $effectiveMaxParticipantsPerBooking }}"
                                x-model.number="participantCount"
                                @input="syncParticipants()"
                                :disabled="bookingMode !== 'person'"
                                x-show="bookingMode === 'person'"
                                class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
                         <p class="mt-1 text-sm text-gray-500" x-show="bookingMode === 'person'">
-                            Maximal {{ max(1, (int) $event->max_participants_per_booking) }} Person{{ max(1, (int) $event->max_participants_per_booking) === 1 ? '' : 'en' }} pro Anmeldung.
+                            Maximal {{ $effectiveMaxParticipantsPerBooking }} Person{{ $effectiveMaxParticipantsPerBooking === 1 ? '' : 'en' }} pro Anmeldung.
                         </p>
                         <div x-show="bookingMode === 'organization'" x-cloak class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950">
                             Die Organisation oder der Verein wird als eine Anmeldung geführt. Eine zusätzliche Teilnehmerzahl ist dafür nicht nötig.
@@ -654,5 +674,6 @@
             </button>
         </div>
     </form>
+        @endif
     </div>
 </div>

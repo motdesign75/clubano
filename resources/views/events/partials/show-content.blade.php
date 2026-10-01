@@ -5,6 +5,9 @@
     $memberPrice = (float) ($event->effective_member_price_per_person ?? $event->price_per_person ?? 0);
     $hasMemberRate = $event->is_paid && $event->member_pricing_enabled && $externalPrice > 0 && $memberPrice < $externalPrice;
     $isEmbed = $isEmbed ?? false;
+    $bookedParticipantsCount = $event->booked_participants_count;
+    $remainingSpots = $event->remaining_spots;
+    $minimumParticipantsMissing = $event->minimum_participants_missing;
     $bookingUrl = $event->activeBookingForm
         ? ($isEmbed ? route('forms.public.embed', $event->activeBookingForm->slug) : route('forms.public.show', $event->activeBookingForm->slug))
         : null;
@@ -284,11 +287,56 @@
                             </div>
                         </div>
 
+                        @if($event->max_participants_total || $event->min_participants || $event->registration_deadline)
+                            <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                                @if($event->max_participants_total)
+                                    <div class="rounded-xl border border-white/70 bg-white/60 px-4 py-3">
+                                        <div class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Kapazität</div>
+                                        <div class="mt-1 text-base font-semibold text-emerald-950">
+                                            {{ $bookedParticipantsCount }} / {{ $event->max_participants_total }} belegt
+                                        </div>
+                                        @if($canManageEvents || $event->show_remaining_spots)
+                                            <div class="mt-1 text-sm text-emerald-800">
+                                                {{ $remainingSpots > 0 ? $remainingSpots.' frei' : 'Ausgebucht' }}
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endif
+
+                                @if($event->min_participants)
+                                    <div class="rounded-xl border {{ $event->minimum_participants_reached ? 'border-emerald-200 bg-white/60' : 'border-amber-200 bg-amber-50' }} px-4 py-3">
+                                        <div class="text-xs font-semibold uppercase tracking-wide {{ $event->minimum_participants_reached ? 'text-emerald-700' : 'text-amber-700' }}">Mindestmenge</div>
+                                        <div class="mt-1 text-base font-semibold {{ $event->minimum_participants_reached ? 'text-emerald-950' : 'text-amber-950' }}">
+                                            {{ $event->minimum_participants_reached ? 'Erreicht' : $minimumParticipantsMissing.' fehlen noch' }}
+                                        </div>
+                                        <div class="mt-1 text-sm {{ $event->minimum_participants_reached ? 'text-emerald-800' : 'text-amber-800' }}">
+                                            ab {{ $event->min_participants }} Teilnehmern
+                                        </div>
+                                    </div>
+                                @endif
+
+                                @if($event->registration_deadline)
+                                    <div class="rounded-xl border {{ $event->registration_deadline_passed ? 'border-rose-200 bg-rose-50' : 'border-white/70 bg-white/60' }} px-4 py-3">
+                                        <div class="text-xs font-semibold uppercase tracking-wide {{ $event->registration_deadline_passed ? 'text-rose-700' : 'text-emerald-700' }}">Anmeldeschluss</div>
+                                        <div class="mt-1 text-base font-semibold {{ $event->registration_deadline_passed ? 'text-rose-950' : 'text-emerald-950' }}">
+                                            {{ $event->registration_deadline->format('d.m.Y H:i') }} Uhr
+                                        </div>
+                                    </div>
+                                @endif
+                            </div>
+                        @endif
+
                         <div class="mt-4 flex flex-wrap gap-3">
-                            <a href="{{ $bookingUrl }}"
-                               class="inline-flex rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
-                                Zum Buchungsformular
-                            </a>
+                            @if(!$event->booking_closed_reason)
+                                <a href="{{ $bookingUrl }}"
+                                   class="inline-flex rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+                                    Zum Buchungsformular
+                                </a>
+                            @else
+                                <span class="inline-flex rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900">
+                                    {{ $event->booking_closed_reason }}
+                                </span>
+                            @endif
 
                             @if(!$isPublicPreview)
                                 <a href="{{ route('forms.submissions', $event->activeBookingForm) }}"

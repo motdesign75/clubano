@@ -404,6 +404,49 @@
                                class="{{ $inputClass }}">
                     </div>
                 </div>
+
+                <div class="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                    <div class="text-sm font-semibold text-blue-950">Planung & Kapazität</div>
+                    <p class="mt-1 text-xs leading-5 text-blue-800">
+                        Optional: Lege fest, ab wann der Termin wirtschaftlich sinnvoll ist, wie viele insgesamt teilnehmen können und bis wann Anmeldungen möglich sind.
+                    </p>
+
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                        <div>
+                            <label for="max_participants_total" class="{{ $labelClass }}">Maximale Teilnehmer insgesamt</label>
+                            <input type="number" min="1" max="100000" name="max_participants_total" id="max_participants_total"
+                                   value="{{ old('max_participants_total', $event->max_participants_total) }}"
+                                   class="{{ $inputClass }}"
+                                   placeholder="Keine Begrenzung">
+                            <p class="mt-1 text-xs text-blue-800">Leer lassen, wenn der Termin keine feste Kapazität hat.</p>
+                        </div>
+
+                        <div>
+                            <label for="min_participants" class="{{ $labelClass }}">Mindestteilnehmer</label>
+                            <input type="number" min="1" max="100000" name="min_participants" id="min_participants"
+                                   value="{{ old('min_participants', $event->min_participants) }}"
+                                   class="{{ $inputClass }}"
+                                   placeholder="Keine Mindestmenge">
+                            <p class="mt-1 text-xs text-blue-800">Hilft bei der Planung, ob der Termin stattfinden sollte.</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <label for="registration_deadline" class="{{ $labelClass }}">Anmeldeschluss</label>
+                        <input type="datetime-local" name="registration_deadline" id="registration_deadline"
+                               value="{{ old('registration_deadline', $event->registration_deadline ? $event->registration_deadline->format('Y-m-d\TH:i') : '') }}"
+                               class="{{ $inputClass }}">
+                        <p class="mt-1 text-xs text-blue-800">Nach diesem Zeitpunkt wird das öffentliche Anmeldeformular automatisch geschlossen.</p>
+                    </div>
+
+                    <label class="mt-4 flex items-start gap-3 rounded-2xl border border-blue-200 bg-white px-4 py-4">
+                        <input type="checkbox" name="show_remaining_spots" value="1" class="mt-1 h-5 w-5 rounded border-blue-300 text-blue-700" @checked(old('show_remaining_spots', $event->show_remaining_spots ?? false))>
+                        <span>
+                            <span class="block text-sm font-semibold text-blue-950">Restplätze öffentlich anzeigen</span>
+                            <span class="mt-1 block text-sm text-blue-800">Interessierte sehen, wie viele Plätze noch verfügbar sind. Intern bleibt die Auswertung immer sichtbar.</span>
+                        </span>
+                    </label>
+                </div>
             </div>
         </section>
 

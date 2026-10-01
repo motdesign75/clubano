@@ -479,6 +479,13 @@ class MobileAppController extends Controller
             'response_required' => (bool) $event->response_required,
             'booking_enabled' => (bool) $event->booking_enabled,
             'price_label' => $event->price_label,
+            'max_participants_total' => $event->max_participants_total,
+            'min_participants' => $event->min_participants,
+            'registration_deadline' => optional($event->registration_deadline)->toIso8601String(),
+            'show_remaining_spots' => (bool) $event->show_remaining_spots,
+            'booked_participants_count' => $event->booked_participants_count,
+            'remaining_spots' => $event->show_remaining_spots ? $event->remaining_spots : null,
+            'booking_closed_reason' => $event->booking_closed_reason,
             'mobile_shifts_enabled' => (bool) $event->mobile_shifts_enabled,
             'invitation' => $invitation ? $this->invitationPayload($invitation) : null,
         ];

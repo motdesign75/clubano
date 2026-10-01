@@ -496,6 +496,7 @@ class EventController extends Controller
                 'response_required' => false,
                 'counts_toward_required_hours' => false,
                 'reminders_enabled' => false,
+                'show_remaining_spots' => false,
                 'start' => $plannedStart,
                 'end' => $plannedEnd,
             ]),
@@ -639,6 +640,10 @@ class EventController extends Controller
             'member_price_per_person' => 'nullable|numeric|min:0',
             'currency' => 'nullable|string|size:3',
             'max_participants_per_booking' => 'nullable|integer|min:1|max:50',
+            'max_participants_total' => 'nullable|integer|min:1|max:100000',
+            'min_participants' => 'nullable|integer|min:1|max:100000',
+            'registration_deadline' => 'nullable|date|before_or_equal:start',
+            'show_remaining_spots' => 'nullable|boolean',
             'booking_address_tone' => ['nullable', Rule::in(['du', 'sie'])],
             'image'       => 'nullable|image|max:5120',
         ];
@@ -670,6 +675,10 @@ class EventController extends Controller
                 : 0,
             'currency' => strtoupper($validated['currency'] ?? ($event?->currency ?: 'EUR')),
             'max_participants_per_booking' => $validated['max_participants_per_booking'] ?? ($event?->max_participants_per_booking ?: 1),
+            'max_participants_total' => $request->boolean('booking_enabled') ? ($validated['max_participants_total'] ?? null) : null,
+            'min_participants' => $request->boolean('booking_enabled') ? ($validated['min_participants'] ?? null) : null,
+            'registration_deadline' => $request->boolean('booking_enabled') ? ($validated['registration_deadline'] ?? null) : null,
+            'show_remaining_spots' => $request->boolean('booking_enabled') && $request->boolean('show_remaining_spots'),
             'image_path'  => array_key_exists('image_path', $validated) ? $validated['image_path'] : $event?->image_path,
         ];
     }
