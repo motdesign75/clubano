@@ -98,6 +98,10 @@
                            class="inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800">
                             Teilnehmer hinzufügen
                         </a>
+                        <a href="{{ route('events.copy', $event) }}"
+                           class="inline-flex min-h-11 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 px-5 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+                            Termin kopieren
+                        </a>
                         <a href="{{ route('events.edit', $event) }}"
                            class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                             Termin bearbeiten
@@ -113,7 +117,7 @@
                             <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Nächste Schritte</div>
                             <p class="mt-1 text-sm text-slate-600">Was möchtest du für diese Veranstaltung tun?</p>
                         </div>
-                        <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
                             <a href="{{ route('events.participants.manage', $event) }}#teilnehmer-nachtragen" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
                                 Teilnehmer hinzufügen
                             </a>
@@ -122,6 +126,9 @@
                             </a>
                             <a href="{{ route('events.schedule.manage', $event) }}" class="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                                 Dienstplan
+                            </a>
+                            <a href="{{ route('events.copy', $event) }}" class="inline-flex min-h-10 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+                                Kopieren
                             </a>
                             <a href="{{ route('events.edit', $event) }}" class="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                                 Termin bearbeiten

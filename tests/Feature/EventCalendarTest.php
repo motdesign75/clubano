@@ -9,6 +9,7 @@ use App\Models\EventAttendance;
 use App\Models\EventCategory;
 use App\Models\EventChangeLog;
 use App\Models\EventInvitation;
+use App\Models\EventShift;
 use App\Models\EventShiftAssignment;
 use App\Models\Member;
 use App\Models\PublicForm;
@@ -65,6 +66,130 @@ test('event managers can create calendar event and audit log is written', functi
     $log = EventChangeLog::query()->where('event_id', $event->id)->where('action', 'created')->first();
 
     expect($log)->not->toBeNull();
+});
+
+test('event managers can copy an event without operational data', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Kopierverein',
+        'slug' => 'kopierverein-' . Str::random(5),
+        'email' => 'kopie-' . Str::random(5) . '@example.test',
+    ]);
+
+    $eventManager = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_EVENT_MANAGER,
+    ]);
+
+    $category = EventCategory::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Fest',
+        'slug' => 'fest-' . Str::random(5),
+        'color' => '#0EA5E9',
+    ]);
+
+    $this->actingAs($eventManager)->post(route('events.store'), [
+        'title' => 'Sommerfest',
+        'description' => '<p>Gleicher Ablauf wie immer.</p>',
+        'location' => 'Vereinsheim',
+        'start' => now()->addWeek()->setTime(18, 0)->toDateTimeString(),
+        'end' => now()->addWeek()->setTime(23, 0)->toDateTimeString(),
+        'category_id' => $category->id,
+        'responsible_user_id' => $eventManager->id,
+        'is_public' => 1,
+        'booking_enabled' => 1,
+        'member_pricing_enabled' => 1,
+        'price_per_person' => 25,
+        'member_price_per_person' => 10,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 4,
+    ])->assertRedirect();
+
+    $sourceEvent = Event::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('title', 'Sommerfest')
+        ->firstOrFail();
+
+    $sourceEvent->forceFill(['image_path' => 'events/sommerfest.jpg'])->save();
+
+    $this->actingAs($eventManager)->post(route('events.booking-fields.store', $sourceEvent), [
+        'label' => 'Essenswunsch',
+        'field_type' => 'select',
+        'options' => "Vegetarisch\nFleisch",
+        'is_required' => '1',
+    ])->assertRedirect(route('events.edit', $sourceEvent) . '#anmeldefelder');
+
+    EventBooking::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $sourceEvent->id,
+        'booking_reference' => 'EVT-ALT',
+        'booker_name' => 'Alte Buchung',
+        'booker_email' => 'alt@example.test',
+        'participant_count' => 1,
+        'price_per_person' => 25,
+        'gross_amount' => 25,
+        'voucher_discount_amount' => 0,
+        'total_amount' => 25,
+        'currency' => 'EUR',
+        'payment_status' => 'open',
+        'booking_status' => 'confirmed',
+    ]);
+
+    EventShift::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $sourceEvent->id,
+        'title' => 'Theke',
+        'starts_at' => $sourceEvent->start,
+        'ends_at' => $sourceEvent->start->copy()->addHours(2),
+        'required_people' => 2,
+        'sort_order' => 1,
+    ]);
+
+    $this->actingAs($eventManager)->get(route('events.copy', $sourceEvent))
+        ->assertOk()
+        ->assertSee('Termin kopieren')
+        ->assertSee('Sommerfest');
+
+    $this->actingAs($eventManager)->post(route('events.store'), [
+        'source_event_id' => $sourceEvent->id,
+        'title' => 'Sommerfest',
+        'description' => '<p>Gleicher Ablauf wie immer.</p>',
+        'location' => 'Vereinsheim',
+        'start' => now()->addWeeks(2)->setTime(18, 0)->toDateTimeString(),
+        'end' => now()->addWeeks(2)->setTime(23, 0)->toDateTimeString(),
+        'category_id' => $category->id,
+        'responsible_user_id' => $eventManager->id,
+        'is_public' => 1,
+        'booking_enabled' => 1,
+        'member_pricing_enabled' => 1,
+        'price_per_person' => 25,
+        'member_price_per_person' => 10,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 4,
+    ])->assertRedirect();
+
+    $copiedEvent = Event::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('title', 'Sommerfest')
+        ->where('id', '!=', $sourceEvent->id)
+        ->latest('id')
+        ->firstOrFail();
+
+    expect($copiedEvent->booking_enabled)->toBeTrue()
+        ->and($copiedEvent->member_pricing_enabled)->toBeTrue()
+        ->and((float) $copiedEvent->member_price_per_person)->toBe(10.0)
+        ->and($copiedEvent->image_path)->toBe('events/sommerfest.jpg')
+        ->and($copiedEvent->bookings()->count())->toBe(0)
+        ->and($copiedEvent->shifts()->count())->toBe(0);
+
+    $copiedEvent->load('activeBookingForm.fields');
+
+    $customField = $copiedEvent->activeBookingForm->fields->firstWhere('slug', 'essenswunsch');
+
+    expect($customField)->not->toBeNull()
+        ->and($customField->options)->toBe('Vegetarisch|Fleisch')
+        ->and($customField->is_required)->toBeTrue();
 });
 
 test('event managers can disable separate member pricing for an event', function () {
