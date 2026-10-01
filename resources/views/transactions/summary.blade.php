@@ -76,6 +76,49 @@
         </div>
     </div>
 
+    @if(($categorySummaries ?? collect())->isNotEmpty())
+        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-900">Auswertung nach Haushaltsbereichen</h2>
+                    <p class="mt-1 text-sm text-slate-500">Aktuelle Buchungen nach Bereich, damit du das Folgejahr schneller planen kannst.</p>
+                </div>
+                <a href="{{ route('budgets.index') }}" class="text-sm font-medium text-slate-600 hover:text-slate-900">
+                    Zum Haushaltsplan
+                </a>
+            </div>
+
+            <div class="mt-5 grid gap-3 lg:grid-cols-2">
+                @foreach($categorySummaries as $categorySummary)
+                    <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="font-semibold text-slate-900">{{ $categorySummary['name'] }}</div>
+                                <div class="mt-1 text-xs text-slate-500">{{ $categorySummary['transactions_count'] }} Buchung{{ $categorySummary['transactions_count'] === 1 ? '' : 'en' }}</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-mono text-sm font-semibold {{ $categorySummary['result'] >= 0 ? 'text-emerald-700' : 'text-rose-700' }}">
+                                    {{ number_format($categorySummary['result'], 2, ',', '.') }} €
+                                </div>
+                                <div class="mt-1 text-xs text-slate-500">Saldo</div>
+                            </div>
+                        </div>
+                        <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                            <div class="rounded-xl bg-white px-3 py-2">
+                                <div class="text-xs text-slate-500">Einnahmen</div>
+                                <div class="mt-1 font-mono font-semibold text-emerald-700">{{ number_format($categorySummary['income'], 2, ',', '.') }} €</div>
+                            </div>
+                            <div class="rounded-xl bg-white px-3 py-2">
+                                <div class="text-xs text-slate-500">Ausgaben</div>
+                                <div class="mt-1 font-mono font-semibold text-rose-700">{{ number_format($categorySummary['expense'], 2, ',', '.') }} €</div>
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </section>
+    @endif
+
     @if(($pendingCount ?? 0) > 0 || ($missingReceiptCount ?? 0) > 0)
         <div class="rounded-2xl border border-violet-200 bg-violet-50 px-5 py-4 text-sm text-violet-900 shadow-sm">
             <div class="font-semibold">Was jetzt sinnvoll zuerst dran ist</div>

@@ -6,6 +6,15 @@
 @php
     $receiptMeta = $transaction->receipt_meta ?? [];
     $selectedReceiptKind = old('receipt_kind', $transaction->hasContractReceipt() ? 'vertrag' : 'none');
+    $fallbackBudgetCategoryId = $transaction->budget_category_id
+        ?: ($transaction->account_from?->type === 'einnahme'
+            ? $transaction->account_from?->budget_category_id
+            : ($transaction->account_to?->type === 'ausgabe' ? $transaction->account_to?->budget_category_id : null));
+    $budgetCategoryValue = (string) old('budget_category_id', $fallbackBudgetCategoryId ?? '');
+    $accountCategoryDefaults = $accounts
+        ->filter(fn ($account) => in_array($account->type, ['einnahme', 'ausgabe'], true) && $account->budget_category_id)
+        ->mapWithKeys(fn ($account) => [(string) $account->id => (string) $account->budget_category_id])
+        ->all();
 @endphp
 
 @if ($errors->any())
@@ -105,6 +114,21 @@
                             <option value="vermoegensverwaltung" {{ old('tax_area', $transaction->tax_area)=='vermoegensverwaltung'?'selected':'' }}>Vermögensverwaltung</option>
                             <option value="wirtschaftlich" {{ old('tax_area', $transaction->tax_area)=='wirtschaftlich'?'selected':'' }}>Wirtschaftlich</option>
                         </select>
+                    </div>
+
+                    <div>
+                        <label for="budget_category_id" class="text-xs uppercase tracking-wide text-slate-500">Haushaltsbereich</label>
+                        <select id="budget_category_id"
+                                name="budget_category_id"
+                                class="mt-1 w-full rounded-xl border-gray-300 focus:ring-2 focus:ring-blue-500">
+                            <option value="">Aus Konto übernehmen / ohne Bereich</option>
+                            @foreach($budgetCategories as $category)
+                                <option value="{{ $category->id }}" @selected($budgetCategoryValue === (string) $category->id)>{{ $category->name }}</option>
+                            @endforeach
+                        </select>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">
+                            Setze hier den Bereich für die aktuelle Auswertung. Leer bedeutet: Clubano nutzt die Kategorie des Einnahme- oder Ausgabekontos.
+                        </p>
                     </div>
 
                 </div>
@@ -293,5 +317,29 @@
     </div>
 
 </div>
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const categorySelect = document.getElementById('budget_category_id');
+            const defaults = @json($accountCategoryDefaults);
+
+            if (!categorySelect) {
+                return;
+            }
+
+            window.addEventListener('account-selected', (event) => {
+                const accountId = String(event.detail?.value || '');
+                const suggestedCategoryId = defaults[accountId];
+
+                if (!suggestedCategoryId) {
+                    return;
+                }
+
+                categorySelect.value = suggestedCategoryId;
+            });
+        });
+    </script>
+@endpush
 
 @endsection

@@ -187,6 +187,7 @@ class BudgetPlanController extends Controller
         $budget->load('items.account.budgetCategory', 'items.budgetCategory');
 
         $actuals = $this->actualAmountsForYear($budget->year);
+        $actualCategoryTotals = $this->actualCategoryTotalsForYear($budget->year);
         $plannedAccountIds = $budget->items->pluck('account_id')->filter()->unique();
         $items = $budget->items->map(function (BudgetPlanItem $item) use ($actuals) {
             $actual = (float) ($actuals[$item->account_id] ?? 0);
@@ -212,7 +213,7 @@ class BudgetPlanController extends Controller
 
         $items = $items->concat($this->unplannedActualItems($actuals, $plannedAccountIds))->values();
         $summary = $this->buildItemSummary($items);
-        $categorySummaries = $this->buildCategorySummaries($items);
+        $categorySummaries = $this->buildCategorySummaries($items, $actualCategoryTotals);
 
         return compact('budget', 'items', 'summary', 'categorySummaries');
     }
@@ -331,6 +332,40 @@ class BudgetPlanController extends Controller
         return $income + $expense;
     }
 
+    protected function actualCategoryTotalsForYear(int $year): array
+    {
+        return Transaction::query()
+            ->whereYear('date', $year)
+            ->where('status', 'abgeschlossen')
+            ->with(['budgetCategory', 'account_from.budgetCategory', 'account_to.budgetCategory'])
+            ->get()
+            ->filter(fn (Transaction $transaction) => $transaction->account_from?->type === 'einnahme' || $transaction->account_to?->type === 'ausgabe')
+            ->groupBy(function (Transaction $transaction) {
+                $category = $this->categoryForTransaction($transaction);
+
+                return $category ? 'category-' . $category->id : 'uncategorized';
+            })
+            ->map(function (Collection $transactions, string $key) {
+                $first = $transactions->first();
+                $category = $this->categoryForTransaction($first);
+                $income = $transactions
+                    ->filter(fn (Transaction $transaction) => $transaction->account_from?->type === 'einnahme')
+                    ->sum('amount');
+                $expense = $transactions
+                    ->filter(fn (Transaction $transaction) => $transaction->account_to?->type === 'ausgabe')
+                    ->sum('amount');
+
+                return [
+                    'key' => $key,
+                    'id' => $category?->id,
+                    'name' => $category?->name ?? 'Ohne Bereich',
+                    'actual_income' => (float) $income,
+                    'actual_expense' => (float) $expense,
+                ];
+            })
+            ->all();
+    }
+
     protected function buildPlanSummary(BudgetPlan $plan, array $actuals): array
     {
         $items = $plan->items->map(function (BudgetPlanItem $item) use ($actuals) {
@@ -367,20 +402,56 @@ class BudgetPlanController extends Controller
         ];
     }
 
-    protected function buildCategorySummaries(Collection $items): Collection
+    protected function buildCategorySummaries(Collection $items, array $actualCategoryTotals = []): Collection
     {
-        return $items
+        $summaries = $items
             ->groupBy(fn (array $item) => $item['category_id'] ? 'category-' . $item['category_id'] : 'uncategorized')
-            ->map(function (Collection $categoryItems) {
+            ->map(function (Collection $categoryItems, string $key) use ($actualCategoryTotals) {
                 $first = $categoryItems->first();
+                $summary = $this->buildItemSummary($categoryItems);
+
+                if (isset($actualCategoryTotals[$key])) {
+                    $actualIncome = $actualCategoryTotals[$key]['actual_income'];
+                    $actualExpense = $actualCategoryTotals[$key]['actual_expense'];
+                    $summary['actual_income'] = $actualIncome;
+                    $summary['actual_expense'] = $actualExpense;
+                    $summary['actual_result'] = $actualIncome - $actualExpense;
+                    $summary['variance_result'] = $summary['actual_result'] - $summary['planned_result'];
+                }
 
                 return [
                     'id' => $first['category_id'],
                     'name' => $first['category_name'] ?? 'Ohne Bereich',
-                    'summary' => $this->buildItemSummary($categoryItems),
+                    'summary' => $summary,
                     'items' => $categoryItems->values(),
                 ];
-            })
+            });
+
+        foreach ($actualCategoryTotals as $key => $actuals) {
+            if ($summaries->has($key)) {
+                continue;
+            }
+
+            $actualIncome = $actuals['actual_income'];
+            $actualExpense = $actuals['actual_expense'];
+
+            $summaries->put($key, [
+                'id' => $actuals['id'],
+                'name' => $actuals['name'],
+                'summary' => [
+                    'planned_income' => 0.0,
+                    'planned_expense' => 0.0,
+                    'planned_result' => 0.0,
+                    'actual_income' => $actualIncome,
+                    'actual_expense' => $actualExpense,
+                    'actual_result' => $actualIncome - $actualExpense,
+                    'variance_result' => $actualIncome - $actualExpense,
+                ],
+                'items' => collect(),
+            ]);
+        }
+
+        return $summaries
             ->sortBy(fn (array $group) => $group['name'] === 'Ohne Bereich' ? 'zzzz' : $group['name'])
             ->values();
     }
@@ -423,5 +494,22 @@ class BudgetPlanController extends Controller
                     'is_unplanned_actual' => true,
                 ];
             });
+    }
+
+    protected function categoryForTransaction(Transaction $transaction): ?BudgetCategory
+    {
+        if ($transaction->budgetCategory) {
+            return $transaction->budgetCategory;
+        }
+
+        if ($transaction->account_from?->type === 'einnahme') {
+            return $transaction->account_from->budgetCategory;
+        }
+
+        if ($transaction->account_to?->type === 'ausgabe') {
+            return $transaction->account_to->budgetCategory;
+        }
+
+        return null;
     }
 }

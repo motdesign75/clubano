@@ -62,6 +62,11 @@
     $amountValue = old('amount', $prefill['amount'] ?? '');
     $taxAreaValue = old('tax_area', $prefill['tax_area'] ?? '');
     $statusValue = old('status', 'entwurf');
+    $budgetCategoryValue = (string) old('budget_category_id', $prefill['budget_category_id'] ?? '');
+    $accountCategoryDefaults = $accounts
+        ->filter(fn ($account) => in_array($account->type, ['einnahme', 'ausgabe'], true) && $account->budget_category_id)
+        ->mapWithKeys(fn ($account) => [(string) $account->id => (string) $account->budget_category_id])
+        ->all();
 @endphp
 
 <div class="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -197,6 +202,22 @@
                             </select>
                             <p class="mt-1 text-xs text-slate-500">Offene Buchungen kannst du später markieren und gesammelt abschließen.</p>
                             @error('status')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div class="lg:col-span-2">
+                            <label for="budget_category_id" class="mb-1 block text-sm font-medium text-slate-600">Haushaltsbereich</label>
+                            <select id="budget_category_id"
+                                    name="budget_category_id"
+                                    class="w-full rounded-xl border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">Aus Konto übernehmen / ohne Bereich</option>
+                                @foreach($budgetCategories as $category)
+                                    <option value="{{ $category->id }}" @selected($budgetCategoryValue === (string) $category->id)>{{ $category->name }}</option>
+                                @endforeach
+                            </select>
+                            <p class="mt-1 text-xs text-slate-500">Wird aus dem Einnahme- oder Ausgabekonto vorgeschlagen und kann pro Buchung geändert werden.</p>
+                            @error('budget_category_id')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                             @enderror
                         </div>
@@ -454,4 +475,28 @@
         </div>
     </form>
 </div>
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const categorySelect = document.getElementById('budget_category_id');
+            const defaults = @json($accountCategoryDefaults);
+
+            if (!categorySelect) {
+                return;
+            }
+
+            window.addEventListener('account-selected', (event) => {
+                const accountId = String(event.detail?.value || '');
+                const suggestedCategoryId = defaults[accountId];
+
+                if (!suggestedCategoryId) {
+                    return;
+                }
+
+                categorySelect.value = suggestedCategoryId;
+            });
+        });
+    </script>
+@endpush
 @endsection

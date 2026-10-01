@@ -21,6 +21,7 @@ class Transaction extends Model
         'account_from_id',
         'account_to_id',
         'tax_area',
+        'budget_category_id',
         'receipt_number',
         'receipt_file',
         'receipt_kind',
@@ -72,6 +73,11 @@ class Transaction extends Model
     public function account_to()
     {
         return $this->belongsTo(Account::class, 'account_to_id');
+    }
+
+    public function budgetCategory()
+    {
+        return $this->belongsTo(BudgetCategory::class);
     }
 
     /**

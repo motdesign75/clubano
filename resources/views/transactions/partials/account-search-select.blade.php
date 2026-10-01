@@ -12,6 +12,7 @@
             $meta = collect([
                 $account->type,
                 $account->tax_area ? str_replace('_', ' ', $account->tax_area) : null,
+                $account->budgetCategory?->name,
                 $account->chart_name,
                 $account->tax_key,
                 $account->datev_automatic ? 'DATEV-Automatik' : null,
@@ -56,11 +57,13 @@
             this.selected = option.id;
             this.query = '';
             this.open = false;
+            window.dispatchEvent(new CustomEvent('account-selected', { detail: { field: '{{ $name }}', value: option.id } }));
         },
         clear() {
             this.selected = '';
             this.query = '';
             this.open = true;
+            window.dispatchEvent(new CustomEvent('account-selected', { detail: { field: '{{ $name }}', value: '' } }));
         }
     }"
     class="space-y-2"
