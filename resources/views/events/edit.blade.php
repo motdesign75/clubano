@@ -26,6 +26,9 @@
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
+                <a href="{{ route('events.copy', $event) }}" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/20 px-4 text-sm font-semibold text-white hover:bg-white/10">
+                    Kopieren
+                </a>
                 <a href="{{ route('events.show', $event) }}" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-white px-4 text-sm font-semibold text-slate-950 hover:bg-slate-100">
                     Ansehen
                 </a>
@@ -78,6 +81,9 @@
                         Kalender
                     </a>
                 </div>
+                <a href="{{ route('events.copy', $event) }}" class="mt-2 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+                    Termin kopieren
+                </a>
             </section>
 
             <nav aria-label="Terminbereiche" class="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">

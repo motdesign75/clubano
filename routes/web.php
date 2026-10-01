@@ -396,6 +396,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/events', [$cls, 'index'])->middleware('tenant.role:Lesen')->name('events.index');
         Route::get('/events/create', [$cls, 'create'])->middleware('tenant.role:events')->name('events.create');
         Route::post('/events', [$cls, 'store'])->middleware('tenant.role:events')->name('events.store');
+        Route::get('/events/{event}/kopieren', [$cls, 'copy'])->middleware('tenant.role:events')->whereNumber('event')->name('events.copy');
         Route::get('/events/{event}/edit', [$cls, 'edit'])->middleware('tenant.role:events')->whereNumber('event')->name('events.edit');
         Route::match(['put', 'patch'], '/events/{event}', [$cls, 'update'])->middleware('tenant.role:events')->whereNumber('event')->name('events.update');
         Route::delete('/events/{event}', [$cls, 'destroy'])->middleware('tenant.role:events')->whereNumber('event')->name('events.destroy');

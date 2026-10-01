@@ -162,7 +162,7 @@ class Event extends Model
             return null;
         }
 
-        return Route::has('events.image')
+        return $this->exists && $this->id && Route::has('events.image')
             ? route('events.image', $this->id)
             : asset('storage/' . ltrim($this->image_path, '/'));
     }

@@ -506,6 +506,45 @@ class EventController extends Controller
     }
 
     /**
+     * Bestehenden Termin als Vorlage verwenden
+     */
+    public function copy(Event $event)
+    {
+        $this->authorizeEvent($event);
+        $event->load(['activeBookingForm.fields']);
+
+        $durationInSeconds = $event->start && $event->end
+            ? max(900, $event->start->diffInSeconds($event->end, false))
+            : 7200;
+        $plannedStart = $event->start?->copy()->addWeek();
+        $plannedEnd = $plannedStart?->copy()->addSeconds($durationInSeconds);
+
+        $copy = $event->replicate([
+            'created_by',
+            'updated_by',
+            'recurrence_group_id',
+            'recurrence_frequency',
+            'recurrence_interval',
+            'recurrence_until',
+        ]);
+        $copy->start = $plannedStart;
+        $copy->end = $plannedEnd;
+        $copy->recurrence_group_id = null;
+        $copy->recurrence_frequency = null;
+        $copy->recurrence_interval = null;
+        $copy->recurrence_until = null;
+        $copy->setRelation('activeBookingForm', $event->activeBookingForm);
+
+        return view('events.create', [
+            'event' => $copy,
+            'sourceEvent' => $event,
+            'categories' => EventCategory::query()->with('defaultTargetTag')->orderBy('name')->get(),
+            'targetTags' => Tag::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
+            'users' => User::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
+        ]);
+    }
+
+    /**
      * Event speichern
      */
     public function store(Request $request)
@@ -526,13 +565,25 @@ class EventController extends Controller
             'recurrence_count' => 'exclude_unless:recurrence_end_mode,count|required|integer|min:1|max:80',
             'recurrence_weekdays' => 'exclude_unless:recurrence_frequency,weekly|nullable|array',
             'recurrence_weekdays.*' => 'integer|min:1|max:7',
+            'source_event_id' => ['nullable', Rule::exists('events', 'id')->where('tenant_id', $tenantId)],
         ]);
+
+        $sourceEvent = null;
+        if (!blank($validated['source_event_id'] ?? null)) {
+            $sourceEvent = Event::query()
+                ->with('activeBookingForm.fields')
+                ->findOrFail($validated['source_event_id']);
+            $this->authorizeEvent($sourceEvent);
+        }
 
         if ($request->hasFile('image')) {
             $validated['image_path'] = $request->file('image')->store('events', 'public');
         }
 
         $baseData = $this->eventDataFromRequest($validated, $request);
+        if ($sourceEvent && !$request->hasFile('image')) {
+            $baseData['image_path'] = $sourceEvent->image_path;
+        }
         $baseData['tenant_id'] = Auth::user()->tenant_id;
         $baseData['created_by'] = Auth::id();
         $baseData['updated_by'] = Auth::id();
@@ -549,14 +600,17 @@ class EventController extends Controller
         );
         $event = $events->first();
 
-        $events->each(function (Event $seriesEvent) use ($validated) {
+        $events->each(function (Event $seriesEvent) use ($validated, $sourceEvent) {
             $this->syncBookingForm($seriesEvent, $validated['booking_address_tone'] ?? null);
+            if ($sourceEvent) {
+                $this->copyCustomBookingFields($sourceEvent, $seriesEvent);
+            }
             $this->logEventChange($seriesEvent, 'created', null, $seriesEvent->fresh()->toArray(), 'Termin angelegt');
         });
 
-        $message = $events->count() > 1
-            ? $events->count() . ' Serientermine wurden gespeichert.'
-            : 'Event wurde gespeichert.';
+        $message = $sourceEvent
+            ? ($events->count() > 1 ? $events->count() . ' kopierte Serientermine wurden gespeichert.' : 'Termin wurde kopiert.')
+            : ($events->count() > 1 ? $events->count() . ' Serientermine wurden gespeichert.' : 'Event wurde gespeichert.');
 
         return redirect()->route('events.edit', $event)->with('success', $message);
     }
@@ -2330,6 +2384,35 @@ class EventController extends Controller
         }
 
         return $event->activeBookingForm ?: abort(404);
+    }
+
+    private function copyCustomBookingFields(Event $sourceEvent, Event $targetEvent): void
+    {
+        if (!$sourceEvent->booking_enabled || !$targetEvent->booking_enabled || !$sourceEvent->activeBookingForm) {
+            return;
+        }
+
+        $targetForm = $this->editableBookingForm($targetEvent);
+        $systemFieldSlugs = $this->eventBookingSystemFieldSlugs();
+        $sortOrder = ($targetForm->fields()->max('sort_order') ?? 0) + 1;
+
+        $sourceEvent->activeBookingForm->fields
+            ->sortBy('sort_order')
+            ->reject(fn (PublicFormField $field) => in_array($field->slug, $systemFieldSlugs, true))
+            ->each(function (PublicFormField $field) use ($targetForm, &$sortOrder) {
+                $payload = [
+                    'label' => $field->label,
+                    'slug' => $this->uniqueBookingFieldSlug($targetForm, $field->slug ?: $field->label),
+                    'field_type' => $field->field_type,
+                    'help_text' => $field->help_text,
+                    'placeholder' => $field->placeholder,
+                    'options' => $field->options,
+                    'is_required' => (bool) $field->is_required,
+                    'sort_order' => $sortOrder++,
+                ];
+
+                $targetForm->fields()->create($this->normalizeBookingFieldPayload($payload));
+            });
     }
 
     private function bookingFieldTypeLabels(): array

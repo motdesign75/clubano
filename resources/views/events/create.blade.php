@@ -3,14 +3,22 @@
 @section('title', 'Termin planen')
 
 @section('content')
+@php
+    $sourceEvent = $sourceEvent ?? null;
+    $isCopy = (bool) $sourceEvent;
+@endphp
 <div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
     <section class="rounded-2xl bg-slate-950 px-6 py-6 text-white shadow-sm sm:px-8">
         <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div class="max-w-3xl">
                 <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">Event-Editor</div>
-                <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Termin planen</h1>
+                <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{{ $isCopy ? 'Termin kopieren' : 'Termin planen' }}</h1>
                 <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
-                    Erst der Kern, dann Zeit und Ort, dann Sichtbarkeit und Anmeldung. So entsteht ein sauberer Termin.
+                    @if($isCopy)
+                        Nutze den bestehenden Termin als Vorlage. Datum und Uhrzeit sind auf eine Woche später gesetzt und können direkt angepasst werden.
+                    @else
+                        Erst der Kern, dann Zeit und Ort, dann Sichtbarkeit und Anmeldung. So entsteht ein sauberer Termin.
+                    @endif
                 </p>
             </div>
             <a href="{{ route('events.index') }}" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/20 px-4 text-sm font-semibold text-white hover:bg-white/10">
@@ -25,8 +33,20 @@
         </div>
     @endif
 
+    @if($isCopy)
+        <div class="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm leading-6 text-blue-950">
+            <div class="font-semibold">Vorlage: {{ $sourceEvent->title }}</div>
+            <p class="mt-1">
+                Inhalt, Preise, Sichtbarkeit, Bild und eigene Anmeldefelder werden übernommen. Teilnehmer, Einladungen, Anmeldungen und Dienstpläne bleiben leer.
+            </p>
+        </div>
+    @endif
+
     <form action="{{ route('events.store') }}" method="POST" enctype="multipart/form-data" class="space-y-6">
         @csrf
+        @if($isCopy)
+            <input type="hidden" name="source_event_id" value="{{ $sourceEvent->id }}">
+        @endif
 
         @include('events.partials.form-fields', ['event' => $event])
 
@@ -36,7 +56,7 @@
             </a>
             <button type="submit" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800">
                 <x-heroicon-o-check-circle class="h-5 w-5" />
-                Termin speichern
+                {{ $isCopy ? 'Kopie speichern' : 'Termin speichern' }}
             </button>
         </div>
     </form>
