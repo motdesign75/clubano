@@ -4,10 +4,10 @@
 <div class="space-y-6 p-6">
     <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-            <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Protokoll</div>
-            <h1 class="mt-2 text-3xl font-semibold text-slate-900">Versand- & Druckhistorie</h1>
+            <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Kommunikation</div>
+            <h1 class="mt-2 text-3xl font-semibold text-slate-900">Versandprotokoll</h1>
             <p class="mt-2 text-sm text-slate-500">
-                Hier seht ihr, welche Vorlagen per Mail versendet oder als Brief-PDF erzeugt wurden.
+                Hier seht ihr versendete Nachrichten, Rechnungen, Geburtstagsmails und erzeugte Brief-PDFs an einem Ort.
             </p>
         </div>
 
