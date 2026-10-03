@@ -385,6 +385,12 @@ class PublicFormController extends Controller
                 ->withErrors(['conversion' => 'Für einen Teilnehmer fehlen Name, Organisation oder E-Mail. Bitte prüfe die Antwort.']);
         }
 
+        if ($this->eventHasActiveParticipant($event, $participantPayload)) {
+            return redirect()
+                ->route('forms.submissions', $form)
+                ->withErrors(['conversion' => 'Diese Person ist bereits für diesen Termin angemeldet.']);
+        }
+
         $defaultPriceAmount = $event->priceForParticipantType($validated['participant_type']);
         $paymentRequired = $request->has('payment_required')
             ? $request->boolean('payment_required')
@@ -697,6 +703,7 @@ class PublicFormController extends Controller
                 $event = Event::query()->whereKey($form->event_id)->lockForUpdate()->firstOrFail();
                 $form->setRelation('event', $event);
                 $this->ensureEventBookingCanAccept($event, (int) ($answers['participant_count'] ?? 1));
+                $this->ensureNoDuplicatePublicEventRegistration($event, $answers, $validated, $bookerMember);
             }
 
             $submission = PublicFormSubmission::create([
@@ -710,6 +717,10 @@ class PublicFormController extends Controller
                 'phone' => $answers['mobile'] ?? ($answers['phone'] ?? null),
                 'answers' => $answers,
             ]);
+
+            if ($isEventBooking) {
+                $this->linkEventSubmissionToExistingRecord($submission, $answers, $bookerMember);
+            }
 
             if ($isEventBooking && $form->event) {
                 $useBookerAsParticipant = (bool) ($answers['use_booker_as_participant'] ?? false);
@@ -1227,6 +1238,116 @@ class PublicFormController extends Controller
             'email' => $this->answer($answers, 'email') ?: $submission->email,
             'phone' => $this->answer($answers, 'mobile') ?: ($this->answer($answers, 'phone') ?: $submission->phone),
         ];
+    }
+
+    private function ensureNoDuplicatePublicEventRegistration(Event $event, array $answers, array $validated, ?Member $bookerMember): void
+    {
+        if ($bookerMember && $this->eventHasActiveMemberParticipant($event, $bookerMember->id)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'booking_claims_membership' => 'Du bist für diesen Termin bereits angemeldet.',
+            ]);
+        }
+
+        $emails = collect([
+            $this->answer($answers, 'email'),
+        ])->merge(collect($validated['participants'] ?? [])->pluck('email'))
+            ->map(fn ($email) => $this->normalizeEmailForDuplicateCheck($email))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($emails->isNotEmpty() && $this->eventHasActiveParticipantEmail($event, $emails->all())) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'fields.email' => 'Für diese E-Mail-Adresse gibt es bereits eine Anmeldung zu diesem Termin.',
+            ]);
+        }
+    }
+
+    private function linkEventSubmissionToExistingRecord(PublicFormSubmission $submission, array $answers, ?Member $bookerMember): void
+    {
+        if ($bookerMember) {
+            $submission->forceFill(['member_id' => $bookerMember->id])->save();
+
+            return;
+        }
+
+        $memberPayload = $this->memberPayloadFromSubmission($submission, $answers);
+        if ($duplicate = $this->findDuplicateMember($memberPayload, (int) $submission->tenant_id)) {
+            $submission->forceFill(['member_id' => $duplicate['record']->id])->save();
+
+            return;
+        }
+
+        $contactPayload = $this->contactPayloadFromSubmission($submission, $answers);
+        if ($duplicate = $this->findDuplicateContact($contactPayload, (int) $submission->tenant_id)) {
+            $submission->forceFill(['contact_id' => $duplicate['record']->id])->save();
+        }
+    }
+
+    private function eventHasActiveMemberParticipant(Event $event, int $memberId): bool
+    {
+        return EventBookingParticipant::query()
+            ->active()
+            ->where('member_id', $memberId)
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $event->id)
+                ->where('tenant_id', $event->tenant_id)
+                ->where('booking_status', '!=', 'cancelled'))
+            ->exists();
+    }
+
+    private function eventHasActiveContactParticipant(Event $event, int $contactId): bool
+    {
+        return EventBookingParticipant::query()
+            ->active()
+            ->where('contact_id', $contactId)
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $event->id)
+                ->where('tenant_id', $event->tenant_id)
+                ->where('booking_status', '!=', 'cancelled'))
+            ->exists();
+    }
+
+    private function eventHasActiveParticipant(Event $event, array $participantPayload): bool
+    {
+        if (filled($participantPayload['member_id'] ?? null)
+            && $this->eventHasActiveMemberParticipant($event, (int) $participantPayload['member_id'])) {
+            return true;
+        }
+
+        if (filled($participantPayload['contact_id'] ?? null)
+            && $this->eventHasActiveContactParticipant($event, (int) $participantPayload['contact_id'])) {
+            return true;
+        }
+
+        $email = $this->normalizeEmailForDuplicateCheck($participantPayload['email'] ?? null);
+
+        return filled($email) && $this->eventHasActiveParticipantEmail($event, [$email]);
+    }
+
+    private function eventHasActiveParticipantEmail(Event $event, array $emails): bool
+    {
+        $emails = collect($emails)->map(fn ($email) => $this->normalizeEmailForDuplicateCheck($email))->filter()->unique()->values();
+
+        if ($emails->isEmpty()) {
+            return false;
+        }
+
+        return EventBookingParticipant::query()
+            ->active()
+            ->whereIn(DB::raw('LOWER(email)'), $emails->all())
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $event->id)
+                ->where('tenant_id', $event->tenant_id)
+                ->where('booking_status', '!=', 'cancelled'))
+            ->exists();
+    }
+
+    private function normalizeEmailForDuplicateCheck(mixed $email): ?string
+    {
+        $email = mb_strtolower(trim((string) $email));
+
+        return $email === '' ? null : $email;
     }
 
     private function answer(array $answers, string $key): ?string
