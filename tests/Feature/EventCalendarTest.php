@@ -515,6 +515,91 @@ test('event bookings respect total capacity and remaining spots', function () {
         ->assertSessionHasErrors('event');
 });
 
+test('public event bookings link existing members and reject duplicate registration', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    $tenant = Tenant::create([
+        'name' => 'Dublettenverein',
+        'slug' => 'dublettenverein-' . Str::random(5),
+        'email' => 'dubletten-' . Str::random(5) . '@example.test',
+    ]);
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Mila',
+        'last_name' => 'Mitglied',
+        'email' => 'mila@example.test',
+        'status' => 'active',
+    ]);
+
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Mitgliederabend',
+        'start' => now()->addWeek()->setTime(18, 0),
+        'end' => now()->addWeek()->setTime(20, 0),
+        'is_public' => true,
+        'booking_enabled' => true,
+        'member_pricing_enabled' => true,
+        'price_per_person' => 15,
+        'member_price_per_person' => 0,
+        'currency' => 'EUR',
+        'max_participants_per_booking' => 1,
+    ]);
+
+    $form = PublicForm::create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'title' => 'Anmeldung: Mitgliederabend',
+        'slug' => 'mitgliederabend-' . Str::random(5),
+        'description' => 'Melde dich an.',
+        'form_type' => 'event',
+        'success_message' => 'Danke.',
+        'is_active' => true,
+    ]);
+
+    foreach ([
+        ['label' => 'Vorname Ansprechpartner', 'slug' => 'first_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 1],
+        ['label' => 'Nachname Ansprechpartner', 'slug' => 'last_name', 'field_type' => 'text', 'is_required' => true, 'sort_order' => 2],
+        ['label' => 'E-Mail', 'slug' => 'email', 'field_type' => 'email', 'is_required' => true, 'sort_order' => 3],
+    ] as $field) {
+        PublicFormField::create($field + ['public_form_id' => $form->id]);
+    }
+
+    $payload = [
+        'fields' => [
+            'first_name' => 'Mila',
+            'last_name' => 'Mitglied',
+            'email' => 'mila@example.test',
+            'street' => 'Testweg 1',
+            'zip' => '31157',
+            'city' => 'Sarstedt',
+        ],
+        'booking_mode' => 'person',
+        'participant_count' => 1,
+        'use_booker_as_participant' => 1,
+        'booking_claims_membership' => 1,
+    ];
+
+    $this->post(route('forms.public.submit', $form->slug), $payload)
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $submission = PublicFormSubmission::query()->where('public_form_id', $form->id)->firstOrFail();
+    $booking = EventBooking::query()->where('event_id', $event->id)->with('participants')->firstOrFail();
+
+    expect((int) $submission->member_id)->toBe($member->id);
+    expect($booking->participants)->toHaveCount(1);
+    expect((int) $booking->participants->first()->member_id)->toBe($member->id);
+
+    $this->from(route('forms.public.show', $form->slug))
+        ->post(route('forms.public.submit', $form->slug), $payload)
+        ->assertRedirect(route('forms.public.show', $form->slug))
+        ->assertSessionHasErrors('booking_claims_membership');
+
+    expect(EventBooking::query()->where('event_id', $event->id)->count())->toBe(1);
+});
+
 test('event bookings can be submitted as organization without participant counter', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
@@ -1206,6 +1291,19 @@ test('staff can manually add event participants from members contacts and guests
         'source' => 'phone',
     ])->assertRedirect(route('events.participants.manage', $event));
 
+    $this->actingAs($staff)
+        ->from(route('events.participants.manage', $event))
+        ->post(route('events.manual-participants.store', $event), [
+            'participant_type' => 'member',
+            'member_ids' => [$member->id],
+            'payment_required' => '1',
+            'price_amount' => '25.00',
+            'payment_status' => 'open',
+            'source' => 'phone',
+        ])
+        ->assertRedirect(route('events.participants.manage', $event))
+        ->assertSessionHasErrors('member_ids');
+
     $this->actingAs($staff)->post(route('events.manual-participants.store', $event), [
         'participant_type' => 'contact',
         'contact_ids' => [$contact->id, $secondContact->id],
@@ -1213,6 +1311,18 @@ test('staff can manually add event participants from members contacts and guests
         'payment_reason' => 'Sponsor',
         'source' => 'manual',
     ])->assertRedirect(route('events.participants.manage', $event));
+
+    $this->actingAs($staff)
+        ->from(route('events.participants.manage', $event))
+        ->post(route('events.manual-participants.store', $event), [
+            'participant_type' => 'contact',
+            'contact_ids' => [$contact->id],
+            'payment_status' => 'not_required',
+            'payment_reason' => 'Sponsor',
+            'source' => 'manual',
+        ])
+        ->assertRedirect(route('events.participants.manage', $event))
+        ->assertSessionHasErrors('contact_ids');
 
     $this->actingAs($staff)->post(route('events.manual-participants.store', $event), [
         'participant_type' => 'guest',

@@ -1920,6 +1920,30 @@ class EventController extends Controller
             'note' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        if ($validated['participant_type'] === 'member') {
+            $duplicateMemberIds = $this->duplicateParticipantMemberIds($event, $validated['member_ids'] ?? []);
+
+            if ($duplicateMemberIds->isNotEmpty()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'member_ids' => $duplicateMemberIds->count() === 1
+                        ? 'Dieses Mitglied ist bereits für diesen Termin angemeldet.'
+                        : 'Einige ausgewählte Mitglieder sind bereits für diesen Termin angemeldet.',
+                ]);
+            }
+        }
+
+        if ($validated['participant_type'] === 'contact') {
+            $duplicateContactIds = $this->duplicateParticipantContactIds($event, $validated['contact_ids'] ?? []);
+
+            if ($duplicateContactIds->isNotEmpty()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'contact_ids' => $duplicateContactIds->count() === 1
+                        ? 'Dieser Kontakt ist bereits für diesen Termin angemeldet.'
+                        : 'Einige ausgewählte Kontakte sind bereits für diesen Termin angemeldet.',
+                ]);
+            }
+        }
+
         $participants = $this->manualParticipantPayloads($validated);
         $defaultPriceAmount = $event->priceForParticipantType($validated['participant_type']);
         if (($validated['participant_type'] ?? null) === 'guest'
@@ -2749,6 +2773,50 @@ class EventController extends Controller
                 'phone' => $validated['phone'] ?? null,
             ],
         ]]);
+    }
+
+    private function duplicateParticipantMemberIds(Event $event, iterable $memberIds)
+    {
+        $ids = collect($memberIds)->filter()->map(fn ($id) => (int) $id)->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return EventBookingParticipant::query()
+            ->active()
+            ->whereIn('member_id', $ids)
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $event->id)
+                ->where('tenant_id', $event->tenant_id)
+                ->where('booking_status', '!=', 'cancelled'))
+            ->pluck('member_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+    }
+
+    private function duplicateParticipantContactIds(Event $event, iterable $contactIds)
+    {
+        $ids = collect($contactIds)->filter()->map(fn ($id) => (int) $id)->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return EventBookingParticipant::query()
+            ->active()
+            ->whereIn('contact_id', $ids)
+            ->whereHas('booking', fn ($query) => $query
+                ->where('event_id', $event->id)
+                ->where('tenant_id', $event->tenant_id)
+                ->where('booking_status', '!=', 'cancelled'))
+            ->pluck('contact_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
     }
 
     private function generateBookingReference(Event $event): string
