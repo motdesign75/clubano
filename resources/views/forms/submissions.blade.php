@@ -176,9 +176,81 @@
                 $suggestedName = trim((string) ($answers['first_name'] ?? '') . ' ' . (string) ($answers['last_name'] ?? '')) ?: ($submission->full_name ?: 'Antwort');
                 $suggestedOrganization = trim((string) ($answers['organization'] ?? ''));
                 $canConvertToEventParticipant = $form->event && !$submission->eventBooking;
+                $booking = $submission->eventBooking;
+                $participants = $booking?->participants ?? collect();
+                $additionalParticipants = $participants->slice(1)->values();
+                $participantCount = $booking?->participant_count ?: (int) ($answers['participant_count'] ?? max(1, $participants->count()));
+                $registeredBy = $submission->full_name ?: $suggestedName;
+                $registeredContact = $submission->email ?: ($submission->phone ?: 'keine Kontaktdaten');
+                $participantNames = $participants
+                    ->map(fn ($participant) => $participant->organization_name ?: $participant->full_name ?: $participant->email)
+                    ->filter()
+                    ->values();
+                $additionalParticipantNames = $additionalParticipants
+                    ->map(fn ($participant) => $participant->organization_name ?: $participant->full_name ?: $participant->email)
+                    ->filter()
+                    ->values();
             @endphp
 
-            <article class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <details class="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <summary class="grid cursor-pointer list-none gap-4 px-5 py-4 transition hover:bg-slate-50 sm:grid-cols-[minmax(0,1.25fr)_minmax(12rem,0.9fr)_minmax(10rem,0.7fr)_auto] sm:items-center sm:px-6 [&::-webkit-details-marker]:hidden">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span class="truncate text-base font-semibold text-slate-950">{{ $registeredBy }}</span>
+                            <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold {{ $submission->status === 'cancelled' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700' }}">
+                                {{ $statusLabel($submission->status) }}
+                            </span>
+                        </div>
+                        <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                            <span>{{ $registeredContact }}</span>
+                            <span>{{ $submission->created_at->format('d.m.Y H:i') }}</span>
+                        </div>
+                    </div>
+
+                    <div class="min-w-0 text-sm">
+                        <div class="font-semibold text-slate-900">
+                            {{ $participantCount }} {{ $participantCount === 1 ? 'Teilnehmer' : 'Teilnehmende' }}
+                        </div>
+                        <div class="mt-1 truncate text-xs text-slate-500">
+                            @if($additionalParticipantNames->isNotEmpty())
+                                Zusätzlich: {{ $additionalParticipantNames->implode(', ') }}
+                            @elseif($participantNames->isNotEmpty())
+                                {{ $participantNames->implode(', ') }}
+                            @else
+                                Keine weiteren Teilnehmerdaten
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap gap-1.5 text-xs">
+                        @if($booking)
+                            <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">
+                                {{ $booking->booking_reference }}
+                            </span>
+                            <span class="inline-flex rounded-full px-2.5 py-1 font-semibold {{ $booking->payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' : ($booking->payment_status === 'cancelled' ? 'bg-rose-100 text-rose-700' : ($booking->payment_status === 'not_required' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700')) }}">
+                                {{ $paymentStatusLabel($booking->payment_status) }}
+                            </span>
+                        @elseif($canConvertToEventParticipant)
+                            <span class="inline-flex rounded-full bg-amber-100 px-2.5 py-1 font-semibold text-amber-700">
+                                Noch nicht übernommen
+                            </span>
+                        @else
+                            <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600">
+                                Antwort
+                            </span>
+                        @endif
+                    </div>
+
+                    <div class="flex items-center justify-between gap-3 text-sm font-semibold text-blue-700 sm:justify-end">
+                        <span class="group-open:hidden">Details</span>
+                        <span class="hidden group-open:inline">Schließen</span>
+                        <svg class="h-4 w-4 transition group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </summary>
+
+                <div class="border-t border-slate-100">
                 <div class="border-b border-slate-100 px-5 py-5 sm:px-6">
                     <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                         <div class="min-w-0">
@@ -429,7 +501,8 @@
                         </aside>
                     @endif
                 </div>
-            </article>
+                </div>
+            </details>
         @empty
             <div class="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center shadow-sm">
                 <h2 class="text-xl font-semibold text-slate-900">Noch keine Antworten vorhanden</h2>
