@@ -357,3 +357,85 @@ test('event related form submissions can be transferred to participant lists aft
         ->and($participant->payment_status)->toBe('open')
         ->and($submission->fresh()->event_booking_id)->toBe($booking->id);
 });
+
+test('submission overview summarizes additional event participants compactly', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $admin] = createConversionTenant();
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'title' => 'Sommerfest',
+        'start' => now()->addWeek()->setTime(18, 0),
+        'end' => now()->addWeek()->setTime(22, 0),
+    ]);
+    $form = createConversionForm($tenant, 'event', $event);
+
+    $submission = PublicFormSubmission::create([
+        'public_form_id' => $form->id,
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'full_name' => 'Anna Anmeldung',
+        'email' => 'anna@example.test',
+        'answers' => [
+            'first_name' => 'Anna',
+            'last_name' => 'Anmeldung',
+            'email' => 'anna@example.test',
+            'participant_count' => 2,
+        ],
+    ]);
+
+    $booking = EventBooking::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'event_id' => $event->id,
+        'public_form_submission_id' => $submission->id,
+        'booking_reference' => 'EVT-1000',
+        'booker_name' => 'Anna Anmeldung',
+        'booker_email' => 'anna@example.test',
+        'participant_count' => 2,
+        'price_per_person' => 0,
+        'gross_amount' => 0,
+        'voucher_discount_amount' => 0,
+        'total_amount' => 0,
+        'currency' => 'EUR',
+        'payment_status' => 'not_required',
+        'booking_status' => 'confirmed',
+    ]);
+
+    $submission->forceFill(['event_booking_id' => $booking->id])->save();
+
+    EventBookingParticipant::create([
+        'event_booking_id' => $booking->id,
+        'participant_type' => 'guest',
+        'position' => 1,
+        'first_name' => 'Anna',
+        'last_name' => 'Anmeldung',
+        'email' => 'anna@example.test',
+        'payment_required' => false,
+        'price_amount' => 0,
+        'voucher_discount_amount' => 0,
+        'payment_status' => 'not_required',
+        'source' => 'public_form',
+    ]);
+
+    EventBookingParticipant::create([
+        'event_booking_id' => $booking->id,
+        'participant_type' => 'guest',
+        'position' => 2,
+        'first_name' => 'Ben',
+        'last_name' => 'Begleitung',
+        'email' => 'ben@example.test',
+        'payment_required' => false,
+        'price_amount' => 0,
+        'voucher_discount_amount' => 0,
+        'payment_status' => 'not_required',
+        'source' => 'public_form',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('forms.submissions', $form))
+        ->assertOk()
+        ->assertSee('Anna Anmeldung')
+        ->assertSee('2 Teilnehmende')
+        ->assertSee('Zusätzlich: Ben Begleitung')
+        ->assertSee('EVT-1000');
+});
