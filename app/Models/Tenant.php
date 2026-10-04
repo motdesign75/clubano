@@ -74,6 +74,8 @@ class Tenant extends Model
         'voucher_show_qr',
         'voucher_mail_subject',
         'voucher_mail_body',
+        'mobile_app_sync_enabled',
+        'mobile_app_sync_tag_id',
 
         // ➕ Stripe / Cashier
         'stripe_id',
@@ -119,6 +121,7 @@ class Tenant extends Model
         'voucher_show_qr' => 'boolean',
         'voucher_template_width' => 'integer',
         'voucher_template_height' => 'integer',
+        'mobile_app_sync_enabled' => 'boolean',
     ];
 
     protected static function booted(): void
@@ -154,6 +157,16 @@ class Tenant extends Model
     public function users()
     {
         return $this->hasMany(User::class);
+    }
+
+    public function mobileAppUsers()
+    {
+        return $this->hasMany(MobileAppUser::class);
+    }
+
+    public function mobileAppSyncTag()
+    {
+        return $this->belongsTo(Tag::class, 'mobile_app_sync_tag_id');
     }
 
     public function verifiedBy()

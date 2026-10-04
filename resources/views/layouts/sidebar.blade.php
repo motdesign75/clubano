@@ -148,6 +148,14 @@
             'minRole' => 'Mitarbeiter',
         ],
         [
+            'label' => 'App-Synchronisierung',
+            'hint' => 'Mitglieder zur App einladen',
+            'route' => route('mobile-app-sync.index'),
+            'active' => request()->routeIs('mobile-app-sync.*'),
+            'icon' => 'arrow-path',
+            'minRole' => 'Mitarbeiter',
+        ],
+        [
             'label' => 'E-Mail schreiben',
             'hint' => 'Direkte Nachricht mit Anhängen senden',
             'route' => route('mail.create'),
@@ -497,6 +505,7 @@
                     || request()->routeIs('protocols.*')
                     || request()->routeIs('templates.*')
                     || request()->routeIs('app-news.*')
+                    || request()->routeIs('mobile-app-sync.*')
                     || request()->routeIs('mail.*')
                     || request()->routeIs('automated-mails.*')
                     || request()->routeIs('letters.*'),
@@ -504,6 +513,7 @@
                     collect($workNav)->firstWhere('label', 'Formulare'),
                     collect($workNav)->firstWhere('label', 'Protokolle'),
                     collect($workNav)->firstWhere('label', 'App-News'),
+                    collect($workNav)->firstWhere('label', 'App-Synchronisierung'),
                     collect($workNav)->firstWhere('label', 'E-Mail schreiben'),
                     collect($workNav)->firstWhere('label', 'Automatische Mails'),
                     collect($workNav)->firstWhere('label', 'Versandprotokoll'),
@@ -593,6 +603,7 @@
         'lock-closed' => 'lock-closed',
         'shield-check' => 'shield-check',
         'megaphone' => 'megaphone',
+        'arrow-path' => 'arrow-path',
         'presentation-chart-line' => 'presentation-chart-line',
         default => 'circle-stack',
     };
