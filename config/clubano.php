@@ -99,16 +99,18 @@ return [
     ],
 
     'update_notice' => [
-        'version' => env('CLUBANO_UPDATE_NOTICE_VERSION', '2026-08-25'),
-        'title' => 'Clubano wurde aktualisiert',
-        'summary' => 'Wir haben die Bereiche Beiträge, Rechnungen, Bankumsätze, Gutscheine, Kommunikation und Kalender spürbar verbessert. Viele Abläufe sind jetzt klarer, sicherer und schneller.',
+        'version' => env('CLUBANO_UPDATE_NOTICE_VERSION', '2026-10-04'),
+        'title' => 'Neue Funktionen für euren Vereinsalltag',
+        'summary' => 'Clubano ist an vielen Stellen spürbar gewachsen: mehr Übersicht in der Kommunikation, bessere Planung bei Terminen, sauberere Finanzen und erste Vorbereitungen für Mein Clubano auf iOS und Android.',
         'items' => [
-            'Beiträge: fehlende Beitragsmodelle, nächste Abrechnung und Familienzahler sind leichter erkennbar',
-            'Rechnungen: Teilzahlungen, Überzahlungen und 0,00-Euro-Rechnungen werden sauberer behandelt',
-            'Bankumsätze: CAMT/CSV-Import, Gegenkonto-Zuordnung, Belege, Verträge und Clubano-Rechnungen als Nachweis',
-            'Gutscheine: PDF-Gutscheine mit Code, Widmung und verbesserter Darstellung',
-            'Kommunikation: HTML-Mails mit Editor, Anhängen, Vorlagen und Testmail vor dem Versand',
-            'Kalender und Dashboard: ruhigere Übersichten, bessere mobile Darstellung und schnelleres Laden',
+            'Kommunikation: Versandprotokolle für Nachrichten, Rechnungen und Geburtstagsmails sind jetzt leichter unter Kommunikation erreichbar',
+            'App-News: Mitteilungen für die künftige Mein-Clubano-App können vorbereitet, veröffentlicht und für Push markiert werden',
+            'Termine: Termine lassen sich kopieren, Mitgliedspreise können deaktiviert werden und Mindestteilnehmer, Anmeldeschluss sowie Restplätze helfen bei der Planung',
+            'Anmeldungen: doppelte Eventanmeldungen werden verhindert und große Anmeldelisten sind kompakter mit aufklappbaren Details',
+            'Finanzen: Eigenbelege unterscheiden Einnahmen und Ausgaben; Buchungen und Haushaltsplanung können über Kategorien besser ausgewertet werden',
+            'Rechnungen: e-Rechnungen wurden vorbereitet, ohne den normalen Rechnungsversand zu verändern',
+            'Mein Clubano App: iOS und Android sind in Vorbereitung - mit Mitgliedsausweis, News, Terminen, Dokumenten und gezielten App-Zugängen',
+            'App-Synchronisierung: Mitglieder können gezielt für die App ausgewählt und eingeladen werden, ohne Zugang zur großen Verwaltungsanwendung zu bekommen',
         ],
     ],
 
