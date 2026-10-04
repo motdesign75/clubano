@@ -142,38 +142,22 @@ export default function App() {
       const permission = current.granted ? current : await Notifications.requestPermissionsAsync();
 
       if (!permission.granted) {
+        setPushStatus("Push ist deaktiviert. Du kannst Benachrichtigungen später in den Geräteeinstellungen erlauben.");
         return;
-      }
-
-      const registered: string[] = [];
-      const errors: string[] = [];
-
-      try {
-        const token = await Notifications.getExpoPushTokenAsync();
-        await registerToken(token.data, "expo");
-        registered.push("Expo");
-      } catch (error) {
-        errors.push(error instanceof Error ? error.message : "Expo-Token konnte nicht erzeugt werden.");
       }
 
       try {
         const token = await Notifications.getDevicePushTokenAsync();
         const nativeToken = typeof token.data === "string" ? token.data : String(token.data);
         await registerToken(nativeToken, Platform.OS === "ios" ? "apns" : "fcm");
-        registered.push(Platform.OS === "ios" ? "APNs" : "FCM");
+        setPushStatus("Push ist aktiviert. Wichtige Mitteilungen kommen direkt auf dein Gerät.");
       } catch (error) {
-        errors.push(error instanceof Error ? error.message : "Geräte-Token konnte nicht erzeugt werden.");
+        console.warn("Native push token registration failed", error);
+        setPushStatus("Push konnte noch nicht aktiviert werden. Die App funktioniert trotzdem normal.");
       }
-
-      if (registered.length === 0) {
-        throw new Error(errors.join(" / "));
-      }
-
-      setPushStatus(`Push vorbereitet: ${registered.join(", ")}`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Push konnte nicht eingerichtet werden.";
-      setPushStatus(`Push-Hinweis: ${message}`);
       console.warn("Push registration failed", error);
+      setPushStatus("Push konnte noch nicht aktiviert werden. Die App funktioniert trotzdem normal.");
     }
   }
 
