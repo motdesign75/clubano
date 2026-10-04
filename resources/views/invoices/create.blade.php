@@ -77,6 +77,10 @@
                                             data-zip="{{ $member->zip }}"
                                             data-city="{{ $member->city }}"
                                             data-country="{{ $member->country ?: 'Deutschland' }}"
+                                            data-e-invoice-enabled="0"
+                                            data-e-invoice-format="xrechnung"
+                                            data-e-invoice-buyer-reference=""
+                                            data-e-invoice-order-reference=""
                                             @selected(old('member_id', $formInvoice?->member_id) == $member->id)
                                         >
                                             {{ $member->last_name }}, {{ $member->first_name }}
@@ -102,6 +106,10 @@
                                             data-zip="{{ $contact->zip ?: $contact->postal_code }}"
                                             data-city="{{ $contact->city }}"
                                             data-country="{{ $contact->country ?: 'Deutschland' }}"
+                                            data-e-invoice-enabled="{{ $contact->e_invoice_required ? 1 : 0 }}"
+                                            data-e-invoice-format="{{ $contact->e_invoice_format ?: 'xrechnung' }}"
+                                            data-e-invoice-buyer-reference="{{ $contact->e_invoice_buyer_reference }}"
+                                            data-e-invoice-order-reference="{{ $contact->e_invoice_order_reference }}"
                                             @selected(old('contact_id', $formInvoice?->contact_id) == $contact->id)
                                         >
                                             {{ $contact->display_name }}
@@ -154,6 +162,48 @@
                             </div>
                         </div>
                     </section>
+
+                    @if(! $isOffer)
+                        <section class="rounded-3xl border border-blue-200 bg-blue-50/70 p-6 shadow-sm">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <h2 class="text-lg font-semibold text-blue-950">E-Rechnung fuer Behörden</h2>
+                                    <p class="mt-1 text-sm text-blue-900/80">
+                                        Nur aktivieren, wenn der Empfaenger eine XRechnung verlangt. PDF und Mailversand bleiben unverändert.
+                                    </p>
+                                </div>
+                                <label class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-800">
+                                    <input type="hidden" name="e_invoice_enabled" value="0">
+                                    <input type="checkbox"
+                                           name="e_invoice_enabled"
+                                           value="1"
+                                           x-model="eInvoice.enabled"
+                                           class="rounded border-blue-300 text-blue-700 focus:ring-blue-500">
+                                    E-Rechnung erforderlich
+                                </label>
+                            </div>
+
+                            <div class="mt-5 grid gap-4 md:grid-cols-3">
+                                <div>
+                                    <label for="e_invoice_format" class="mb-1 block text-sm font-medium text-blue-950">Format</label>
+                                    <select name="e_invoice_format" id="e_invoice_format" x-model="eInvoice.format" class="w-full rounded-2xl border-blue-200">
+                                        <option value="xrechnung">XRechnung</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label for="e_invoice_buyer_reference" class="mb-1 block text-sm font-medium text-blue-950">Leitweg-ID / Käuferreferenz</label>
+                                    <input type="text" name="e_invoice_buyer_reference" id="e_invoice_buyer_reference" x-model="eInvoice.buyerReference" placeholder="z. B. 991-12345-67" class="w-full rounded-2xl border-blue-200">
+                                    <p class="mt-2 text-xs text-blue-800/75">Pflichtfeld fuer XRechnung an öffentliche Auftraggeber.</p>
+                                </div>
+
+                                <div>
+                                    <label for="e_invoice_order_reference" class="mb-1 block text-sm font-medium text-blue-950">Bestell-/Auftragsnummer</label>
+                                    <input type="text" name="e_invoice_order_reference" id="e_invoice_order_reference" x-model="eInvoice.orderReference" placeholder="Optional" class="w-full rounded-2xl border-blue-200">
+                                </div>
+                            </div>
+                        </section>
+                    @endif
 
                     <section class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                         <div>
@@ -422,6 +472,12 @@
                     city: @js(old('recipient_city', $formInvoice?->recipient_city)),
                     country: @js(old('recipient_country', $formInvoice?->recipient_country ?? 'Deutschland')),
                 },
+                eInvoice: {
+                    enabled: Boolean(Number(@js(old('e_invoice_enabled', $formInvoice?->e_invoice_enabled ? 1 : 0)))),
+                    format: @js(old('e_invoice_format', $formInvoice?->e_invoice_format ?? 'xrechnung')),
+                    buyerReference: @js(old('e_invoice_buyer_reference', $formInvoice?->e_invoice_buyer_reference)),
+                    orderReference: @js(old('e_invoice_order_reference', $formInvoice?->e_invoice_order_reference)),
+                },
                 pricing: {
                     discount: Number(@js(old('discount', $formInvoice?->discount ?? 0))) || 0,
                     taxRate: Number(@js(old('tax_rate', $formInvoice?->tax_rate ?? 0))) || 0,
@@ -462,6 +518,10 @@
                     this.recipient.zip = option.dataset.zip || '';
                     this.recipient.city = option.dataset.city || '';
                     this.recipient.country = option.dataset.country || 'Deutschland';
+                    this.eInvoice.enabled = option.dataset.eInvoiceEnabled === '1';
+                    this.eInvoice.format = option.dataset.eInvoiceFormat || 'xrechnung';
+                    this.eInvoice.buyerReference = option.dataset.eInvoiceBuyerReference || '';
+                    this.eInvoice.orderReference = option.dataset.eInvoiceOrderReference || '';
                 },
                 fillFromMember() {
                     this.fillFromOption('member_id');

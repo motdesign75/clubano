@@ -525,6 +525,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::middleware('tenant.role:finance')->group(function () use ($cls) {
             Route::resource('invoices', $cls)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
             Route::get('/invoices/{invoice}/pdf', [$cls, 'pdf'])->name('invoices.pdf');
+            Route::get('/invoices/{invoice}/xrechnung', [$cls, 'xrechnung'])->name('invoices.xrechnung');
             Route::post('/invoices/{invoice}/send', [$cls, 'sendMail'])->name('invoices.send');
             Route::get('/invoices/{invoice}/reminder', [$cls, 'reminderPreview'])->name('invoices.reminder.preview');
             Route::post('/invoices/{invoice}/reminder', [$cls, 'sendReminder'])->name('invoices.reminder');
