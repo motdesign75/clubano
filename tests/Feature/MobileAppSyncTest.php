@@ -45,7 +45,7 @@ test('admin can synchronize selected members into separated app accounts', funct
         ->get(route('mobile-app-sync.index'))
         ->assertOk()
         ->assertSee('App-Synchronisierung')
-        ->assertSee('1 Mitglied(er) im aktuellen Segment')
+        ->assertSee('1 Mitglied(er) werden aktuell synchronisiert')
         ->assertSee('1 von 2 Mitgliedern ausgewählt');
 
     $this->actingAs($admin)

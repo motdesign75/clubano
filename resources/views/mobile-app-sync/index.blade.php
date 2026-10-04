@@ -1,3 +1,8 @@
+@extends('layouts.app')
+
+@section('title', 'App-Synchronisierung')
+
+@section('content')
 @php
     $statusClasses = [
         'manual' => 'bg-slate-100 text-slate-700',
@@ -16,75 +21,84 @@
         'ignored' => 'Ignoriert',
         'removed' => 'Entfernt',
     ];
+
+    $selectedCount = $selectableMembers->where('mobile_app_sync_enabled', true)->count();
 @endphp
 
-<x-app-layout>
-    <x-slot name="header">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-                <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Kommunikation</div>
-                <h1 class="mt-2 text-3xl font-semibold text-slate-900">App-Synchronisierung</h1>
-                <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                    Mitglieder werden als getrennte App-Zugänge eingeladen. Diese Zugänge gelten nur für Mein Clubano und nicht für die Verwaltungsanwendung.
+<div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <section class="overflow-hidden rounded-3xl bg-slate-950 text-white shadow-sm">
+        <div class="grid gap-6 px-6 py-6 lg:grid-cols-[1fr_auto] lg:items-end lg:px-8">
+            <div class="max-w-3xl">
+                <div class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Kommunikation</div>
+                <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">App-Synchronisierung</h1>
+                <p class="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
+                    Wähle gezielt aus, welche Mitglieder Zugang zu Mein Clubano erhalten. App-Zugänge bleiben getrennt von der Verwaltungsanwendung.
                 </p>
             </div>
+
+            <div class="rounded-2xl border border-white/10 bg-white/5 px-5 py-4">
+                <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">Ausgewählt</div>
+                <div class="mt-2 text-3xl font-semibold">{{ $selectedCount }} / {{ $selectableMembers->count() }}</div>
+                <div class="mt-1 text-xs text-slate-400">aktive Mitglieder mit E-Mail</div>
+            </div>
         </div>
-    </x-slot>
 
-    <div class="space-y-6">
-        @if(session('success'))
-            <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">
-                {{ session('success') }}
-            </div>
-        @endif
-
-        @if(session('error'))
-            <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-900">
-                {{ session('error') }}
-            </div>
-        @endif
-
-        <div class="grid gap-4 md:grid-cols-5">
+        <div class="grid border-t border-white/10 sm:grid-cols-2 lg:grid-cols-5">
             @foreach([
-                'synced' => ['label' => 'Synchronisiert', 'value' => $stats['synced'], 'tone' => 'bg-blue-50 text-blue-900'],
-                'activated' => ['label' => 'Aktiviert', 'value' => $stats['activated'], 'tone' => 'bg-emerald-50 text-emerald-900'],
-                'failed' => ['label' => 'Fehlgeschlagen', 'value' => $stats['failed'], 'tone' => 'bg-rose-50 text-rose-900'],
-                'removed' => ['label' => 'Entfernt', 'value' => $stats['removed'], 'tone' => 'bg-zinc-100 text-zinc-800'],
-                'ignored' => ['label' => 'Ignoriert', 'value' => $stats['ignored'], 'tone' => 'bg-slate-100 text-slate-800'],
+                'synced' => ['label' => 'Synchronisiert', 'value' => $stats['synced']],
+                'activated' => ['label' => 'Aktiviert', 'value' => $stats['activated']],
+                'failed' => ['label' => 'Fehlgeschlagen', 'value' => $stats['failed']],
+                'removed' => ['label' => 'Entfernt', 'value' => $stats['removed']],
+                'ignored' => ['label' => 'Ignoriert', 'value' => $stats['ignored']],
             ] as $card)
-                <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <div class="text-sm font-medium text-slate-500">{{ $card['label'] }}</div>
-                    <div class="mt-3 inline-flex min-w-16 items-center justify-center rounded-2xl px-4 py-2 text-2xl font-semibold {{ $card['tone'] }}">
-                        {{ $card['value'] }}
-                    </div>
+                <div class="border-white/10 px-6 py-4 sm:border-r last:border-r-0">
+                    <div class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{{ $card['label'] }}</div>
+                    <div class="mt-2 text-2xl font-semibold">{{ $card['value'] }}</div>
                 </div>
             @endforeach
         </div>
+    </section>
 
-        <div class="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
-            <form method="POST" action="{{ route('mobile-app-sync.update') }}" class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" x-data="{ q: '' }">
-                @csrf
-                @method('PUT')
+    @if(session('success'))
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-900">
+            {{ session('success') }}
+        </div>
+    @endif
 
-                <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+    @if(session('error'))
+        <div class="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-900">
+            {{ session('error') }}
+        </div>
+    @endif
+
+    <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <form method="POST"
+              action="{{ route('mobile-app-sync.update') }}"
+              class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+              x-data="{ q: '' }">
+            @csrf
+            @method('PUT')
+
+            <div class="border-b border-slate-200 px-5 py-5 sm:px-6">
+                <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                        <h2 class="text-xl font-semibold text-slate-950">Synchronisierung steuern</h2>
-                        <p class="mt-2 text-sm leading-6 text-slate-500">
-                            Wenn aktiv, werden nur die unten ausgewählten Mitglieder als App-Zugänge vorbereitet. Das Segment/Tag kann zusätzlich eingrenzen.
+                        <h2 class="text-xl font-semibold text-slate-950">Mitglieder auswählen</h2>
+                        <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                            Nur angehakte Mitglieder werden zur App synchronisiert. Entfernte Häkchen deaktivieren den App-Zugang beim nächsten Synchronisieren, löschen aber keine Mitgliedsdaten.
                         </p>
                     </div>
 
-                    <label class="inline-flex items-center gap-3 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800">
+                    <label class="inline-flex w-fit items-center gap-3 rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-800">
                         <input type="checkbox" name="mobile_app_sync_enabled" value="1" class="rounded border-slate-300" @checked(old('mobile_app_sync_enabled', $tenant->mobile_app_sync_enabled))>
-                        Aktiv
+                        Synchronisierung aktiv
                     </label>
                 </div>
 
-                <div class="mt-6 grid gap-4 md:grid-cols-2">
+                <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                     <div>
-                        <x-ui.label for="mobile_app_sync_tag_id">Segment/Tag</x-ui.label>
+                        <x-ui.label for="mobile_app_sync_tag_id">Zusätzliches Segment</x-ui.label>
                         <select id="mobile_app_sync_tag_id" name="mobile_app_sync_tag_id" class="mt-1 w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                            <option value="">Keine zusätzliche Segment-Eingrenzung</option>
+                            <option value="">Keine zusätzliche Eingrenzung</option>
                             @foreach($tags as $tag)
                                 <option value="{{ $tag->id }}" @selected((string) old('mobile_app_sync_tag_id', $tenant->mobile_app_sync_tag_id) === (string) $tag->id)>
                                     {{ $tag->name }}
@@ -97,89 +111,88 @@
                     </div>
 
                     <div class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
-                        <div class="text-sm font-semibold text-blue-950">{{ $eligibleCount }} Mitglied(er) im aktuellen Segment</div>
+                        <div class="text-sm font-semibold text-blue-950">{{ $eligibleCount }} Mitglied(er) werden aktuell synchronisiert</div>
                         <p class="mt-1 text-sm leading-6 text-blue-800">
-                            Maßgeblich ist die Auswahl unten. Nur ausgewählte Mitglieder mit E-Mail-Adresse werden eingeladen.
+                            Auswahl plus optionales Segment bestimmen gemeinsam, wer eingeladen wird.
                         </p>
                     </div>
                 </div>
+            </div>
 
-                <div class="mt-6 rounded-2xl border border-slate-200">
-                    <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
-                        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                            <div>
-                                <div class="text-sm font-semibold text-slate-950">Mitglieder für die App auswählen</div>
-                                <div class="mt-1 text-xs text-slate-500">
-                                    {{ $selectableMembers->where('mobile_app_sync_enabled', true)->count() }} von {{ $selectableMembers->count() }} Mitgliedern ausgewählt
-                                </div>
+            <div class="border-b border-slate-200 bg-slate-50/80 px-5 py-4 sm:px-6">
+                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <div class="text-sm font-semibold text-slate-950">{{ $selectedCount }} von {{ $selectableMembers->count() }} Mitgliedern ausgewählt</div>
+                        <div class="mt-1 text-xs text-slate-500">Mitglieder ohne E-Mail-Adresse werden hier nicht angezeigt.</div>
+                    </div>
+                    <input
+                        type="search"
+                        x-model.debounce.150ms="q"
+                        placeholder="Name, E-Mail oder Nummer suchen..."
+                        class="w-full rounded-full border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 lg:w-80"
+                    >
+                </div>
+            </div>
+
+            <div class="max-h-[34rem] divide-y divide-slate-100 overflow-y-auto">
+                @forelse($selectableMembers as $member)
+                    @php
+                        $searchText = mb_strtolower(trim($member->full_name . ' ' . $member->email . ' ' . $member->member_id));
+                        $appUser = $member->mobileAppUser;
+                    @endphp
+                    <label
+                        class="grid cursor-pointer gap-3 px-5 py-4 transition hover:bg-slate-50 sm:px-6 lg:grid-cols-[auto_minmax(0,1fr)_auto]"
+                        x-show="@js($searchText).includes(q.toLowerCase())"
+                    >
+                        <input
+                            type="checkbox"
+                            name="mobile_app_member_ids[]"
+                            value="{{ $member->id }}"
+                            class="mt-1 rounded border-slate-300"
+                            @checked(old('mobile_app_member_ids') ? in_array((string) $member->id, old('mobile_app_member_ids', []), true) : $member->mobile_app_sync_enabled)
+                        >
+                        <div class="min-w-0">
+                            <div class="truncate font-semibold text-slate-900">{{ $member->full_name ?: 'Ohne Namen' }}</div>
+                            <div class="mt-1 truncate text-xs text-slate-500">
+                                {{ $member->email }}
+                                @if($member->member_id)
+                                    <span class="text-slate-300">·</span> Nr. {{ $member->member_id }}
+                                @endif
                             </div>
-                            <input
-                                type="search"
-                                x-model.debounce.150ms="q"
-                                placeholder="Mitglied suchen..."
-                                class="w-full rounded-full border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 md:w-72"
-                            >
                         </div>
+                        <div class="flex items-center gap-2 lg:justify-end">
+                            @if($appUser)
+                                <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClasses[$appUser->sync_status] ?? 'bg-slate-100 text-slate-700' }}">
+                                    {{ $statusLabels[$appUser->sync_status] ?? $appUser->sync_status }}
+                                </span>
+                            @else
+                                <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                                    Noch nicht synchronisiert
+                                </span>
+                            @endif
+                        </div>
+                    </label>
+                @empty
+                    <div class="px-6 py-12 text-center">
+                        <h3 class="text-lg font-semibold text-slate-950">Keine auswählbaren Mitglieder</h3>
+                        <p class="mt-2 text-sm text-slate-500">Lege zuerst eine E-Mail-Adresse bei Mitgliedern an.</p>
                     </div>
+                @endforelse
+            </div>
 
-                    <div class="max-h-[28rem] divide-y divide-slate-100 overflow-y-auto">
-                        @forelse($selectableMembers as $member)
-                            @php
-                                $searchText = mb_strtolower(trim($member->full_name . ' ' . $member->email . ' ' . $member->member_id));
-                                $appUser = $member->mobileAppUser;
-                            @endphp
-                            <label
-                                class="grid cursor-pointer gap-3 px-4 py-3 hover:bg-slate-50 md:grid-cols-[auto_1fr_auto]"
-                                x-show="@js($searchText).includes(q.toLowerCase())"
-                            >
-                                <input
-                                    type="checkbox"
-                                    name="mobile_app_member_ids[]"
-                                    value="{{ $member->id }}"
-                                    class="mt-1 rounded border-slate-300"
-                                    @checked(old('mobile_app_member_ids') ? in_array((string) $member->id, old('mobile_app_member_ids', []), true) : $member->mobile_app_sync_enabled)
-                                >
-                                <div>
-                                    <div class="font-semibold text-slate-900">{{ $member->full_name ?: 'Ohne Namen' }}</div>
-                                    <div class="mt-1 text-xs text-slate-500">
-                                        {{ $member->email }}
-                                        @if($member->member_id)
-                                            · Nr. {{ $member->member_id }}
-                                        @endif
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-2 md:justify-end">
-                                    @if($appUser)
-                                        <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClasses[$appUser->sync_status] ?? 'bg-slate-100 text-slate-700' }}">
-                                            {{ $statusLabels[$appUser->sync_status] ?? $appUser->sync_status }}
-                                        </span>
-                                    @else
-                                        <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                                            Noch nicht synchronisiert
-                                        </span>
-                                    @endif
-                                </div>
-                            </label>
-                        @empty
-                            <div class="px-4 py-8 text-center text-sm text-slate-500">
-                                Keine aktiven Mitglieder mit E-Mail-Adresse vorhanden.
-                            </div>
-                        @endforelse
-                    </div>
-                </div>
+            <div class="border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+                <button class="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                    Auswahl speichern
+                </button>
+            </div>
+        </form>
 
-                <div class="mt-6 flex flex-wrap gap-3">
-                    <button class="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-                        Einstellungen speichern
-                    </button>
-                </div>
-            </form>
-
+        <aside class="space-y-6">
             <form method="POST" action="{{ route('mobile-app-sync.run') }}" class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
                 @csrf
-                <h2 class="text-xl font-semibold text-slate-950">Jetzt synchronisieren</h2>
+                <h2 class="text-xl font-semibold text-slate-950">Synchronisieren</h2>
                 <p class="mt-2 text-sm leading-6 text-slate-500">
-                    Neue App-Zugänge erhalten eine Einladung per E-Mail. Bestehende aktivierte Zugänge bleiben aktiv.
+                    Neue App-Zugänge erhalten eine Einladung per E-Mail. Bestehende aktivierte Zugänge bleiben erhalten.
                 </p>
 
                 <label class="mt-6 inline-flex items-center gap-3 text-sm font-medium text-slate-700">
@@ -187,66 +200,45 @@
                     Einladungen direkt versenden
                 </label>
 
-                <button class="mt-6 inline-flex w-full items-center justify-center rounded-full bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700" @disabled(! $tenant->mobile_app_sync_enabled)>
-                    Synchronisierung ausführen
+                <button class="mt-6 inline-flex w-full items-center justify-center rounded-full bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300" @disabled(! $tenant->mobile_app_sync_enabled)>
+                    Jetzt synchronisieren
                 </button>
 
                 @unless($tenant->mobile_app_sync_enabled)
-                    <p class="mt-3 text-sm text-amber-700">Aktiviere die Synchronisierung zuerst.</p>
+                    <p class="mt-3 text-sm font-medium text-amber-700">Aktiviere die Synchronisierung und speichere zuerst.</p>
                 @endunless
             </form>
-        </div>
 
-        <div class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div class="border-b border-slate-200 px-5 py-4">
-                <h2 class="text-lg font-semibold text-slate-950">Letzte App-Zugänge</h2>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <tr>
-                            <th class="px-5 py-3">Mitglied</th>
-                            <th class="px-5 py-3">Login</th>
-                            <th class="px-5 py-3">Status</th>
-                            <th class="px-5 py-3">Einladung</th>
-                            <th class="px-5 py-3">Fehler</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        @forelse($appUsers as $appUser)
-                            <tr>
-                                <td class="px-5 py-4">
-                                    <div class="font-semibold text-slate-900">{{ $appUser->member?->full_name ?: 'Ohne Mitglied' }}</div>
-                                    <div class="mt-1 text-xs text-slate-500">{{ $appUser->member?->member_id }}</div>
-                                </td>
-                                <td class="px-5 py-4 text-slate-600">{{ $appUser->username }}</td>
-                                <td class="px-5 py-4">
-                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClasses[$appUser->sync_status] ?? 'bg-slate-100 text-slate-700' }}">
-                                        {{ $statusLabels[$appUser->sync_status] ?? $appUser->sync_status }}
-                                    </span>
-                                </td>
-                                <td class="px-5 py-4 text-slate-600">
-                                    @if($appUser->accepted_at)
-                                        Aktiviert am {{ $appUser->accepted_at->format('d.m.Y H:i') }}
-                                    @elseif($appUser->invitation_sent_at)
-                                        Gesendet am {{ $appUser->invitation_sent_at->format('d.m.Y H:i') }}
-                                    @else
-                                        -
-                                    @endif
-                                </td>
-                                <td class="px-5 py-4 text-slate-600">{{ $appUser->sync_error ?: '-' }}</td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="5" class="px-5 py-10 text-center text-slate-500">
-                                    Noch keine App-Zugänge vorhanden.
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            <section class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div class="border-b border-slate-200 px-5 py-4">
+                    <h2 class="text-lg font-semibold text-slate-950">Letzte App-Zugänge</h2>
+                </div>
+                <div class="divide-y divide-slate-100">
+                    @forelse($appUsers->take(8) as $appUser)
+                        <div class="px-5 py-4">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="truncate font-semibold text-slate-900">{{ $appUser->member?->full_name ?: 'Ohne Mitglied' }}</div>
+                                    <div class="mt-1 truncate text-xs text-slate-500">{{ $appUser->username }}</div>
+                                </div>
+                                <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClasses[$appUser->sync_status] ?? 'bg-slate-100 text-slate-700' }}">
+                                    {{ $statusLabels[$appUser->sync_status] ?? $appUser->sync_status }}
+                                </span>
+                            </div>
+                            @if($appUser->sync_error)
+                                <div class="mt-2 text-xs text-rose-700">{{ $appUser->sync_error }}</div>
+                            @elseif($appUser->accepted_at)
+                                <div class="mt-2 text-xs text-slate-500">Aktiviert am {{ $appUser->accepted_at->format('d.m.Y H:i') }}</div>
+                            @elseif($appUser->invitation_sent_at)
+                                <div class="mt-2 text-xs text-slate-500">Einladung am {{ $appUser->invitation_sent_at->format('d.m.Y H:i') }}</div>
+                            @endif
+                        </div>
+                    @empty
+                        <div class="px-5 py-8 text-center text-sm text-slate-500">Noch keine App-Zugänge vorhanden.</div>
+                    @endforelse
+                </div>
+            </section>
+        </aside>
     </div>
-</x-app-layout>
+</div>
+@endsection
