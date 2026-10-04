@@ -29,6 +29,7 @@ class Member extends Model
         'mobile_identity_secret',
         'mobile_identity_rotated_at',
         'mobile_identity_revoked_at',
+        'mobile_app_sync_enabled',
 
         // Block: Mitgliedschaft
         'member_id',
@@ -102,6 +103,7 @@ class Member extends Model
         'archived_at' => 'datetime',
         'mobile_identity_rotated_at' => 'datetime',
         'mobile_identity_revoked_at' => 'datetime',
+        'mobile_app_sync_enabled' => 'boolean',
         'required_service_hours' => 'decimal:2',
     ];
 
