@@ -445,6 +445,66 @@
         </div>
     </section>
 
+    {{-- E-Rechnung --}}
+    <section class="rounded-xl border border-blue-200 bg-blue-50/60 p-5 shadow-sm">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+                <h3 class="text-lg font-semibold text-blue-950">E-Rechnung</h3>
+                <p class="mt-1 text-sm text-blue-900/80">
+                    Für Behörden und öffentliche Auftraggeber. Der normale Rechnungsversand bleibt davon unberührt.
+                </p>
+            </div>
+            <label class="inline-flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-800">
+                <input type="checkbox"
+                       name="e_invoice_required"
+                       value="1"
+                       @checked(old('e_invoice_required', $contact->e_invoice_required ?? false))
+                       class="rounded border-blue-300 text-blue-700 focus:ring-blue-500">
+                E-Rechnung erforderlich
+            </label>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
+                <label for="e_invoice_format" class="block text-sm font-medium text-blue-950">Format</label>
+                <select name="e_invoice_format"
+                        id="e_invoice_format"
+                        class="mt-1 block w-full rounded-md border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <option value="xrechnung" @selected(old('e_invoice_format', $contact->e_invoice_format ?? 'xrechnung') === 'xrechnung')>XRechnung</option>
+                </select>
+                @error('e_invoice_format')
+                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                @enderror
+            </div>
+
+            <div>
+                <label for="e_invoice_buyer_reference" class="block text-sm font-medium text-blue-950">Leitweg-ID / Käuferreferenz</label>
+                <input type="text"
+                       name="e_invoice_buyer_reference"
+                       id="e_invoice_buyer_reference"
+                       value="{{ old('e_invoice_buyer_reference', $contact->e_invoice_buyer_reference ?? '') }}"
+                       placeholder="z. B. 991-12345-67"
+                       class="mt-1 block w-full rounded-md border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                @error('e_invoice_buyer_reference')
+                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                @enderror
+            </div>
+
+            <div>
+                <label for="e_invoice_order_reference" class="block text-sm font-medium text-blue-950">Bestell-/Auftragsnummer</label>
+                <input type="text"
+                       name="e_invoice_order_reference"
+                       id="e_invoice_order_reference"
+                       value="{{ old('e_invoice_order_reference', $contact->e_invoice_order_reference ?? '') }}"
+                       placeholder="Optional"
+                       class="mt-1 block w-full rounded-md border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                @error('e_invoice_order_reference')
+                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                @enderror
+            </div>
+        </div>
+    </section>
+
     {{-- Beziehung / Datenschutz / Notizen --}}
     <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h3 class="text-lg font-semibold text-gray-900">Weitere Angaben</h3>

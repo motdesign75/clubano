@@ -26,6 +26,10 @@ class Invoice extends Model
         'recipient_zip',
         'recipient_city',
         'recipient_country',
+        'e_invoice_enabled',
+        'e_invoice_format',
+        'e_invoice_buyer_reference',
+        'e_invoice_order_reference',
         'intro_text',
         'payment_text',
         'closing_text',
@@ -56,6 +60,7 @@ class Invoice extends Model
         'cancelled_at' => 'datetime',
         'paid_at' => 'datetime',
         'sepa_exported_at' => 'datetime',
+        'e_invoice_enabled' => 'boolean',
     ];
 
     public function member()

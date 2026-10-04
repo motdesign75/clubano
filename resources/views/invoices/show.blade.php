@@ -91,6 +91,11 @@
                     <a href="{{ route('invoices.pdf', $invoice) }}" target="_blank" rel="noopener" class="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-100">
                         PDF oeffnen
                     </a>
+                    @if($invoice->isInvoice() && $invoice->e_invoice_enabled)
+                        <a href="{{ route('invoices.xrechnung', $invoice) }}" class="rounded-full border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100">
+                            XRechnung XML
+                        </a>
+                    @endif
                     <a href="{{ route('invoices.index') }}" class="rounded-full border border-white/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">
                         Zurueck
                     </a>
@@ -340,6 +345,49 @@
                                 <div class="mt-1 text-xl font-semibold {{ $overpaidAmount > 0 ? 'text-sky-800' : 'text-slate-950' }}">{{ number_format($overpaidAmount, 2, ',', '.') }} €</div>
                             </div>
                         </div>
+                    </div>
+                @endif
+
+                @if($invoice->isInvoice())
+                    <div class="rounded-3xl border {{ $invoice->e_invoice_enabled ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white' }} p-6 shadow-sm">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <div class="text-xs font-semibold uppercase tracking-[0.18em] {{ $invoice->e_invoice_enabled ? 'text-blue-700' : 'text-slate-400' }}">E-Rechnung</div>
+                                <h2 class="mt-2 text-lg font-semibold {{ $invoice->e_invoice_enabled ? 'text-blue-950' : 'text-slate-950' }}">
+                                    {{ $invoice->e_invoice_enabled ? 'XRechnung vorbereitet' : 'Normaler Rechnungsversand' }}
+                                </h2>
+                                <p class="mt-2 text-sm {{ $invoice->e_invoice_enabled ? 'text-blue-900/80' : 'text-slate-600' }}">
+                                    @if($invoice->e_invoice_enabled)
+                                        Für diesen Empfänger kann zusätzlich eine strukturierte XML-Datei erzeugt werden. Der Mailversand verschickt weiterhin wie gewohnt das PDF.
+                                    @else
+                                        Für diese Rechnung ist keine E-Rechnung aktiviert. PDF und Mailversand laufen wie bisher.
+                                    @endif
+                                </p>
+                            </div>
+
+                            @if($invoice->e_invoice_enabled)
+                                <a href="{{ route('invoices.xrechnung', $invoice) }}" class="inline-flex min-h-11 items-center justify-center rounded-full bg-blue-700 px-5 text-sm font-semibold text-white transition hover:bg-blue-800">
+                                    XRechnung herunterladen
+                                </a>
+                            @endif
+                        </div>
+
+                        @if($invoice->e_invoice_enabled)
+                            <div class="mt-5 grid gap-3 sm:grid-cols-2">
+                                <div class="rounded-2xl bg-white/75 px-4 py-3">
+                                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Format</div>
+                                    <div class="mt-1 font-semibold text-blue-950">XRechnung</div>
+                                </div>
+                                <div class="rounded-2xl bg-white/75 px-4 py-3">
+                                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Leitweg-ID / Käuferreferenz</div>
+                                    <div class="mt-1 font-semibold text-blue-950">{{ $invoice->e_invoice_buyer_reference ?: 'Fehlt noch' }}</div>
+                                </div>
+                                <div class="rounded-2xl bg-white/75 px-4 py-3 sm:col-span-2">
+                                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Bestell-/Auftragsnummer</div>
+                                    <div class="mt-1 font-semibold text-blue-950">{{ $invoice->e_invoice_order_reference ?: 'Nicht hinterlegt' }}</div>
+                                </div>
+                            </div>
+                        @endif
                     </div>
                 @endif
 

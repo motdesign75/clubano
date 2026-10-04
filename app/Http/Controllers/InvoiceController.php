@@ -14,6 +14,7 @@ use App\Services\InvoicePdfService;
 use App\Services\InvoiceCancellationService;
 use App\Services\MailTrackingService;
 use App\Services\TenantMailConfigurator;
+use App\Services\XRechnungService;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -29,6 +30,7 @@ class InvoiceController extends Controller
         private readonly InvoiceCancellationService $invoiceCancellationService,
         private readonly TenantMailConfigurator $tenantMailConfigurator,
         private readonly MailTrackingService $mailTrackingService,
+        private readonly XRechnungService $xRechnungService,
     ) {
     }
 
@@ -214,6 +216,10 @@ class InvoiceController extends Controller
             'discount'       => $validated['discount'] ?? 0,
             'tax_rate'       => $validated['tax_rate'] ?? 0,
             'status'         => $validated['status'],
+            'e_invoice_enabled' => (bool) ($validated['e_invoice_enabled'] ?? false),
+            'e_invoice_format' => $validated['e_invoice_format'] ?? 'xrechnung',
+            'e_invoice_buyer_reference' => $validated['e_invoice_buyer_reference'] ?? null,
+            'e_invoice_order_reference' => $validated['e_invoice_order_reference'] ?? null,
             ...$recipientSnapshot,
             ...$texts,
         ]);
@@ -267,6 +273,10 @@ class InvoiceController extends Controller
             'discount'       => $validated['discount'] ?? 0,
             'tax_rate'       => $validated['tax_rate'] ?? 0,
             'status'         => $validated['status'],
+            'e_invoice_enabled' => (bool) ($validated['e_invoice_enabled'] ?? false),
+            'e_invoice_format' => $validated['e_invoice_format'] ?? 'xrechnung',
+            'e_invoice_buyer_reference' => $validated['e_invoice_buyer_reference'] ?? null,
+            'e_invoice_order_reference' => $validated['e_invoice_order_reference'] ?? null,
             ...$recipientSnapshot,
             ...$texts,
         ])->save();
@@ -700,6 +710,29 @@ class InvoiceController extends Controller
         return response($pdfBinary, 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="' . $invoice->getDocumentLabel() . '_' . $invoice->invoice_number . '.pdf"',
+        ]);
+    }
+
+    public function xrechnung(Invoice $invoice)
+    {
+        $this->authorizeAccess($invoice);
+
+        $invoice->load(['member', 'contact', 'items', 'incomeAccount']);
+        $tenant = $invoice->tenant()->firstOrFail();
+
+        $errors = $this->xRechnungService->validationErrors($invoice, $tenant);
+        if ($errors !== []) {
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with('error', 'XRechnung kann noch nicht erzeugt werden: ' . implode(' ', $errors));
+        }
+
+        $xml = $this->xRechnungService->render($invoice, $tenant);
+        $filename = 'XRechnung_' . preg_replace('/[^A-Za-z0-9._-]+/', '_', $invoice->invoice_number) . '.xml';
+
+        return response($xml, 200, [
+            'Content-Type' => 'application/xml; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
     }
 
@@ -1178,6 +1211,10 @@ class InvoiceController extends Controller
             'recipient_zip'         => ['nullable', 'string', 'max:50'],
             'recipient_city'        => ['nullable', 'string', 'max:255'],
             'recipient_country'     => ['nullable', 'string', 'max:255'],
+            'e_invoice_enabled'     => ['nullable', 'boolean'],
+            'e_invoice_format'      => ['nullable', Rule::in(['xrechnung'])],
+            'e_invoice_buyer_reference' => ['nullable', 'string', 'max:100'],
+            'e_invoice_order_reference' => ['nullable', 'string', 'max:100'],
             'invoice_date'          => 'required|date',
             'due_date'              => 'nullable|date|after_or_equal:invoice_date',
             'status'                => ['required', Rule::in(['entwurf', 'open'])],

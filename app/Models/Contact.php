@@ -75,6 +75,10 @@ class Contact extends Model
         'last_contacted_at',
         'notes',
         'internal_notes',
+        'e_invoice_required',
+        'e_invoice_format',
+        'e_invoice_buyer_reference',
+        'e_invoice_order_reference',
 
         /*
         |--------------------------------------------------------------------------
@@ -102,6 +106,7 @@ class Contact extends Model
         'consent_post'      => 'boolean',
         'consent_given_at'  => 'datetime',
         'last_contacted_at' => 'datetime',
+        'e_invoice_required' => 'boolean',
 
         // Alte Felder
         'gdpr_consent'      => 'boolean',

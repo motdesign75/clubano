@@ -23,6 +23,7 @@ class StoreContactRequest extends FormRequest
                 || $this->boolean('consent_phone')
                 || $this->boolean('consent_post')
                 || $this->boolean('gdpr_consent'),
+            'e_invoice_required' => $this->boolean('e_invoice_required'),
         ]);
     }
 
@@ -283,6 +284,34 @@ class StoreContactRequest extends FormRequest
             'internal_notes' => [
                 'nullable',
                 'string',
+            ],
+
+            /*
+            |--------------------------------------------------------------------------
+            | E-Rechnung
+            |--------------------------------------------------------------------------
+            */
+
+            'e_invoice_required' => [
+                'boolean',
+            ],
+
+            'e_invoice_format' => [
+                'nullable',
+                'string',
+                'in:xrechnung',
+            ],
+
+            'e_invoice_buyer_reference' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
+            'e_invoice_order_reference' => [
+                'nullable',
+                'string',
+                'max:100',
             ],
 
             /*
