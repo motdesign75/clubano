@@ -11,6 +11,8 @@ use App\Http\Controllers\MembershipBillingController;
 use App\Http\Controllers\AutomatedMailController;
 use App\Http\Controllers\AppNewsController;
 use App\Http\Controllers\MailTrackingController;
+use App\Http\Controllers\MobileAppInvitationController;
+use App\Http\Controllers\MobileAppSyncController;
 use App\Http\Controllers\LetterController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\BankImportController;
@@ -87,6 +89,12 @@ Route::get('/stammdaten-pruefen/{token}', [DataUpdateRequestController::class, '
 Route::post('/stammdaten-pruefen/{token}', [DataUpdateRequestController::class, 'publicSubmit'])
     ->middleware(['signed', 'throttle:public-invitation-response'])
     ->name('data-update-requests.public.submit');
+Route::get('/app-einladung/{token}', [MobileAppInvitationController::class, 'show'])
+    ->middleware(['throttle:30,1'])
+    ->name('mobile-app-invitations.show');
+Route::post('/app-einladung/{token}', [MobileAppInvitationController::class, 'store'])
+    ->middleware(['throttle:10,1'])
+    ->name('mobile-app-invitations.store');
 Route::get('/dokumentation', [DocumentationController::class, 'index'])->name('docs.index');
 Route::get('/dokumentation/assets/{filename}', [DocumentationController::class, 'asset'])->name('docs.asset');
 Route::get('/dokumentation/{path}', [DocumentationController::class, 'show'])
@@ -214,6 +222,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/automatische-mails', [AutomatedMailController::class, 'index'])->name('automated-mails.index');
         Route::put('/automatische-mails/{occasion}', [AutomatedMailController::class, 'update'])->name('automated-mails.update');
         Route::post('/automatische-mails/{occasion}/test', [AutomatedMailController::class, 'test'])->name('automated-mails.test');
+
+        Route::get('/app-synchronisierung', [MobileAppSyncController::class, 'index'])->name('mobile-app-sync.index');
+        Route::put('/app-synchronisierung', [MobileAppSyncController::class, 'update'])->name('mobile-app-sync.update');
+        Route::post('/app-synchronisierung/ausfuehren', [MobileAppSyncController::class, 'run'])->name('mobile-app-sync.run');
 
         Route::get('/stammdaten-pruefung', [DataUpdateRequestController::class, 'index'])->name('data-update-requests.index');
         Route::post('/stammdaten-pruefung', [DataUpdateRequestController::class, 'store'])->name('data-update-requests.store');
