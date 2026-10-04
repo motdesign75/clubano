@@ -37,6 +37,7 @@ test('admin can synchronize selected members into separated app accounts', funct
         ->put(route('mobile-app-sync.update'), [
             'mobile_app_sync_enabled' => '1',
             'mobile_app_sync_tag_id' => $tag->id,
+            'mobile_app_member_ids' => [$included->id],
         ])
         ->assertRedirect(route('mobile-app-sync.index'));
 
@@ -44,7 +45,8 @@ test('admin can synchronize selected members into separated app accounts', funct
         ->get(route('mobile-app-sync.index'))
         ->assertOk()
         ->assertSee('App-Synchronisierung')
-        ->assertSee('1 Mitglied(er) im aktuellen Segment');
+        ->assertSee('1 Mitglied(er) im aktuellen Segment')
+        ->assertSee('1 von 2 Mitgliedern ausgewählt');
 
     $this->actingAs($admin)
         ->post(route('mobile-app-sync.run'), ['send_invitations' => '1'])
@@ -61,6 +63,32 @@ test('admin can synchronize selected members into separated app accounts', funct
     expect($appUser->invitation_sent_at)->not->toBeNull();
 });
 
+test('sync does not invite members unless they are explicitly selected', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Mail::fake();
+
+    [$admin, $tenant] = mobileSyncAdminFixture();
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Nicht',
+        'last_name' => 'Ausgewaehlt',
+        'email' => 'nicht.ausgewaehlt@example.test',
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('mobile-app-sync.update'), [
+            'mobile_app_sync_enabled' => '1',
+            'mobile_app_member_ids' => [],
+        ])
+        ->assertRedirect(route('mobile-app-sync.index'));
+
+    $this->actingAs($admin)
+        ->post(route('mobile-app-sync.run'), ['send_invitations' => '1'])
+        ->assertRedirect(route('mobile-app-sync.index'));
+
+    expect(MobileAppUser::query()->where('username', 'nicht.ausgewaehlt@example.test')->exists())->toBeFalse();
+});
+
 test('invitation activation enables mobile login but not web login', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
     Mail::fake();
@@ -74,6 +102,7 @@ test('invitation activation enables mobile login but not web login', function ()
     ]);
 
     $tenant->forceFill(['mobile_app_sync_enabled' => true])->save();
+    $member->forceFill(['mobile_app_sync_enabled' => true])->save();
 
     $this->actingAs($admin)
         ->post(route('mobile-app-sync.run'), ['send_invitations' => '1'])
@@ -124,6 +153,7 @@ test('sync disables app accounts when members leave the selected segment without
         'first_name' => 'Tom',
         'last_name' => 'Segment',
         'email' => 'tom.segment@example.test',
+        'mobile_app_sync_enabled' => true,
     ]);
     $member->tags()->attach($tag->id);
 

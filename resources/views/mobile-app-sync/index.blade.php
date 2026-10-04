@@ -62,7 +62,7 @@
         </div>
 
         <div class="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
-            <form method="POST" action="{{ route('mobile-app-sync.update') }}" class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <form method="POST" action="{{ route('mobile-app-sync.update') }}" class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" x-data="{ q: '' }">
                 @csrf
                 @method('PUT')
 
@@ -70,7 +70,7 @@
                     <div>
                         <h2 class="text-xl font-semibold text-slate-950">Synchronisierung steuern</h2>
                         <p class="mt-2 text-sm leading-6 text-slate-500">
-                            Wenn aktiv, werden passende Mitglieder als App-Zugänge vorbereitet. Ohne Tag-Auswahl werden alle aktiven Mitglieder mit E-Mail-Adresse berücksichtigt.
+                            Wenn aktiv, werden nur die unten ausgewählten Mitglieder als App-Zugänge vorbereitet. Das Segment/Tag kann zusätzlich eingrenzen.
                         </p>
                     </div>
 
@@ -84,7 +84,7 @@
                     <div>
                         <x-ui.label for="mobile_app_sync_tag_id">Segment/Tag</x-ui.label>
                         <select id="mobile_app_sync_tag_id" name="mobile_app_sync_tag_id" class="mt-1 w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                            <option value="">Alle aktiven Mitglieder mit E-Mail</option>
+                            <option value="">Keine zusätzliche Segment-Eingrenzung</option>
                             @foreach($tags as $tag)
                                 <option value="{{ $tag->id }}" @selected((string) old('mobile_app_sync_tag_id', $tenant->mobile_app_sync_tag_id) === (string) $tag->id)>
                                     {{ $tag->name }}
@@ -99,8 +99,72 @@
                     <div class="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
                         <div class="text-sm font-semibold text-blue-950">{{ $eligibleCount }} Mitglied(er) im aktuellen Segment</div>
                         <p class="mt-1 text-sm leading-6 text-blue-800">
-                            Nur Mitglieder mit E-Mail-Adresse werden eingeladen. Doppelte E-Mail-Adressen werden als Fehler markiert.
+                            Maßgeblich ist die Auswahl unten. Nur ausgewählte Mitglieder mit E-Mail-Adresse werden eingeladen.
                         </p>
+                    </div>
+                </div>
+
+                <div class="mt-6 rounded-2xl border border-slate-200">
+                    <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <div class="text-sm font-semibold text-slate-950">Mitglieder für die App auswählen</div>
+                                <div class="mt-1 text-xs text-slate-500">
+                                    {{ $selectableMembers->where('mobile_app_sync_enabled', true)->count() }} von {{ $selectableMembers->count() }} Mitgliedern ausgewählt
+                                </div>
+                            </div>
+                            <input
+                                type="search"
+                                x-model.debounce.150ms="q"
+                                placeholder="Mitglied suchen..."
+                                class="w-full rounded-full border-slate-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 md:w-72"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="max-h-[28rem] divide-y divide-slate-100 overflow-y-auto">
+                        @forelse($selectableMembers as $member)
+                            @php
+                                $searchText = mb_strtolower(trim($member->full_name . ' ' . $member->email . ' ' . $member->member_id));
+                                $appUser = $member->mobileAppUser;
+                            @endphp
+                            <label
+                                class="grid cursor-pointer gap-3 px-4 py-3 hover:bg-slate-50 md:grid-cols-[auto_1fr_auto]"
+                                x-show="@js($searchText).includes(q.toLowerCase())"
+                            >
+                                <input
+                                    type="checkbox"
+                                    name="mobile_app_member_ids[]"
+                                    value="{{ $member->id }}"
+                                    class="mt-1 rounded border-slate-300"
+                                    @checked(old('mobile_app_member_ids') ? in_array((string) $member->id, old('mobile_app_member_ids', []), true) : $member->mobile_app_sync_enabled)
+                                >
+                                <div>
+                                    <div class="font-semibold text-slate-900">{{ $member->full_name ?: 'Ohne Namen' }}</div>
+                                    <div class="mt-1 text-xs text-slate-500">
+                                        {{ $member->email }}
+                                        @if($member->member_id)
+                                            · Nr. {{ $member->member_id }}
+                                        @endif
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 md:justify-end">
+                                    @if($appUser)
+                                        <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClasses[$appUser->sync_status] ?? 'bg-slate-100 text-slate-700' }}">
+                                            {{ $statusLabels[$appUser->sync_status] ?? $appUser->sync_status }}
+                                        </span>
+                                    @else
+                                        <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                                            Noch nicht synchronisiert
+                                        </span>
+                                    @endif
+                                </div>
+                            </label>
+                        @empty
+                            <div class="px-4 py-8 text-center text-sm text-slate-500">
+                                Keine aktiven Mitglieder mit E-Mail-Adresse vorhanden.
+                            </div>
+                        @endforelse
                     </div>
                 </div>
 

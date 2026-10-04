@@ -69,6 +69,7 @@ class MobileAppSyncService
             ->where('tenant_id', $tenant->id)
             ->whereNull('archived_at')
             ->whereNotNull('email')
+            ->where('mobile_app_sync_enabled', true)
             ->when($tenant->mobile_app_sync_tag_id, function ($query, int $tagId) {
                 $query->whereHas('tags', fn ($tagQuery) => $tagQuery->whereKey($tagId));
             })
