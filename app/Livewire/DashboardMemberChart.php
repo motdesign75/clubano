@@ -81,7 +81,7 @@ class DashboardMemberChart extends Component
                 ->whereDate('entry_date', '<=', $monthEnd)
                 ->where(function ($q) use ($monthEnd) {
                     $q->whereNull('exit_date')
-                      ->orWhere('exit_date', '>', $monthEnd);
+                      ->orWhereDate('exit_date', '>=', $monthEnd);
                 })
                 ->count();
 

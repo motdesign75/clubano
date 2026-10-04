@@ -48,7 +48,7 @@ class TrinkwertIdentityController extends Controller
             return $this->invalidIdentity('revoked_identity');
         }
 
-        if ($member->archived_at || ($member->exit_date && $member->exit_date->isPast())) {
+        if ($member->archived_at || $member->status !== 'aktiv') {
             return $this->invalidIdentity('inactive_member');
         }
 

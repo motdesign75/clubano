@@ -58,6 +58,50 @@ test('staff can send direct html mail with attachments without a template', func
         ->and($log->meta['attachment_names'])->toBe(['info.pdf']);
 });
 
+test('mail recipient list keeps members active until their exit date has passed', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    $this->travelTo('2026-10-04 10:00:00');
+
+    $tenant = Tenant::create([
+        'name' => 'Jahreswechsel Verein',
+        'slug' => 'jahreswechsel-verein',
+        'email' => 'verein@example.test',
+        'license_mode' => 'gifted',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+        'email_verified_at' => now(),
+    ]);
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Bleibt',
+        'last_name' => 'BisJahresende',
+        'email' => 'bleibt@example.test',
+        'entry_date' => '2020-01-01',
+        'exit_date' => '2026-12-31',
+    ]);
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Schon',
+        'last_name' => 'Ausgetreten',
+        'email' => 'ehemalig@example.test',
+        'entry_date' => '2020-01-01',
+        'exit_date' => '2026-09-30',
+    ]);
+
+    $response = $this->actingAs($staff)->get(route('mail.create'));
+
+    $response->assertOk();
+    $response->assertSee('Bleibt BisJahresende');
+    $response->assertSee('bleibt@example.test');
+    $response->assertDontSee('Schon Ausgetreten');
+    $response->assertDontSee('ehemalig@example.test');
+});
+
 test('staff can fill template button link for clickable mail buttons', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

@@ -47,7 +47,7 @@ class MailController extends Controller
 
         $members = Member::where('tenant_id', $tenantId)
             ->notArchived()
-            ->whereNull('exit_date')
+            ->notExitedAt()
             ->orderBy('last_name')
             ->get();
         $contacts = Contact::where('tenant_id', $tenantId)

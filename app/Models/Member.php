@@ -4,8 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use App\Scopes\CurrentTenantScope;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 class Member extends Model
@@ -264,6 +266,41 @@ class Member extends Model
         return $query->whereNotNull('archived_at');
     }
 
+    public function scopeActiveAt(Builder $query, Carbon|string|null $date = null): Builder
+    {
+        $date = $date instanceof Carbon
+            ? $date->toDateString()
+            : Carbon::parse($date ?? now())->toDateString();
+
+        return $query
+            ->whereDate('entry_date', '<=', $date)
+            ->notExitedAt($date);
+    }
+
+    public function scopeNotExitedAt(Builder $query, Carbon|string|null $date = null): Builder
+    {
+        $date = $date instanceof Carbon
+            ? $date->toDateString()
+            : Carbon::parse($date ?? now())->toDateString();
+
+        return $query
+            ->where(function (Builder $query) use ($date) {
+                $query->whereNull('exit_date')
+                    ->orWhereDate('exit_date', '>=', $date);
+            });
+    }
+
+    public function scopeFormerAt(Builder $query, Carbon|string|null $date = null): Builder
+    {
+        $date = $date instanceof Carbon
+            ? $date->toDateString()
+            : Carbon::parse($date ?? now())->toDateString();
+
+        return $query
+            ->whereNotNull('exit_date')
+            ->whereDate('exit_date', '<', $date);
+    }
+
     // Accessor: Vollständiger Name
     public function getFullNameAttribute()
     {
@@ -286,7 +323,7 @@ class Member extends Model
 
         $today = now();
 
-        if ($this->exit_date && $this->exit_date->isPast()) {
+        if ($this->exit_date && $this->exit_date->lt(now()->startOfDay())) {
             return 'ehemalig';
         }
 

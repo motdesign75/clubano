@@ -49,7 +49,7 @@ class AutomatedMailService
             $members = Member::withoutGlobalScopes()
                 ->where('tenant_id', $setting->tenant_id)
                 ->notArchived()
-                ->whereNull('exit_date')
+                ->notExitedAt($targetDate)
                 ->whereNotNull('email')
                 ->whereNotNull('birthday')
                 ->whereMonth('birthday', $targetDate->month)

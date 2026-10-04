@@ -79,15 +79,9 @@ class MemberController extends Controller
             $status = request('status');
 
             if ($status === 'aktiv') {
-                $query
-                    ->whereDate('entry_date', '<=', $today)
-                    ->where(function ($q) use ($today) {
-                        $q->whereNull('exit_date')
-                            ->orWhereDate('exit_date', '>', $today);
-                    });
+                $query->activeAt($today);
             } elseif ($status === 'ehemalig') {
-                $query->whereNotNull('exit_date')
-                    ->whereDate('exit_date', '<=', $today);
+                $query->formerAt($today);
             } elseif ($status === 'zukünftig') {
                 $query->where(function ($q) use ($today) {
                     $q->whereNull('entry_date')
@@ -131,17 +125,8 @@ class MemberController extends Controller
 
         $stats = [
             'alle' => (clone $activeMembersBaseQuery)->count(),
-            'aktiv' => (clone $activeMembersBaseQuery)
-                ->whereDate('entry_date', '<=', $today)
-                ->where(function ($q) use ($today) {
-                    $q->whereNull('exit_date')
-                        ->orWhereDate('exit_date', '>', $today);
-                })
-                ->count(),
-            'ehemalig' => (clone $activeMembersBaseQuery)
-                ->whereNotNull('exit_date')
-                ->whereDate('exit_date', '<=', $today)
-                ->count(),
+            'aktiv' => (clone $activeMembersBaseQuery)->activeAt($today)->count(),
+            'ehemalig' => (clone $activeMembersBaseQuery)->formerAt($today)->count(),
             'zukünftig' => (clone $activeMembersBaseQuery)
                 ->where(function ($q) use ($today) {
                     $q->whereNull('entry_date')
@@ -154,13 +139,13 @@ class MemberController extends Controller
             'austritte_bald' => Member::where('tenant_id', $tenantId)
                 ->notArchived()
                 ->whereNotNull('exit_date')
-                ->whereDate('exit_date', '>', $today)
+                ->whereDate('exit_date', '>=', $today)
                 ->whereDate('exit_date', '<=', $upcomingExitWindow)
                 ->count(),
             'gekuendigt' => Member::where('tenant_id', $tenantId)
                 ->notArchived()
                 ->whereNotNull('exit_date')
-                ->whereDate('exit_date', '>', $today)
+                ->whereDate('exit_date', '>=', $today)
                 ->count(),
         ];
 
@@ -172,12 +157,12 @@ class MemberController extends Controller
             ->orderBy('exit_date');
 
         if ($exitScope === 'kuendigungen') {
-            $exitQuery->whereDate('exit_date', '>', $today);
+            $exitQuery->whereDate('exit_date', '>=', $today);
         } elseif ($exitScope === 'zeitraum') {
-            $exitQuery->whereDate('exit_date', '>', $today)
+            $exitQuery->whereDate('exit_date', '>=', $today)
                 ->whereDate('exit_date', '<=', $upcomingExitWindow);
         } elseif ($exitScope === 'vergangen') {
-            $exitQuery->whereDate('exit_date', '<=', $today);
+            $exitQuery->whereDate('exit_date', '<', $today);
         }
 
         $upcomingExits = $exitQuery

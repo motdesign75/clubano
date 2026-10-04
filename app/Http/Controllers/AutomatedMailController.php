@@ -36,7 +36,7 @@ class AutomatedMailController extends Controller
         $birthdayCandidates = Member::withoutGlobalScopes()
             ->where('tenant_id', $tenant->id)
             ->notArchived()
-            ->whereNull('exit_date')
+            ->notExitedAt()
             ->whereNotNull('email')
             ->whereNotNull('birthday')
             ->count();
