@@ -5,6 +5,8 @@
     $bookingAddressTone = old('booking_address_tone', $bookingForm?->booking_address_tone ?? 'du');
     $isEditingEvent = $event->exists;
     $recurrenceEnabled = (bool) old('recurrence_enabled', false);
+    $seriesUpdateScope = old('update_scope', 'single');
+    $seriesEventCount = (int) ($seriesEventCount ?? 0);
     $recurrenceFrequency = old('recurrence_frequency', 'weekly');
     $recurrenceUntil = old('recurrence_until');
     $recurrencePreset = $recurrenceEnabled ? $recurrenceFrequency : 'none';
@@ -210,10 +212,31 @@
                 @else
                     @if($event->recurrence_group_id)
                         <div class="rounded-3xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-                            <div class="text-base font-semibold text-amber-950">Dieser Termin gehört zu einer Serie</div>
-                            <p class="mt-1 text-sm leading-6 text-slate-500">
-                                Änderungen in diesem Editor betreffen nur diesen einzelnen Termin.
-                            </p>
+                            <div class="flex items-start gap-3">
+                                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-amber-700 ring-1 ring-amber-100">
+                                    <x-heroicon-o-arrow-path class="h-5 w-5" />
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-base font-semibold text-amber-950">Dieser Termin gehört zu einer Serie</div>
+                                    <p class="mt-1 text-sm leading-6 text-amber-900">
+                                        Entscheide vor dem Speichern, ob nur dieser Termin oder alle {{ $seriesEventCount ?: 'weiteren' }} Termine der Serie korrigiert werden.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 grid gap-3 lg:grid-cols-2">
+                                <label class="cursor-pointer rounded-2xl border px-4 py-4 {{ $seriesUpdateScope !== 'series' ? 'border-amber-500 bg-white' : 'border-amber-100 bg-white/70' }}">
+                                    <input type="radio" name="update_scope" value="single" class="sr-only" @checked($seriesUpdateScope !== 'series')>
+                                    <span class="block text-sm font-semibold text-slate-950">Nur diesen Termin ändern</span>
+                                    <span class="mt-1 block text-xs leading-5 text-slate-600">Gut für Ausnahmen, zum Beispiel ein anderer Raum oder eine einzelne Uhrzeit.</span>
+                                </label>
+
+                                <label class="cursor-pointer rounded-2xl border px-4 py-4 {{ $seriesUpdateScope === 'series' ? 'border-amber-500 bg-white' : 'border-amber-100 bg-white/70' }}">
+                                    <input type="radio" name="update_scope" value="series" class="sr-only" @checked($seriesUpdateScope === 'series')>
+                                    <span class="block text-sm font-semibold text-slate-950">Ganze Serie korrigieren</span>
+                                    <span class="mt-1 block text-xs leading-5 text-slate-600">Titel, Ort, Sichtbarkeit, Anmeldung und Zeitverschiebung werden auf die Serie übertragen.</span>
+                                </label>
+                            </div>
                         </div>
                     @endif
                 @endunless

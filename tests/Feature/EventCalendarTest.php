@@ -1606,6 +1606,79 @@ test('staff can create recurring events on multiple weekdays', function () {
     expect($events->pluck('recurrence_interval')->unique()->all())->toBe([1]);
 });
 
+test('staff can update all events in an existing series at once', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Korrekturverein',
+        'slug' => 'korrekturverein',
+        'email' => 'korrektur@example.test',
+    ]);
+
+    $staff = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_STAFF,
+    ]);
+
+    $start = now()->setDate(2026, 9, 7)->setTime(18, 0);
+
+    $this->actingAs($staff)->post(route('events.store'), [
+        'title' => 'Hallentraining',
+        'description' => 'Alte Info',
+        'location' => 'Alte Halle',
+        'start' => $start->format('Y-m-d H:i:s'),
+        'end' => $start->copy()->addHours(2)->format('Y-m-d H:i:s'),
+        'is_public' => 0,
+        'booking_enabled' => 0,
+        'recurrence_enabled' => 1,
+        'recurrence_frequency' => 'weekly',
+        'recurrence_end_mode' => 'date',
+        'recurrence_until' => $start->copy()->addWeeks(2)->toDateString(),
+    ])->assertRedirect();
+
+    $series = Event::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('title', 'Hallentraining')
+        ->orderBy('start')
+        ->get();
+
+    $eventToEdit = $series[1];
+
+    $response = $this->actingAs($staff)->put(route('events.update', $eventToEdit), [
+        'title' => 'Hallentraining aktualisiert',
+        'description' => 'Neue Info fuer alle',
+        'location' => 'Neue Halle',
+        'start' => $eventToEdit->start->copy()->setTime(19, 0)->format('Y-m-d H:i:s'),
+        'end' => $eventToEdit->start->copy()->setTime(21, 30)->format('Y-m-d H:i:s'),
+        'is_public' => 1,
+        'booking_enabled' => 0,
+        'update_scope' => 'series',
+    ]);
+
+    $response->assertRedirect(route('events.edit', $eventToEdit));
+
+    $updated = Event::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('recurrence_group_id', $eventToEdit->recurrence_group_id)
+        ->orderBy('start')
+        ->get();
+
+    expect($updated)->toHaveCount(3);
+    expect($updated->pluck('title')->unique()->all())->toBe(['Hallentraining aktualisiert']);
+    expect($updated->pluck('location')->unique()->all())->toBe(['Neue Halle']);
+    expect($updated->pluck('is_public')->unique()->all())->toBe([true]);
+    expect($updated->pluck('start')->map->format('Y-m-d H:i')->all())->toBe([
+        '2026-09-07 19:00',
+        '2026-09-14 19:00',
+        '2026-09-21 19:00',
+    ]);
+    expect($updated->pluck('end')->map->format('Y-m-d H:i')->all())->toBe([
+        '2026-09-07 21:30',
+        '2026-09-14 21:30',
+        '2026-09-21 21:30',
+    ]);
+});
+
 test('staff can create recurring events by count and interval', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

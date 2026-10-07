@@ -832,6 +832,7 @@ class EventController extends Controller
 
         return view('events.edit', [
             'event' => $event,
+            'seriesEventCount' => $event->recurrence_group_id ? $this->eventsInSameSeries($event)->count() : 0,
             'categories' => EventCategory::query()->with('defaultTargetTag')->orderBy('name')->get(),
             'targetTags' => Tag::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
             'users' => User::query()->where('tenant_id', auth()->user()->tenant_id)->orderBy('name')->get(),
@@ -850,7 +851,9 @@ class EventController extends Controller
         $this->authorizeEvent($event);
         $tenantId = auth()->user()->tenant_id;
 
-        $validated = $request->validate($this->eventValidationRules($tenantId));
+        $validated = $request->validate($this->eventValidationRules($tenantId) + [
+            'update_scope' => ['nullable', Rule::in(['single', 'series'])],
+        ]);
 
         if ($request->hasFile('image')) {
             if ($event->image_path) {
@@ -865,9 +868,17 @@ class EventController extends Controller
             $validated['image_path'] = null;
         }
 
-        $before = $event->fresh()->toArray();
+        $beforeEvent = $event->fresh();
+        $before = $beforeEvent->toArray();
+        $eventData = $this->eventDataFromRequest($validated, $request, $event);
 
-        $event->update($this->eventDataFromRequest($validated, $request, $event) + [
+        if (($validated['update_scope'] ?? 'single') === 'series' && $event->recurrence_group_id) {
+            $updatedEvents = $this->updateEventSeries($event, $beforeEvent, $eventData, $validated, $request);
+
+            return redirect()->route('events.edit', $event)->with('success', $updatedEvents . ' Termine dieser Serie wurden aktualisiert.');
+        }
+
+        $event->update($eventData + [
             'updated_by' => Auth::id(),
         ]);
 
@@ -875,6 +886,63 @@ class EventController extends Controller
         $this->logEventChange($event, 'updated', $before, $event->fresh()->toArray(), $this->buildUpdateSummary($before, $event->fresh()->toArray()));
 
         return redirect()->route('events.edit', $event)->with('success', 'Event aktualisiert.');
+    }
+
+    private function updateEventSeries(Event $event, Event $beforeEvent, array $eventData, array $validated, Request $request): int
+    {
+        $seriesEvents = $this->eventsInSameSeries($event)->get();
+        $newStart = Carbon::parse($eventData['start']);
+        $newEnd = Carbon::parse($eventData['end']);
+        $durationInSeconds = max(0, $newStart->diffInSeconds($newEnd, false));
+        $startDeltaInSeconds = $beforeEvent->start
+            ? $beforeEvent->start->diffInSeconds($newStart, false)
+            : 0;
+        $seriesUntil = $seriesEvents
+            ->map(fn (Event $seriesEvent) => $seriesEvent->start?->copy()->addSeconds($startDeltaInSeconds))
+            ->filter()
+            ->max()?->toDateString();
+
+        foreach ($seriesEvents as $seriesEvent) {
+            $before = $seriesEvent->fresh()->toArray();
+            $payload = $eventData + [
+                'updated_by' => Auth::id(),
+            ];
+
+            if ((int) $seriesEvent->id !== (int) $event->id && $seriesEvent->start) {
+                $shiftedStart = $seriesEvent->start->copy()->addSeconds($startDeltaInSeconds);
+                $payload['start'] = $shiftedStart->toDateTimeString();
+                $payload['end'] = $shiftedStart->copy()->addSeconds($durationInSeconds)->toDateTimeString();
+            }
+
+            if (! $request->hasFile('image') && ! $request->boolean('remove_image') && (int) $seriesEvent->id !== (int) $event->id) {
+                $payload['image_path'] = $seriesEvent->image_path;
+            }
+
+            if ($seriesUntil) {
+                $payload['recurrence_until'] = $seriesUntil;
+            }
+
+            $seriesEvent->update($payload);
+            $this->syncBookingForm($seriesEvent, $validated['booking_address_tone'] ?? null);
+            $this->logEventChange(
+                $seriesEvent,
+                'updated',
+                $before,
+                $seriesEvent->fresh()->toArray(),
+                'Serie aktualisiert: ' . $this->buildUpdateSummary($before, $seriesEvent->fresh()->toArray())
+            );
+        }
+
+        return $seriesEvents->count();
+    }
+
+    private function eventsInSameSeries(Event $event)
+    {
+        return Event::query()
+            ->where('tenant_id', $event->tenant_id)
+            ->where('recurrence_group_id', $event->recurrence_group_id)
+            ->orderBy('start')
+            ->orderBy('id');
     }
 
     public function storeBookingField(Request $request, Event $event)
