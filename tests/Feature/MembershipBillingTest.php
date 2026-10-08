@@ -970,6 +970,90 @@ test('partial invoice payment keeps invoice open and shows remaining amount', fu
     expect(MemberCredit::query()->where('member_id', $member->id)->exists())->toBeFalse();
 });
 
+test('invoice payment can override income account and transaction description', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Finanzverein',
+        'slug' => 'finanzverein',
+        'email' => 'finanz@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'active' => true,
+    ]);
+
+    $summerFestival = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8400',
+        'name' => 'Erlöse aus Sommerfest',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+    ]);
+
+    $workshop = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8410',
+        'name' => 'Erlöse Workshop',
+        'type' => 'einnahme',
+        'tax_area' => 'wirtschaftlich',
+        'active' => true,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'income_account_id' => $summerFestival->id,
+        'recipient_type' => 'free',
+        'recipient_name' => 'Firma Beispiel',
+        'recipient_email' => 'rechnung@example.test',
+        'invoice_number' => 'R-FIN-001',
+        'invoice_date' => now()->toDateString(),
+        'due_date' => now()->addDays(14)->toDateString(),
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Workshop Teilnahme',
+        'quantity' => 1,
+        'unit' => 'Pauschale',
+        'unit_price' => 180,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('payments.store', $invoice), [
+            'account_id' => $bank->id,
+            'income_account_id' => $workshop->id,
+            'transaction_description' => 'Workshop Zahlung Firma Beispiel',
+            'amount' => 180,
+            'payment_date' => now()->toDateString(),
+            'note' => 'Korrigierte Kontierung',
+        ])
+        ->assertRedirect(route('invoices.show', $invoice));
+
+    $invoice->refresh();
+    $transaction = Transaction::withoutGlobalScopes()->where('invoice_id', $invoice->id)->firstOrFail();
+
+    expect((int) $invoice->income_account_id)->toBe($workshop->id);
+    expect($transaction->description)->toBe('Workshop Zahlung Firma Beispiel');
+    expect((int) $transaction->account_from_id)->toBe($workshop->id);
+    expect($transaction->tax_area)->toBe('wirtschaftlich');
+    expect($transaction->receipt_kind)->toBe('system_invoice');
+});
+
 test('overpaid invoice is marked paid and creates member credit', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

@@ -35,26 +35,17 @@
                     <div class="mt-6 grid gap-4 md:grid-cols-2">
                         <div>
                             <label for="income_account_id" class="mb-1 block text-sm font-medium text-slate-700">Ertragskonto</label>
-                            @if($invoice->incomeAccount)
-                                <input type="hidden" name="income_account_id" value="{{ $invoice->incomeAccount->id }}">
-                                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                    <div class="font-semibold text-slate-900">
-                                        {{ $invoice->incomeAccount->number ? $invoice->incomeAccount->number . ' - ' : '' }}{{ $invoice->incomeAccount->name }}
-                                    </div>
-                                    <div class="mt-1 text-sm text-slate-500">
-                                        Steuerbereich: {{ $invoice->incomeAccount->taxAreaLabel }}
-                                    </div>
-                                </div>
-                            @else
-                                <select name="income_account_id" id="income_account_id" class="w-full rounded-2xl border-slate-300" required>
-                                    <option value="">Bitte auswaehlen</option>
-                                    @foreach($incomeAccounts as $acc)
-                                        <option value="{{ $acc->id }}" @selected(old('income_account_id', $suggestedIncomeAccount?->id) == $acc->id)>
-                                            {{ $acc->number ? $acc->number . ' - ' : '' }}{{ $acc->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                            @endif
+                            <select name="income_account_id" id="income_account_id" class="w-full rounded-2xl border-slate-300" required>
+                                <option value="">Bitte auswaehlen</option>
+                                @foreach($incomeAccounts as $acc)
+                                    <option value="{{ $acc->id }}" @selected(old('income_account_id', $suggestedIncomeAccount?->id) == $acc->id)>
+                                        {{ $acc->number ? $acc->number . ' - ' : '' }}{{ $acc->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <p class="mt-1 text-xs leading-5 text-slate-500">
+                                Die Auswahl wird für diese Rechnung und die daraus erzeugte Finanzbuchung gespeichert.
+                            </p>
                             @error('income_account_id')
                                 <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
                             @enderror
@@ -86,6 +77,17 @@
                             <label for="payment_date" class="mb-1 block text-sm font-medium text-slate-700">Datum</label>
                             <input type="date" name="payment_date" id="payment_date" value="{{ old('payment_date', date('Y-m-d')) }}" class="w-full rounded-2xl border-slate-300" required>
                             @error('payment_date')
+                                <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label for="transaction_description" class="mb-1 block text-sm font-medium text-slate-700">Buchungstext</label>
+                            <input type="text" name="transaction_description" id="transaction_description" value="{{ old('transaction_description', $defaultTransactionDescription) }}" class="w-full rounded-2xl border-slate-300" required>
+                            <p class="mt-1 text-xs leading-5 text-slate-500">
+                                Dieser Text erscheint später in der Buchungsliste und in Auswertungen. Die Rechnung bleibt als Systembeleg verknüpft.
+                            </p>
+                            @error('transaction_description')
                                 <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
                             @enderror
                         </div>

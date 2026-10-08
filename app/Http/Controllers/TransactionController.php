@@ -70,9 +70,6 @@ class TransactionController extends Controller
             $transactions->where(function ($query) {
                 $query->whereNull('receipt_file')
                     ->orWhere('receipt_file', '');
-            })->where(function ($query) {
-                $query->where('description', 'not like', 'Zahlung Rechnung %')
-                    ->where('description', 'not like', 'Zahlung Angebot %');
             })->whereNull('invoice_id')
             ->where(function ($query) {
                 $query->whereNull('receipt_kind')
@@ -693,9 +690,6 @@ class TransactionController extends Controller
             $transactions->where(function ($query) {
                 $query->whereNull('receipt_file')
                     ->orWhere('receipt_file', '');
-            })->where(function ($query) {
-                $query->where('description', 'not like', 'Zahlung Rechnung %')
-                    ->where('description', 'not like', 'Zahlung Angebot %');
             })->whereNull('invoice_id')
             ->where(function ($query) {
                 $query->whereNull('receipt_kind')

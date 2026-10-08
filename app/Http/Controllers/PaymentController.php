@@ -53,17 +53,20 @@ class PaymentController extends Controller
 
         if ($invoice->incomeAccount) {
             $suggestedIncomeAccount = $invoice->incomeAccount;
-            $incomeAccountHint = 'Dieses Ertragskonto ist bereits auf der Rechnung hinterlegt und wird automatisch fuer die Buchung verwendet.';
+            $incomeAccountHint = 'Vorauswahl aus der Rechnung. Du kannst sie vor dem Buchen ändern, wenn die Zahlung fachlich auf ein anderes Ertragskonto gehört.';
         } else {
             [$suggestedIncomeAccount, $incomeAccountHint] = $this->suggestIncomeAccount($invoice, $incomeAccounts);
         }
+
+        $defaultTransactionDescription = $this->buildPaymentTransactionDescription($invoice);
 
         return view('payments.create', compact(
             'invoice',
             'accounts',
             'incomeAccounts',
             'suggestedIncomeAccount',
-            'incomeAccountHint'
+            'incomeAccountHint',
+            'defaultTransactionDescription'
         ));
     }
 
@@ -87,7 +90,8 @@ class PaymentController extends Controller
 
         $validated = $request->validate([
             'account_id'        => ['required', Rule::exists('accounts', 'id')->where('tenant_id', $tenantId)],
-            'income_account_id' => [$invoice->income_account_id ? 'nullable' : 'required', Rule::exists('accounts', 'id')->where('tenant_id', $tenantId)],
+            'income_account_id' => ['required', Rule::exists('accounts', 'id')->where('tenant_id', $tenantId)],
+            'transaction_description' => 'nullable|string|max:255',
             'amount'            => 'required|numeric|min:0.01',
             'payment_date'      => 'required|date',
             'note'              => 'nullable|string|max:255',
@@ -97,14 +101,14 @@ class PaymentController extends Controller
             ->where('tenant_id', $tenantId)
             ->findOrFail($validated['account_id']);
 
-        $incomeAccountId = $invoice->income_account_id ?: $validated['income_account_id'];
+        $incomeAccountId = $validated['income_account_id'];
 
         $incomeAccount = Account::query()
             ->where('tenant_id', $tenantId)
             ->where('type', 'einnahme')
             ->findOrFail($incomeAccountId);
 
-        if (!$invoice->income_account_id) {
+        if ((int) $invoice->income_account_id !== (int) $incomeAccount->id) {
             $invoice->forceFill(['income_account_id' => $incomeAccount->id])->save();
         }
 
@@ -158,7 +162,7 @@ class PaymentController extends Controller
 
             'date' => $validated['payment_date'],
 
-            'description' => $this->buildPaymentTransactionDescription($invoice),
+            'description' => ($validated['transaction_description'] ?? null) ?: $this->buildPaymentTransactionDescription($invoice),
             'receipt_kind' => 'system_invoice',
             'receipt_meta' => [
                 'invoice_number' => $invoice->invoice_number,
