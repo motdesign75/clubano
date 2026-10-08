@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Account;
+use App\Models\BankTransaction;
 use App\Models\BudgetCategory;
 use App\Models\Document;
 use App\Models\Invoice;
@@ -1022,6 +1023,64 @@ class TransactionController extends Controller
             ->take(5)
             ->values();
         $categorySummaries = $this->transactionCategorySummaries($transactions);
+        $today = Carbon::today();
+
+        $openInvoices = Invoice::query()
+            ->where('tenant_id', $tenantId)
+            ->where('document_type', 'invoice')
+            ->where('status', 'open')
+            ->with(['items', 'payments'])
+            ->orderBy('due_date')
+            ->get()
+            ->filter(fn (Invoice $invoice) => $invoice->getRemainingAmount() > 0.009)
+            ->values();
+
+        $overdueInvoices = $openInvoices
+            ->filter(fn (Invoice $invoice) => $invoice->due_date && $invoice->due_date->lt($today))
+            ->values();
+        $dueSoonInvoices = $openInvoices
+            ->filter(fn (Invoice $invoice) => $invoice->due_date && $invoice->due_date->betweenIncluded($today, $today->copy()->addDays(14)))
+            ->values();
+
+        $receiptReviewDocuments = Document::query()
+            ->where('tenant_id', $tenantId)
+            ->where('is_booking_receipt', true)
+            ->notArchived()
+            ->whereIn('receipt_status', [Document::RECEIPT_NEEDS_REVIEW, Document::RECEIPT_READY])
+            ->latest('updated_at')
+            ->limit(5)
+            ->get();
+        $payableReceiptCount = Document::where('tenant_id', $tenantId)
+            ->where('is_booking_receipt', true)
+            ->notArchived()
+            ->where('receipt_status', Document::RECEIPT_READY)
+            ->count();
+        $payableReceiptTotal = Document::where('tenant_id', $tenantId)
+            ->where('is_booking_receipt', true)
+            ->notArchived()
+            ->where('receipt_status', Document::RECEIPT_READY)
+            ->sum('recognized_amount');
+
+        $bankWorkQueue = BankTransaction::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('status', [BankTransaction::STATUS_PENDING, BankTransaction::STATUS_READY, BankTransaction::STATUS_DUPLICATE])
+            ->latest('booking_date')
+            ->limit(5)
+            ->get();
+
+        $bankWorkStats = [
+            'pending' => BankTransaction::where('tenant_id', $tenantId)->where('status', BankTransaction::STATUS_PENDING)->count(),
+            'ready' => BankTransaction::where('tenant_id', $tenantId)->where('status', BankTransaction::STATUS_READY)->count(),
+            'duplicate' => BankTransaction::where('tenant_id', $tenantId)->where('status', BankTransaction::STATUS_DUPLICATE)->count(),
+        ];
+
+        $cashAndBankAccounts = Account::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('type', ['bank', 'kasse'])
+            ->where('active', true)
+            ->orderBy('type')
+            ->orderBy('number')
+            ->get();
 
         return view('transactions.summary', [
             'transactions' => $transactions,
@@ -1034,6 +1093,15 @@ class TransactionController extends Controller
             'pendingTransactions' => $pendingTransactions,
             'missingReceiptTransactions' => $missingReceiptTransactions,
             'categorySummaries' => $categorySummaries,
+            'openInvoices' => $openInvoices,
+            'overdueInvoices' => $overdueInvoices,
+            'dueSoonInvoices' => $dueSoonInvoices,
+            'receiptReviewDocuments' => $receiptReviewDocuments,
+            'payableReceiptCount' => $payableReceiptCount,
+            'payableReceiptTotal' => $payableReceiptTotal,
+            'bankWorkQueue' => $bankWorkQueue,
+            'bankWorkStats' => $bankWorkStats,
+            'cashAndBankAccounts' => $cashAndBankAccounts,
             'start' => $start,
             'end' => $end,
         ]);

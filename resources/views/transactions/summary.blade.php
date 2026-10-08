@@ -76,6 +76,154 @@
         </div>
     </div>
 
+    <section class="grid gap-4 xl:grid-cols-3">
+        <div class="rounded-2xl border {{ ($overdueInvoices ?? collect())->isNotEmpty() ? 'border-rose-200 bg-rose-50/60' : 'border-slate-200 bg-white' }} p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-900">Geld ausstehend</h2>
+                    <p class="mt-1 text-sm text-slate-500">Offene Rechnungen, die jetzt Aufmerksamkeit brauchen.</p>
+                </div>
+                <a href="{{ route('invoices.index', ['status' => 'overdue']) }}" class="shrink-0 text-sm font-medium text-slate-600 hover:text-slate-950">Öffnen</a>
+            </div>
+
+            <div class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div class="rounded-xl bg-white px-3 py-2">
+                    <div class="text-xs text-slate-500">Überfällig</div>
+                    <div class="mt-1 font-mono text-lg font-semibold text-rose-700">{{ ($overdueInvoices ?? collect())->count() }}</div>
+                </div>
+                <div class="rounded-xl bg-white px-3 py-2">
+                    <div class="text-xs text-slate-500">Nächste 14 Tage</div>
+                    <div class="mt-1 font-mono text-lg font-semibold text-amber-700">{{ ($dueSoonInvoices ?? collect())->count() }}</div>
+                </div>
+            </div>
+
+            <div class="mt-4 space-y-2">
+                @forelse(($overdueInvoices ?? collect())->take(3) as $invoice)
+                    <a href="{{ route('invoices.show', $invoice) }}" class="block rounded-xl border border-white bg-white px-3 py-2 text-sm hover:border-rose-200">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="truncate font-medium text-slate-900">{{ $invoice->invoice_number }} · {{ $invoice->recipient_name }}</span>
+                            <span class="font-mono text-rose-700">{{ number_format($invoice->getRemainingAmount(), 2, ',', '.') }} €</span>
+                        </div>
+                        <div class="mt-1 text-xs text-slate-500">Fällig {{ optional($invoice->due_date)->format('d.m.Y') }}</div>
+                    </a>
+                @empty
+                    <div class="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-5 text-sm text-slate-500">
+                        Keine überfälligen offenen Rechnungen.
+                    </div>
+                @endforelse
+            </div>
+        </div>
+
+        <div class="rounded-2xl border {{ ($receiptReviewDocuments ?? collect())->isNotEmpty() ? 'border-amber-200 bg-amber-50/60' : 'border-slate-200 bg-white' }} p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-900">Belege prüfen</h2>
+                    <p class="mt-1 text-sm text-slate-500">Hochgeladene Rechnungen und Belege, bevor daraus Buchungen werden.</p>
+                </div>
+                <a href="{{ route('documents.index', ['category' => \App\Models\Document::CATEGORY_FINANCE]) }}" class="shrink-0 text-sm font-medium text-slate-600 hover:text-slate-950">Öffnen</a>
+            </div>
+
+            <div class="mt-4 rounded-xl bg-white px-3 py-2 text-sm">
+                <div class="flex items-center justify-between gap-3">
+                    <span class="text-slate-500">Zu bezahlen / zu buchen</span>
+                    <span class="font-mono font-semibold text-slate-950">{{ $payableReceiptCount ?? 0 }}</span>
+                </div>
+                <div class="mt-1 text-xs text-slate-500">
+                    Erkannter Gesamtbetrag: {{ number_format((float) ($payableReceiptTotal ?? 0), 2, ',', '.') }} €
+                </div>
+            </div>
+
+            <div class="mt-4 space-y-2">
+                @forelse(($receiptReviewDocuments ?? collect()) as $receipt)
+                    <a href="{{ route('documents.show', $receipt) }}" class="block rounded-xl border border-white bg-white px-3 py-2 text-sm hover:border-amber-200">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="truncate font-medium text-slate-900">{{ $receipt->title }}</span>
+                            <span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">{{ $receipt->receipt_status_label }}</span>
+                        </div>
+                        <div class="mt-1 text-xs text-slate-500">
+                            {{ $receipt->recognized_vendor ?: 'Anbieter offen' }}
+                            @if($receipt->recognized_amount)
+                                · {{ number_format((float) $receipt->recognized_amount, 2, ',', '.') }} €
+                            @endif
+                        </div>
+                    </a>
+                @empty
+                    <div class="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-5 text-sm text-slate-500">
+                        Keine Belege im Prüfeingang.
+                    </div>
+                @endforelse
+            </div>
+        </div>
+
+        <div class="rounded-2xl border {{ array_sum($bankWorkStats ?? []) > 0 ? 'border-blue-200 bg-blue-50/60' : 'border-slate-200 bg-white' }} p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-900">Bank zuordnen</h2>
+                    <p class="mt-1 text-sm text-slate-500">Umsätze prüfen, vorbereiten und Dubletten im Blick behalten.</p>
+                </div>
+                <a href="{{ route('bank-imports.index') }}" class="shrink-0 text-sm font-medium text-slate-600 hover:text-slate-950">Öffnen</a>
+            </div>
+
+            <div class="mt-4 grid grid-cols-3 gap-2 text-sm">
+                <div class="rounded-xl bg-white px-3 py-2">
+                    <div class="text-xs text-slate-500">Zuordnen</div>
+                    <div class="mt-1 font-mono text-lg font-semibold text-amber-700">{{ $bankWorkStats['pending'] ?? 0 }}</div>
+                </div>
+                <div class="rounded-xl bg-white px-3 py-2">
+                    <div class="text-xs text-slate-500">Bereit</div>
+                    <div class="mt-1 font-mono text-lg font-semibold text-blue-700">{{ $bankWorkStats['ready'] ?? 0 }}</div>
+                </div>
+                <div class="rounded-xl bg-white px-3 py-2">
+                    <div class="text-xs text-slate-500">Dubletten</div>
+                    <div class="mt-1 font-mono text-lg font-semibold text-violet-700">{{ $bankWorkStats['duplicate'] ?? 0 }}</div>
+                </div>
+            </div>
+
+            <div class="mt-4 space-y-2">
+                @forelse(($bankWorkQueue ?? collect())->take(3) as $bankTransaction)
+                    <a href="{{ route('bank-imports.index', ['status' => $bankTransaction->status]) }}" class="block rounded-xl border border-white bg-white px-3 py-2 text-sm hover:border-blue-200">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="truncate font-medium text-slate-900">{{ $bankTransaction->counterparty_name ?: 'Unbekannter Umsatz' }}</span>
+                            <span class="font-mono {{ $bankTransaction->isCredit() ? 'text-emerald-700' : 'text-rose-700' }}">{{ number_format((float) $bankTransaction->amount, 2, ',', '.') }} €</span>
+                        </div>
+                        <div class="mt-1 text-xs text-slate-500">{{ optional($bankTransaction->booking_date)->format('d.m.Y') }} · {{ $bankTransaction->statusLabel() }}</div>
+                    </a>
+                @empty
+                    <div class="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-5 text-sm text-slate-500">
+                        Keine offenen Bankumsätze.
+                    </div>
+                @endforelse
+            </div>
+        </div>
+    </section>
+
+    @if(($cashAndBankAccounts ?? collect())->isNotEmpty())
+        <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-900">Bank und Kasse</h2>
+                    <p class="mt-1 text-sm text-slate-500">Aktuelle Bestände der Geldkonten als schnelle Plausibilitätsprüfung.</p>
+                </div>
+                <a href="{{ route('transactions.cashbook') }}" class="text-sm font-medium text-slate-600 hover:text-slate-950">Zum Kassenbuch</a>
+            </div>
+
+            <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                @foreach($cashAndBankAccounts as $account)
+                    <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="truncate text-sm font-semibold text-slate-900">{{ $account->name }}</div>
+                            <span class="rounded-full bg-white px-2 py-1 text-xs font-medium text-slate-500">{{ ucfirst($account->type) }}</span>
+                        </div>
+                        <div class="mt-2 font-mono text-lg font-semibold text-slate-950">{{ number_format((float) $account->balance_current, 2, ',', '.') }} €</div>
+                        @if($account->balance_date)
+                            <div class="mt-1 text-xs text-slate-500">Stand {{ $account->balance_date->format('d.m.Y') }}</div>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        </section>
+    @endif
+
     @if(($categorySummaries ?? collect())->isNotEmpty())
         <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
