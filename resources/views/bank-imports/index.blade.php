@@ -230,6 +230,9 @@
                     $isTrinkwertCreditBalance = $isTrinkwert && !empty($trinkwertData['trinkwert_is_credit_balance_redemption']);
                     $movementLabel = $isTrinkwertCreditBalance ? 'Verrechnung' : ($bankTransaction->amount >= 0 ? 'Eingang' : 'Ausgang');
                     $sourceAccountLabel = $isTrinkwertCreditBalance ? 'Erlöskonto' : 'Konto';
+                    $recognizedAmount = filled($bankTransaction->receipt_meta['recognized_amount'] ?? null)
+                        ? round((float) $bankTransaction->receipt_meta['recognized_amount'], 2)
+                        : null;
                 @endphp
                 <article id="bank-transaction-{{ $bankTransaction->id }}" class="scroll-mt-24 p-5 target:bg-blue-50/70">
                     <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,430px)]">
@@ -311,17 +314,28 @@
                                         @elseif($bankTransaction->receipt_kind === 'system_invoice')
                                             Clubano-Rechnung
                                         @elseif($bankTransaction->receipt_file)
-                                            Datei vorbereitet
+                                            Datei geprüft
                                         @else
                                             Offen
                                         @endif
                                     </div>
+                                    @if($recognizedAmount !== null)
+                                        <div class="mt-1 text-xs text-slate-500">
+                                            Endbetrag erkannt: {{ number_format($recognizedAmount, 2, ',', '.') }} {{ $bankTransaction->receipt_meta['recognized_currency'] ?? 'EUR' }}
+                                        </div>
+                                    @endif
                                 </div>
                             </div>
                         </div>
 
                         <aside class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                            <form method="POST" action="{{ route('bank-imports.transactions.update', $bankTransaction) }}" enctype="multipart/form-data" class="space-y-4">
+                            <form method="POST"
+                                  action="{{ route('bank-imports.transactions.update', $bankTransaction) }}"
+                                  enctype="multipart/form-data"
+                                  class="space-y-4"
+                                  data-payment-review-form
+                                  data-bank-amount="{{ number_format(abs((float) $bankTransaction->amount), 2, '.', '') }}"
+                                  data-recognized-amount="{{ $recognizedAmount !== null ? number_format($recognizedAmount, 2, '.', '') : '' }}">
                                 @csrf
                                 @method('PATCH')
 
@@ -355,7 +369,7 @@
 
                                             <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                                                 <label class="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">Rechnung auswählen</label>
-                                                <select name="invoice_id" class="w-full rounded-xl border-emerald-200 bg-white text-xs shadow-sm focus:border-emerald-600 focus:ring-emerald-600">
+                                                <select name="invoice_id" class="w-full rounded-xl border-emerald-200 bg-white text-xs shadow-sm focus:border-emerald-600 focus:ring-emerald-600" data-invoice-select>
                                                     <option value="">Keine Rechnung verknüpfen</option>
                                                     @foreach($invoices as $invoice)
                                                         @php
@@ -363,11 +377,15 @@
                                                             $paid = (float) ($invoice->paid_amount ?? 0);
                                                             $remaining = max($total - $paid, 0);
                                                         @endphp
-                                                        <option value="{{ $invoice->id }}" @selected((string) $selectedInvoiceId === (string) $invoice->id)>
+                                                        <option value="{{ $invoice->id }}"
+                                                                data-total="{{ number_format($total, 2, '.', '') }}"
+                                                                data-remaining="{{ number_format($remaining, 2, '.', '') }}"
+                                                                @selected((string) $selectedInvoiceId === (string) $invoice->id)>
                                                             {{ $invoice->invoice_number }} · {{ $invoice->recipient_name ?: 'Ohne Empfänger' }} · {{ number_format($remaining, 2, ',', '.') }} € offen
                                                         </option>
                                                     @endforeach
                                                 </select>
+                                                <div class="mt-2 hidden rounded-lg border px-3 py-2 text-xs leading-5" data-payment-review></div>
                                             </div>
 
                                             <input name="receipt_file" type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700">
@@ -474,6 +492,79 @@
                     hidden.value = option.dataset.accountId ?? '';
                     return;
                 }
+            }
+        });
+
+        const formatEuro = (value) => {
+            return new Intl.NumberFormat('de-DE', {
+                style: 'currency',
+                currency: 'EUR',
+            }).format(value);
+        };
+
+        const updatePaymentReview = (form) => {
+            const output = form.querySelector('[data-payment-review]');
+            const select = form.querySelector('[data-invoice-select]');
+
+            if (! output || ! select) {
+                return;
+            }
+
+            const bankAmount = Number.parseFloat(form.dataset.bankAmount || '0');
+            const recognizedAmount = Number.parseFloat(form.dataset.recognizedAmount || '');
+            const selected = select.selectedOptions[0];
+            const remaining = Number.parseFloat(selected?.dataset.remaining || '');
+            const messages = [];
+            let hasWarning = false;
+
+            if (! Number.isNaN(recognizedAmount)) {
+                const diff = Math.abs(recognizedAmount - bankAmount);
+
+                if (diff < 0.01) {
+                    messages.push('Beleg passt: Der erkannte Endbetrag entspricht dem Bankumsatz.');
+                } else {
+                    messages.push(`Beleg prüfen: erkannter Endbetrag ${formatEuro(recognizedAmount)}, Bankumsatz ${formatEuro(bankAmount)}.`);
+                    hasWarning = true;
+                }
+            }
+
+            if (selected?.value && ! Number.isNaN(remaining)) {
+                const diff = Math.abs(remaining - bankAmount);
+
+                if (diff < 0.01) {
+                    messages.push('Clubano-Rechnung passt: Der offene Endbetrag wird vollständig bezahlt.');
+                } else {
+                    messages.push(`Clubano-Rechnung prüfen: offen ${formatEuro(remaining)}, Bankumsatz ${formatEuro(bankAmount)}.`);
+                    hasWarning = true;
+                }
+            }
+
+            if (messages.length === 0) {
+                output.classList.add('hidden');
+                output.textContent = '';
+                return;
+            }
+
+            output.classList.remove('hidden', 'border-emerald-200', 'bg-emerald-50', 'text-emerald-800', 'border-amber-200', 'bg-amber-50', 'text-amber-800');
+            output.classList.add(...(hasWarning
+                ? ['border-amber-200', 'bg-amber-50', 'text-amber-800']
+                : ['border-emerald-200', 'bg-emerald-50', 'text-emerald-800']));
+            output.textContent = messages.join(' ');
+        };
+
+        document.querySelectorAll('[data-payment-review-form]').forEach(updatePaymentReview);
+
+        document.addEventListener('change', (event) => {
+            const select = event.target.closest('[data-invoice-select]');
+
+            if (! select) {
+                return;
+            }
+
+            const form = select.closest('[data-payment-review-form]');
+
+            if (form) {
+                updatePaymentReview(form);
             }
         });
     </script>

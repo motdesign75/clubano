@@ -8,6 +8,7 @@ use App\Models\BankTransaction;
 use App\Models\Invoice;
 use App\Models\Transaction;
 use App\Services\BankStatementImportService;
+use App\Services\ReceiptRecognitionService;
 use App\Services\ReceiptStorage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -262,7 +263,7 @@ class BankImportController extends Controller
             ->with('success', 'Import wurde gelöscht. Bereits erzeugte Buchungen bleiben erhalten und werden bei einem Neuimport erkannt.');
     }
 
-    public function update(Request $request, BankTransaction $bankTransaction)
+    public function update(Request $request, BankTransaction $bankTransaction, ReceiptRecognitionService $receiptRecognitionService)
     {
         $tenantId = auth()->user()->tenant_id;
         $this->abortIfForeignTenant($bankTransaction, $tenantId);
@@ -304,9 +305,10 @@ class BankImportController extends Controller
             'contract_date' => ['nullable', 'date'],
         ]);
 
-        $receiptData = $this->receiptData($request, $validated, $bankTransaction);
+        $receiptData = $this->receiptData($request, $validated, $bankTransaction, $receiptRecognitionService);
+        $paymentReviewMessage = null;
 
-        DB::transaction(function () use ($bankTransaction, $validated, $receiptData, $tenantId) {
+        DB::transaction(function () use ($bankTransaction, $validated, $receiptData, $tenantId, &$paymentReviewMessage) {
             $fingerprint = app(BankStatementImportService::class)->fingerprint(
                 $tenantId,
                 (int) $validated['source_account_id'],
@@ -334,12 +336,14 @@ class BankImportController extends Controller
             ]);
 
             $this->syncLinkedTransaction($bankTransaction);
+
+            $paymentReviewMessage = $this->paymentReviewMessage($bankTransaction->fresh());
         });
 
         return $this->backToBankTransaction($bankTransaction)
-            ->with('success', $bankTransaction->transaction_id
+            ->with('success', $paymentReviewMessage ?: ($bankTransaction->transaction_id
                 ? 'Konten wurden gespeichert und der Buchungsentwurf aktualisiert.'
-                : 'Konten wurden gespeichert.');
+                : 'Konten wurden gespeichert.'));
     }
 
     public function book(BankTransaction $bankTransaction)
@@ -731,7 +735,7 @@ class BankImportController extends Controller
         return redirect()->to($withoutFragment . '#bank-transaction-' . $bankTransaction->id);
     }
 
-    private function receiptData(Request $request, array $validated, BankTransaction $bankTransaction): array
+    private function receiptData(Request $request, array $validated, BankTransaction $bankTransaction, ReceiptRecognitionService $receiptRecognitionService): array
     {
         $receiptKind = $validated['receipt_kind'] ?? 'none';
 
@@ -765,21 +769,25 @@ class BankImportController extends Controller
             return [
                 'receipt_file' => null,
                 'receipt_kind' => 'system_invoice',
-                'receipt_meta' => [
+                'receipt_meta' => array_filter([
                     'invoice_id' => $invoice->id,
                     'invoice_number' => $invoice->invoice_number,
                     'invoice_recipient' => $invoice->recipient_name,
+                    'invoice_total' => $invoice->getTotal(),
+                    'invoice_remaining_amount' => $invoice->getRemainingAmount(),
                     'linked_at' => now()->toIso8601String(),
                     'linked_by' => auth()->id(),
-                ],
+                ]),
             ];
         }
 
         $receiptFile = $bankTransaction->receipt_file;
+        $recognition = [];
 
         if ($request->hasFile('receipt_file')) {
             app(ReceiptStorage::class)->delete($receiptFile);
 
+            $recognition = $receiptRecognitionService->fromUpload($request->file('receipt_file'));
             $receiptFile = app(ReceiptStorage::class)->storeUploaded($request->file('receipt_file'), auth()->user()->tenant_id, 'bank-imports');
         }
 
@@ -804,8 +812,55 @@ class BankImportController extends Controller
         return [
             'receipt_file' => $receiptFile,
             'receipt_kind' => $receiptFile ? 'upload' : null,
-            'receipt_meta' => null,
+            'receipt_meta' => $receiptFile ? $this->receiptRecognitionMeta($recognition ?: ($bankTransaction->receipt_meta ?? [])) : null,
         ];
+    }
+
+    private function receiptRecognitionMeta(array $recognition): array
+    {
+        return array_filter([
+            'recognized_amount' => filled($recognition['recognized_amount'] ?? null)
+                ? round((float) $recognition['recognized_amount'], 2)
+                : null,
+            'recognized_currency' => $recognition['recognized_currency'] ?? null,
+            'recognized_date' => $recognition['recognized_date'] ?? null,
+            'recognized_vendor' => $recognition['recognized_vendor'] ?? null,
+            'recognized_invoice_number' => $recognition['recognized_invoice_number'] ?? null,
+            'recognition_source' => $recognition['recognition_source'] ?? null,
+            'recognition_notes' => $recognition['recognition_notes'] ?? null,
+            'recognized_at' => filled($recognition['recognized_amount'] ?? null) ? now()->toIso8601String() : null,
+        ]);
+    }
+
+    private function paymentReviewMessage(BankTransaction $bankTransaction): ?string
+    {
+        $amount = round(abs((float) $bankTransaction->amount), 2);
+        $meta = $bankTransaction->receipt_meta ?? [];
+        $parts = [];
+
+        $recognizedAmount = filled($meta['recognized_amount'] ?? null)
+            ? round((float) $meta['recognized_amount'], 2)
+            : null;
+
+        if ($recognizedAmount !== null) {
+            $parts[] = abs($recognizedAmount - $amount) < 0.01
+                ? 'Beleg geprüft: Der erkannte Endbetrag passt zum Bankumsatz. Die Rechnung ist mit diesem Umsatz vollständig bezahlt.'
+                : 'Beleg geprüft: Der erkannte Endbetrag weicht um ' . number_format(abs($recognizedAmount - $amount), 2, ',', '.') . ' € vom Bankumsatz ab. Bitte Rechnung und Zahlung prüfen.';
+        }
+
+        if ($bankTransaction->receipt_kind === 'system_invoice') {
+            $invoice = $this->invoiceFromBankTransaction($bankTransaction);
+
+            if ($invoice) {
+                $remaining = round($invoice->getRemainingAmount(), 2);
+
+                $parts[] = abs($remaining - $amount) < 0.01
+                    ? 'Clubano-Rechnung geprüft: Der Bankumsatz gleicht den offenen Endbetrag vollständig aus.'
+                    : 'Clubano-Rechnung geprüft: Offener Endbetrag ' . number_format($remaining, 2, ',', '.') . ' €, Bankumsatz ' . number_format($amount, 2, ',', '.') . ' €. Bitte Differenz prüfen.';
+            }
+        }
+
+        return $parts ? implode(' ', $parts) : null;
     }
 
     private function invoiceChoices()

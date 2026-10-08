@@ -1111,13 +1111,16 @@ test('saved bank transaction assignments can receive a receipt upload later', fu
         'source_account_id' => $bankAccount->id,
         'selected_account_id' => $expenseAccount->id,
         'receipt_kind' => 'none',
-        'receipt_file' => UploadedFile::fake()->create('beleg.pdf', 100, 'application/pdf'),
-    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+        'receipt_file' => UploadedFile::fake()->create('rechnung-endbetrag-18,50.pdf', 100, 'application/pdf'),
+    ])
+        ->assertRedirectContains('#bank-transaction-' . $bankTransaction->id)
+        ->assertSessionHas('success', fn (string $message) => str_contains($message, 'vollständig bezahlt'));
 
     $bankTransaction = BankTransaction::withoutGlobalScopes()->find($bankTransaction->id);
 
     expect($bankTransaction->receipt_kind)->toBe('upload');
     expect($bankTransaction->receipt_file)->toStartWith('private:');
+    expect((float) $bankTransaction->receipt_meta['recognized_amount'])->toBe(18.5);
     Storage::disk('local')->assertExists(substr($bankTransaction->receipt_file, strlen('private:')));
 });
 
@@ -1198,7 +1201,9 @@ test('bank transactions can use an existing invoice as internal receipt', functi
         'selected_account_id' => $incomeAccount->id,
         'receipt_kind' => 'system_invoice',
         'invoice_id' => $invoice->id,
-    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+    ])
+        ->assertRedirectContains('#bank-transaction-' . $bankTransaction->id)
+        ->assertSessionHas('success', fn (string $message) => str_contains($message, 'offenen Endbetrag vollständig'));
 
     $bankTransaction = BankTransaction::withoutGlobalScopes()->find($bankTransaction->id);
 
