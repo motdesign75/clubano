@@ -207,6 +207,14 @@
             'minRole' => 'finance',
         ],
         [
+            'label' => 'Finanzübersicht',
+            'hint' => 'Offene Aufgaben, Belege und Kontostände',
+            'route' => route('transactions.summary'),
+            'active' => request()->routeIs('transactions.summary'),
+            'icon' => 'chart-bar',
+            'minRole' => 'finance',
+        ],
+        [
             'label' => 'Geldbewegungen',
             'hint' => 'Alles sehen, was rein- oder rausgeht',
             'route' => route('transactions.index'),
@@ -226,7 +234,7 @@
             'label' => 'Auswertungen',
             'hint' => 'EÜR, Journal und Jahresabschluss vorbereiten',
             'route' => route('transactions.corporation-tax'),
-            'active' => request()->routeIs('transactions.summary') || request()->routeIs('transactions.eur') || request()->routeIs('transactions.journal*') || request()->routeIs('transactions.corporation-tax'),
+            'active' => request()->routeIs('transactions.eur') || request()->routeIs('transactions.journal*') || request()->routeIs('transactions.corporation-tax'),
             'icon' => 'chart-bar',
             'minRole' => 'finance',
         ],
