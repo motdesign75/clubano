@@ -1218,3 +1218,79 @@ test('bank transactions can use an existing invoice as internal receipt', functi
     expect($transaction->receipt_kind)->toBe('system_invoice');
     expect($transaction->receipt_meta['invoice_number'])->toBe('R-BANK-001');
 });
+
+test('bank imports relink existing invoice payment bookings instead of duplicating them', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('invoice-payment-relink');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $incomeAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8400',
+        'name' => 'Kurse',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'income_account_id' => $incomeAccount->id,
+        'recipient_name' => 'Max Muster',
+        'recipient_email' => 'max@example.test',
+        'invoice_number' => 'R-BANK-RELINK',
+        'invoice_date' => '2026-10-01',
+        'due_date' => '2026-10-15',
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Braukurs',
+        'quantity' => 1,
+        'unit_price' => 100,
+        'tax_rate' => 0,
+    ]);
+
+    $this->actingAs($user)->post(route('payments.store', $invoice), [
+        'account_id' => $bankAccount->id,
+        'income_account_id' => $incomeAccount->id,
+        'amount' => 100,
+        'payment_date' => '2026-10-08',
+        'note' => 'Schon manuell verbucht',
+    ])->assertRedirect(route('invoices.show', $invoice));
+
+    $existingTransaction = Transaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('invoice_id', $invoice->id)
+        ->firstOrFail();
+
+    $csv = "Buchungstag;Betrag;Währung;Name;Verwendungszweck;Referenz\n"
+        . "08.10.2026;100,00;EUR;Max Muster;Rechnung R-BANK-RELINK;REL-001\n";
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $bankAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('volksbank.csv', $csv),
+    ])->assertRedirect();
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+
+    expect(Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(1);
+    expect($bankTransaction->status)->toBe(BankTransaction::STATUS_BOOKED);
+    expect($bankTransaction->transaction_id)->toBe($existingTransaction->id);
+    expect($bankTransaction->selected_account_id)->toBe($incomeAccount->id);
+});

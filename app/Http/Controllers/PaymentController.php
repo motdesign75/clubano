@@ -10,6 +10,7 @@ use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
 
 class PaymentController extends Controller
 {
@@ -118,6 +119,15 @@ class PaymentController extends Controller
         $paidAfter = round($paidBefore + $paymentAmount, 2);
         $overpaymentFromThisPayment = round(max(0, $paidAfter - max($invoiceTotal, $paidBefore)), 2);
 
+        if ($duplicate = $this->duplicatePaymentCandidate($invoice, $account->id, $paymentAmount, $validated['payment_date'])) {
+            $reference = $duplicate instanceof Payment
+                ? 'Zahlung #' . $duplicate->id
+                : 'Buchung ' . ($duplicate->receipt_number ?: ('#' . $duplicate->id));
+
+            return redirect()
+                ->route('invoices.show', $invoice)
+                ->with('error', 'Diese Zahlung wurde vermutlich bereits erfasst (' . $reference . '). Es wurde keine zweite Buchung erzeugt.');
+        }
 
         /*
         |--------------------------------------------------------------------------
@@ -125,54 +135,56 @@ class PaymentController extends Controller
         |--------------------------------------------------------------------------
         */
 
-        $payment = Payment::create([
+        DB::transaction(function () use ($tenantId, $invoice, $account, $incomeAccount, $validated, $paymentAmount, &$payment, &$transaction) {
+            $payment = Payment::create([
 
-            'tenant_id'    => $tenantId,
-            'invoice_id'   => $invoice->id,
-            'account_id'   => $account->id,
+                'tenant_id'    => $tenantId,
+                'invoice_id'   => $invoice->id,
+                'account_id'   => $account->id,
 
-            'amount'       => $paymentAmount,
-            'payment_date' => $validated['payment_date'],
-            'note'         => $validated['note'],
+                'amount'       => $paymentAmount,
+                'payment_date' => $validated['payment_date'],
+                'note'         => $validated['note'],
 
-        ]);
+            ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | Transaction erzeugen
-        |--------------------------------------------------------------------------
-        */
+            /*
+            |--------------------------------------------------------------------------
+            | Transaction erzeugen
+            |--------------------------------------------------------------------------
+            */
 
-        $transaction = Transaction::create([
+            $transaction = Transaction::create([
 
-            'tenant_id' => auth()->user()->tenant_id,
-            'invoice_id' => $invoice->id,
-            'created_by' => auth()->id(),
-            'updated_by' => auth()->id(),
-            'status' => 'abgeschlossen',
-            'finalized_at' => now(),
-            'finalized_by' => auth()->id(),
+                'tenant_id' => auth()->user()->tenant_id,
+                'invoice_id' => $invoice->id,
+                'created_by' => auth()->id(),
+                'updated_by' => auth()->id(),
+                'status' => 'abgeschlossen',
+                'finalized_at' => now(),
+                'finalized_by' => auth()->id(),
 
-            // Einnahme -> Bank/Kasse
-            'account_from_id' => $incomeAccount->id,
-            'account_to_id'   => $account->id,
+                // Einnahme -> Bank/Kasse
+                'account_from_id' => $incomeAccount->id,
+                'account_to_id'   => $account->id,
 
-            'amount' => $paymentAmount,
-            'tax_area' => $incomeAccount->tax_area ?: 'ideell',
+                'amount' => $paymentAmount,
+                'tax_area' => $incomeAccount->tax_area ?: 'ideell',
 
-            'date' => $validated['payment_date'],
+                'date' => $validated['payment_date'],
 
-            'description' => ($validated['transaction_description'] ?? null) ?: $this->buildPaymentTransactionDescription($invoice),
-            'receipt_kind' => 'system_invoice',
-            'receipt_meta' => [
-                'invoice_number' => $invoice->invoice_number,
-                'linked_at' => now()->toIso8601String(),
-                'linked_by' => auth()->id(),
-            ],
+                'description' => ($validated['transaction_description'] ?? null) ?: $this->buildPaymentTransactionDescription($invoice),
+                'receipt_kind' => 'system_invoice',
+                'receipt_meta' => [
+                    'invoice_number' => $invoice->invoice_number,
+                    'linked_at' => now()->toIso8601String(),
+                    'linked_by' => auth()->id(),
+                ],
 
-        ]);
+            ]);
 
-        $payment->forceFill(['transaction_id' => $transaction->id])->save();
+            $payment->forceFill(['transaction_id' => $transaction->id])->save();
+        });
 
 
 /*
@@ -288,5 +300,35 @@ if ($toAccount) {
     private function buildPaymentTransactionDescription(Invoice $invoice): string
     {
         return 'Zahlung ' . $invoice->getDocumentLabel() . ' ' . $invoice->invoice_number;
+    }
+
+    private function duplicatePaymentCandidate(Invoice $invoice, int $accountId, float $amount, string $paymentDate): Payment|Transaction|null
+    {
+        $tenantId = auth()->user()->tenant_id;
+
+        $payment = Payment::query()
+            ->where('tenant_id', $tenantId)
+            ->where('invoice_id', $invoice->id)
+            ->where('account_id', $accountId)
+            ->whereDate('payment_date', $paymentDate)
+            ->where('amount', round($amount, 2))
+            ->first();
+
+        if ($payment) {
+            return $payment;
+        }
+
+        return Transaction::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('invoice_id', $invoice->id)
+            ->whereDate('date', $paymentDate)
+            ->where('amount', round($amount, 2))
+            ->where('account_to_id', $accountId)
+            ->where(function ($query) {
+                $query->where('receipt_kind', 'system_invoice')
+                    ->orWhereNotNull('invoice_id');
+            })
+            ->whereDoesntHave('payment')
+            ->first();
     }
 }

@@ -664,12 +664,18 @@ class BankImportController extends Controller
                 $isBankImportBooking = $source === 'Bankumsatz-Import'
                     || str_starts_with((string) $transaction->receipt_number, 'BANK-');
                 $isMoneyTransfer = $this->isMoneyTransfer($transaction);
+                $isInvoicePayment = $transaction->hasSystemReceipt()
+                    || $transaction->payment()->exists();
 
-                if (! $isBankImportBooking && ! $isMoneyTransfer) {
+                if (! $isBankImportBooking && ! $isMoneyTransfer && ! $isInvoicePayment) {
                     return false;
                 }
 
                 if ($isMoneyTransfer && ! $isBankImportBooking) {
+                    return true;
+                }
+
+                if ($isInvoicePayment && $this->bankDescriptionMentionsInvoice($transaction, $description)) {
                     return true;
                 }
 
@@ -687,6 +693,23 @@ class BankImportController extends Controller
 
                 return (string) $transaction->description === $description;
             });
+    }
+
+    private function bankDescriptionMentionsInvoice(Transaction $transaction, string $bankDescription): bool
+    {
+        $transaction->loadMissing('invoice');
+
+        $invoiceNumber = $transaction->invoice?->invoice_number
+            ?: ($transaction->receipt_meta['invoice_number'] ?? null);
+
+        if (blank($invoiceNumber)) {
+            return false;
+        }
+
+        $haystack = Str::lower($bankDescription . ' ' . $transaction->description);
+        $needle = Str::lower((string) $invoiceNumber);
+
+        return str_contains($haystack, $needle);
     }
 
     private function isMoneyTransfer(Transaction $transaction): bool

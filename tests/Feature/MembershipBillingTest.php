@@ -1054,6 +1054,81 @@ test('invoice payment can override income account and transaction description', 
     expect($transaction->receipt_kind)->toBe('system_invoice');
 });
 
+test('duplicate invoice payments with same booking data are blocked', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    $tenant = Tenant::create([
+        'name' => 'Dublettenverein',
+        'slug' => 'dublettenverein',
+        'email' => 'dubletten@example.test',
+    ]);
+
+    $admin = User::factory()->create([
+        'tenant_id' => $tenant->id,
+        'role' => User::ROLE_ADMIN,
+    ]);
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'active' => true,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8400',
+        'name' => 'Erlöse Kurse',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'income_account_id' => $income->id,
+        'recipient_type' => 'free',
+        'recipient_name' => 'Firma Beispiel',
+        'recipient_email' => 'rechnung@example.test',
+        'invoice_number' => 'R-DUP-001',
+        'invoice_date' => '2026-10-01',
+        'due_date' => '2026-10-15',
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Kurs',
+        'quantity' => 1,
+        'unit' => 'Pauschale',
+        'unit_price' => 90,
+    ]);
+
+    $payload = [
+        'account_id' => $bank->id,
+        'income_account_id' => $income->id,
+        'amount' => 90,
+        'payment_date' => '2026-10-08',
+        'note' => 'Überweisung',
+    ];
+
+    $this->actingAs($admin)
+        ->post(route('payments.store', $invoice), $payload)
+        ->assertRedirect(route('invoices.show', $invoice));
+
+    $this->actingAs($admin)
+        ->post(route('payments.store', $invoice), $payload)
+        ->assertRedirect(route('invoices.show', $invoice))
+        ->assertSessionHas('error', fn (string $message) => str_contains($message, 'keine zweite Buchung'));
+
+    expect(Payment::query()->where('invoice_id', $invoice->id)->count())->toBe(1);
+    expect(Transaction::withoutGlobalScopes()->where('invoice_id', $invoice->id)->count())->toBe(1);
+});
+
 test('overpaid invoice is marked paid and creates member credit', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
