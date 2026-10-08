@@ -181,6 +181,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
 
     // Dokumentenzentrale
     $when($C.'DocumentController', function($cls){
+        Route::get('/eingangsrechnungen', [$cls, 'payables'])->middleware('tenant.role:finance')->name('payables.index');
         Route::get('/dokumente', [$cls, 'index'])->middleware('tenant.role:Lesen')->name('documents.index');
         Route::get('/dokumente/neu', [$cls, 'create'])->middleware('tenant.role:documents')->name('documents.create');
         Route::post('/dokumente', [$cls, 'store'])->middleware('tenant.role:documents')->name('documents.store');

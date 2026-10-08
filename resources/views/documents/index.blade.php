@@ -109,6 +109,9 @@
                                         {{ filled($receipt->recognized_amount) ? number_format((float) $receipt->recognized_amount, 2, ',', '.') . ' ' . ($receipt->recognized_currency ?: 'EUR') : 'Betrag fehlt' }}
                                     </div>
                                     <div class="mt-1">{{ $receipt->recognized_date?->format('d.m.Y') ?? 'Datum offen' }}</div>
+                                    <div class="mt-1 {{ $receipt->isPayableOverdue() ? 'font-semibold text-rose-700' : 'text-slate-500' }}">
+                                        Fällig: {{ $receipt->payable_due_date?->format('d.m.Y') ?? 'offen' }}
+                                    </div>
                                     <div class="mt-1 text-slate-500">{{ $receipt->recognized_vendor ?: 'Empfänger offen' }}</div>
                                 </td>
                                 <td class="px-4 py-4">
@@ -120,7 +123,10 @@
                                             <input name="recognized_date" type="date" value="{{ old('recognized_date', $receipt->recognized_date?->format('Y-m-d')) }}" class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
                                             <input name="recognized_vendor" type="text" value="{{ old('recognized_vendor', $receipt->recognized_vendor) }}" class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300" placeholder="Empfänger">
                                             <input name="recognized_invoice_number" type="text" value="{{ old('recognized_invoice_number', $receipt->recognized_invoice_number) }}" class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300" placeholder="Belegnummer">
+                                            <input name="payable_due_date" type="date" value="{{ old('payable_due_date', $receipt->payable_due_date?->format('Y-m-d')) }}" class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300">
+                                            <input name="payable_reference" type="text" value="{{ old('payable_reference', $receipt->payable_reference) }}" class="rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300" placeholder="Verwendungszweck">
                                             <input type="hidden" name="recognized_currency" value="{{ $receipt->recognized_currency ?: 'EUR' }}">
+                                            <input type="hidden" name="payable_due_source" value="{{ $receipt->payable_due_source ?: 'manual' }}">
                                             <button type="submit" class="sm:col-span-2 inline-flex min-h-10 items-center justify-center rounded-lg border border-amber-300 px-3 text-sm font-semibold text-amber-900 hover:bg-amber-50">
                                                 Prüfen speichern
                                             </button>

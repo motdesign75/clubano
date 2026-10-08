@@ -215,6 +215,14 @@
             'minRole' => 'finance',
         ],
         [
+            'label' => 'Eingangsrechnungen',
+            'hint' => 'Fälligkeiten und Zahlungen prüfen',
+            'route' => route('payables.index'),
+            'active' => request()->routeIs('payables.*'),
+            'icon' => 'clipboard-document-check',
+            'minRole' => 'finance',
+        ],
+        [
             'label' => 'Geldbewegungen',
             'hint' => 'Alles sehen, was rein- oder rausgeht',
             'route' => route('transactions.index'),

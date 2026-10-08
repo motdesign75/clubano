@@ -129,6 +129,48 @@ test('receipt recognition endpoint returns suggestions for the upload form', fun
         ->assertJsonPath('has_suggestion', true);
 });
 
+test('incoming invoices can be tracked with due date and payment details', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake('local');
+
+    [$tenant, $user] = createDocumentReceiptTenant();
+
+    $file = UploadedFile::fake()->create('Stadtwerke Rechnung RE-998 Gesamt 119,00 EUR fällig 15.09.2026 IBAN DE02120300000000202051.pdf', 120, 'application/pdf');
+
+    $this->actingAs($user)
+        ->post(route('documents.store'), [
+            'title' => 'Stadtwerke September',
+            'category' => Document::CATEGORY_FINANCE,
+            'status' => Document::STATUS_ACTIVE,
+            'is_booking_receipt' => '1',
+            'recognized_amount' => '119.00',
+            'recognized_date' => '2026-09-01',
+            'recognized_vendor' => 'Stadtwerke',
+            'recognized_invoice_number' => 'RE-998',
+            'payable_due_date' => '2026-09-15',
+            'payable_due_source' => 'explicit',
+            'payable_iban' => 'DE02120300000000202051',
+            'payable_reference' => 'RE-998',
+            'file' => $file,
+        ])
+        ->assertRedirect(route('documents.index'));
+
+    $document = Document::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+
+    expect($document->payable_status)->toBe(Document::PAYABLE_OPEN)
+        ->and($document->payableRemainingAmount())->toBe(119.00)
+        ->and($document->payable_due_date->toDateString())->toBe('2026-09-15')
+        ->and($document->payable_iban)->toBe('DE02120300000000202051');
+
+    $this->actingAs($user)
+        ->get(route('payables.index'))
+        ->assertOk()
+        ->assertSee('Eingangsrechnungen im Blick')
+        ->assertSee('Stadtwerke')
+        ->assertSee('RE-998')
+        ->assertSee('15.09.2026');
+});
+
 test('receipt recognition does not treat generic photo names as successful amount recognition', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

@@ -106,6 +106,48 @@
             </div>
         </div>
 
+        <div class="mt-4 grid gap-4 md:grid-cols-4">
+            <div>
+                <label for="payable_due_date" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Fällig am</label>
+                <input id="payable_due_date" name="payable_due_date" type="date"
+                       value="{{ old('payable_due_date', $document?->payable_due_date?->format('Y-m-d')) }}"
+                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400">
+                <input type="hidden" name="payable_due_source" value="{{ old('payable_due_source', $document?->payable_due_source ?? 'manual') }}">
+            </div>
+
+            <div>
+                <label for="payable_iban" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">IBAN</label>
+                <input id="payable_iban" name="payable_iban" type="text"
+                       value="{{ old('payable_iban', $document?->payable_iban) }}"
+                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       placeholder="optional">
+            </div>
+
+            <div>
+                <label for="payable_reference" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Verwendungszweck</label>
+                <input id="payable_reference" name="payable_reference" type="text"
+                       value="{{ old('payable_reference', $document?->payable_reference) }}"
+                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       placeholder="optional">
+            </div>
+
+            <div>
+                <label for="payable_paid_amount" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Bereits bezahlt</label>
+                <input id="payable_paid_amount" name="payable_paid_amount" type="number" min="0" step="0.01"
+                       value="{{ old('payable_paid_amount', $document?->payable_paid_amount) }}"
+                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       placeholder="0,00">
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <label for="payable_due_note" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Hinweis zur Fälligkeit</label>
+            <input id="payable_due_note" name="payable_due_note" type="text"
+                   value="{{ old('payable_due_note', $document?->payable_due_note) }}"
+                   class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                   placeholder="z. B. explizit aus Rechnung erkannt oder manuell gesetzt">
+        </div>
+
         <input type="hidden" name="recognized_currency" value="{{ old('recognized_currency', $document?->recognized_currency ?? 'EUR') }}">
         @error('recognized_amount') <p class="mt-2 text-sm text-rose-600">{{ $message }}</p> @enderror
     </section>
@@ -302,6 +344,11 @@
                             filledCount += fillField('recognized_date', data.recognized_date) ? 1 : 0;
                             filledCount += fillField('recognized_vendor', data.recognized_vendor) ? 1 : 0;
                             filledCount += fillField('recognized_invoice_number', data.recognized_invoice_number) ? 1 : 0;
+                            filledCount += fillField('payable_due_date', data.payable_due_date) ? 1 : 0;
+                            filledCount += fillField('payable_due_source', data.payable_due_source || 'manual') ? 1 : 0;
+                            filledCount += fillField('payable_due_note', data.payable_due_note) ? 1 : 0;
+                            filledCount += fillField('payable_iban', data.payable_iban) ? 1 : 0;
+                            filledCount += fillField('payable_reference', data.payable_reference) ? 1 : 0;
 
                             if (data.has_amount) {
                                 showStatus('Betrag erkannt. Bitte kurz prüfen und dann speichern.', 'success');

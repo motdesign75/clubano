@@ -30,6 +30,7 @@ class ReceiptRecognitionService
         $date = $this->date($searchableText);
         $vendor = $this->vendor($readableName, $text);
         $invoiceNumber = $this->invoiceNumber($searchableText);
+        $due = $this->dueDate($searchableText, $date);
 
         return [
             'recognized_amount' => $amount,
@@ -37,6 +38,11 @@ class ReceiptRecognitionService
             'recognized_date' => $date,
             'recognized_vendor' => $vendor,
             'recognized_invoice_number' => $invoiceNumber,
+            'payable_due_date' => $due['date'],
+            'payable_due_source' => $due['source'],
+            'payable_due_note' => $due['note'],
+            'payable_iban' => $this->iban($searchableText),
+            'payable_reference' => $this->paymentReference($searchableText, $invoiceNumber),
             'recognition_source' => $source,
             'recognition_notes' => $this->recognitionNotes($source, $amount, $text),
         ];
@@ -265,6 +271,78 @@ class ReceiptRecognitionService
         }
 
         return null;
+    }
+
+    /**
+     * @return array{date: ?string, source: ?string, note: ?string}
+     */
+    private function dueDate(string $value, ?string $invoiceDate): array
+    {
+        $normalized = $this->normalizeOcrText($value);
+
+        if (preg_match('/(?:fällig|faellig|zahlbar bis|zahlung bis|zahlungsziel bis|due date)[^\d]{0,30}(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/iu', $normalized, $match)) {
+            try {
+                $date = Carbon::create((int) $match[3], (int) $match[2], (int) $match[1])->toDateString();
+
+                return [
+                    'date' => $date,
+                    'source' => 'explicit',
+                    'note' => 'Explizit erkannt: ' . trim($match[0]),
+                ];
+            } catch (\Throwable) {
+                return ['date' => null, 'source' => 'unclear', 'note' => 'Fälligkeitsdatum erkannt, aber nicht sicher lesbar.'];
+            }
+        }
+
+        if (preg_match('/(?:zahlungsziel|zahlbar|fällig|faellig)[^\d]{0,30}(\d{1,3})\s*(?:tage|tag)\b/iu', $normalized, $match)) {
+            if ($invoiceDate) {
+                try {
+                    $days = (int) $match[1];
+
+                    return [
+                        'date' => Carbon::parse($invoiceDate)->addDays($days)->toDateString(),
+                        'source' => 'calculated',
+                        'note' => 'Berechnet aus Belegdatum plus ' . $days . ' Tage: ' . trim($match[0]),
+                    ];
+                } catch (\Throwable) {
+                    return ['date' => null, 'source' => 'unclear', 'note' => 'Relatives Zahlungsziel erkannt, aber Belegdatum ist unklar.'];
+                }
+            }
+
+            return [
+                'date' => null,
+                'source' => 'unclear',
+                'note' => 'Relatives Zahlungsziel erkannt, aber ohne sicheres Belegdatum nicht berechnet.',
+            ];
+        }
+
+        if (preg_match('/(?:nach zugang|nach erhalt|rechnungserhalt)/iu', $normalized)) {
+            return [
+                'date' => null,
+                'source' => 'unclear',
+                'note' => 'Zahlungsziel bezieht sich auf Zugang/Erhalt. Bitte Fälligkeit manuell setzen.',
+            ];
+        }
+
+        return ['date' => null, 'source' => null, 'note' => null];
+    }
+
+    private function iban(string $value): ?string
+    {
+        if (! preg_match('/\b([A-Z]{2}\d{2}(?:\s?\d{4}){2,7})\b/i', $value, $match)) {
+            return null;
+        }
+
+        return Str::upper(str_replace(' ', '', $match[1]));
+    }
+
+    private function paymentReference(string $value, ?string $invoiceNumber): ?string
+    {
+        if (preg_match('/(?:verwendungszweck|referenz|reference|kundenreferenz)[:\s]+([^\r\n]{3,120})/iu', $value, $match)) {
+            return trim($match[1]);
+        }
+
+        return $invoiceNumber;
     }
 
     private function recognitionNotes(string $source, ?float $amount, string $text): string

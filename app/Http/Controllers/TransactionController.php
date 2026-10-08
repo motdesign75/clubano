@@ -269,6 +269,7 @@ class TransactionController extends Controller
         ])->save();
 
         $this->syncInvoicePaymentForTransaction($transaction);
+        $this->markLinkedReceiptDocumentPaid($transaction);
 
         $this->recalculateAccountBalances(auth()->user()->tenant_id, [
             $transaction->account_from_id,
@@ -308,6 +309,7 @@ class TransactionController extends Controller
             ])->save();
 
             $this->syncInvoicePaymentForTransaction($transaction);
+            $this->markLinkedReceiptDocumentPaid($transaction);
 
             $this->recalculateAccountBalances(auth()->user()->tenant_id, [
                 $transaction->account_from_id,
@@ -1253,6 +1255,8 @@ class TransactionController extends Controller
                 ->whereKey($validated['receipt_document_id'])
                 ->update([
                     'receipt_status' => Document::RECEIPT_BOOKED,
+                    'payable_status' => $transaction->isFinalized() ? Document::PAYABLE_PAID : Document::PAYABLE_OPEN,
+                    'payable_paid_amount' => $transaction->isFinalized() ? $transaction->amount : 0,
                     'linked_transaction_id' => $transaction->id,
                     'updated_at' => now(),
                 ]);
@@ -1260,6 +1264,7 @@ class TransactionController extends Controller
 
         if ($transaction->isFinalized()) {
             $this->syncInvoicePaymentForTransaction($transaction);
+            $this->markLinkedReceiptDocumentPaid($transaction);
         }
 
         $this->recalculateAccountBalances($tenantId, [
@@ -1276,6 +1281,20 @@ class TransactionController extends Controller
         if (!$transaction || $transaction->tenant_id != auth()->user()->tenant_id) {
             abort(403, 'Kein Zugriff auf diese Buchung.');
         }
+    }
+
+    private function markLinkedReceiptDocumentPaid(Transaction $transaction): void
+    {
+        Document::query()
+            ->where('tenant_id', $transaction->tenant_id)
+            ->where('linked_transaction_id', $transaction->id)
+            ->where('is_booking_receipt', true)
+            ->update([
+                'receipt_status' => Document::RECEIPT_BOOKED,
+                'payable_status' => Document::PAYABLE_PAID,
+                'payable_paid_amount' => $transaction->amount,
+                'updated_at' => now(),
+            ]);
     }
 
     private function budgetCategoryChoices()

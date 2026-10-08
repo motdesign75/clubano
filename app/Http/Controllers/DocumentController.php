@@ -167,6 +167,11 @@ class DocumentController extends Controller
             'recognized_date' => $suggestions['recognized_date'] ?? null,
             'recognized_vendor' => $suggestions['recognized_vendor'] ?? null,
             'recognized_invoice_number' => $suggestions['recognized_invoice_number'] ?? null,
+            'payable_due_date' => $suggestions['payable_due_date'] ?? null,
+            'payable_due_source' => $suggestions['payable_due_source'] ?? null,
+            'payable_due_note' => $suggestions['payable_due_note'] ?? null,
+            'payable_iban' => $suggestions['payable_iban'] ?? null,
+            'payable_reference' => $suggestions['payable_reference'] ?? null,
             'recognition_source' => $suggestions['recognition_source'] ?? null,
             'recognition_notes' => $suggestions['recognition_notes'] ?? null,
             'has_amount' => filled($suggestions['recognized_amount'] ?? null),
@@ -175,6 +180,61 @@ class DocumentController extends Controller
                 ->filter(fn ($value) => filled($value))
                 ->isNotEmpty(),
         ]);
+    }
+
+    public function payables(Request $request)
+    {
+        $tenantId = $request->user()->tenant_id;
+        $status = trim((string) $request->query('status', ''));
+        $search = trim((string) $request->query('search', ''));
+        $today = now()->startOfDay();
+
+        $baseQuery = Document::query()
+            ->where('tenant_id', $tenantId)
+            ->where('is_booking_receipt', true)
+            ->notArchived();
+
+        $payables = (clone $baseQuery)
+            ->with(['linkedTransaction'])
+            ->when($search !== '', function ($query) use ($search) {
+                $like = '%' . $search . '%';
+
+                $query->where(function ($query) use ($like) {
+                    $query->where('title', 'like', $like)
+                        ->orWhere('recognized_vendor', 'like', $like)
+                        ->orWhere('recognized_invoice_number', 'like', $like)
+                        ->orWhere('payable_reference', 'like', $like);
+                });
+            })
+            ->when($status !== '', function ($query) use ($status, $today) {
+                if ($status === 'overdue') {
+                    $query->whereDate('payable_due_date', '<', $today)
+                        ->whereNotIn('payable_status', [Document::PAYABLE_PAID, Document::PAYABLE_CANCELLED])
+                        ->where('receipt_status', '!=', Document::RECEIPT_BOOKED);
+
+                    return;
+                }
+
+                $query->where('payable_status', $status);
+            })
+            ->orderByRaw('payable_due_date is null')
+            ->orderBy('payable_due_date')
+            ->latest('updated_at')
+            ->paginate(20)
+            ->withQueryString();
+
+        $openCollection = (clone $baseQuery)->with('linkedTransaction')->get();
+        $stats = [
+            'review' => $openCollection->filter(fn (Document $document) => $document->derivedPayableStatus() === Document::PAYABLE_REVIEW)->count(),
+            'open' => $openCollection->filter(fn (Document $document) => $document->derivedPayableStatus() === Document::PAYABLE_OPEN)->count(),
+            'overdue' => $openCollection->filter(fn (Document $document) => $document->isPayableOverdue())->count(),
+            'paid' => $openCollection->filter(fn (Document $document) => $document->derivedPayableStatus() === Document::PAYABLE_PAID)->count(),
+            'open_total' => $openCollection
+                ->reject(fn (Document $document) => in_array($document->derivedPayableStatus(), [Document::PAYABLE_PAID, Document::PAYABLE_CANCELLED], true))
+                ->sum(fn (Document $document) => $document->payableRemainingAmount()),
+        ];
+
+        return view('documents.payables', compact('payables', 'stats', 'status', 'search'));
     }
 
     public function show(Request $request, Document $document)
@@ -229,6 +289,7 @@ class DocumentController extends Controller
             'is_booking_receipt' => true,
             'category' => Document::CATEGORY_FINANCE,
             'receipt_status' => Document::RECEIPT_READY,
+            'payable_status' => $this->payableStatusFor($validated, Document::RECEIPT_READY),
         ]);
 
         return back()->with('success', 'Belegdaten wurden geprüft. Der Beleg ist jetzt buchbar.');
@@ -368,24 +429,34 @@ class DocumentController extends Controller
                 'recognized_invoice_number' => null,
                 'recognition_source' => null,
                 'recognition_notes' => null,
+                'payable_status' => null,
+                'payable_paid_amount' => null,
+                'payable_due_date' => null,
+                'payable_due_source' => null,
+                'payable_due_note' => null,
+                'payable_iban' => null,
+                'payable_reference' => null,
             ];
         }
 
         $suggestions = $file ? $recognitionService->fromUpload($file) : [];
         $receiptData = $this->validatedReceiptData($request, required: false);
 
-        foreach (['recognized_amount', 'recognized_currency', 'recognized_date', 'recognized_vendor', 'recognized_invoice_number'] as $field) {
+        foreach (['recognized_amount', 'recognized_currency', 'recognized_date', 'recognized_vendor', 'recognized_invoice_number', 'payable_due_date', 'payable_due_source', 'payable_due_note', 'payable_iban', 'payable_reference'] as $field) {
             if (blank($receiptData[$field] ?? null) && filled($suggestions[$field] ?? null)) {
                 $receiptData[$field] = $suggestions[$field];
             }
         }
 
+        $receiptStatus = filled($receiptData['recognized_amount'] ?? null)
+            ? Document::RECEIPT_READY
+            : Document::RECEIPT_NEEDS_REVIEW;
+
         return $receiptData + [
             'is_booking_receipt' => true,
             'category' => Document::CATEGORY_FINANCE,
-            'receipt_status' => filled($receiptData['recognized_amount'] ?? null)
-                ? Document::RECEIPT_READY
-                : Document::RECEIPT_NEEDS_REVIEW,
+            'receipt_status' => $receiptStatus,
+            'payable_status' => $this->payableStatusFor($receiptData, $receiptStatus),
             'recognized_currency' => $receiptData['recognized_currency'] ?? 'EUR',
             'recognition_source' => $suggestions['recognition_source'] ?? 'Manuell',
             'recognition_notes' => $suggestions['recognition_notes'] ?? null,
@@ -400,7 +471,40 @@ class DocumentController extends Controller
             'recognized_date' => ['nullable', 'date'],
             'recognized_vendor' => ['nullable', 'string', 'max:255'],
             'recognized_invoice_number' => ['nullable', 'string', 'max:255'],
+            'payable_status' => ['nullable', Rule::in(array_keys(Document::payableStatuses()))],
+            'payable_paid_amount' => ['nullable', 'numeric', 'min:0'],
+            'payable_due_date' => ['nullable', 'date'],
+            'payable_due_source' => ['nullable', Rule::in(['explicit', 'calculated', 'manual', 'unclear'])],
+            'payable_due_note' => ['nullable', 'string', 'max:1000'],
+            'payable_iban' => ['nullable', 'string', 'max:34'],
+            'payable_reference' => ['nullable', 'string', 'max:255'],
         ]);
+    }
+
+    protected function payableStatusFor(array $data, string $receiptStatus): string
+    {
+        if (($data['payable_status'] ?? null) === Document::PAYABLE_CANCELLED) {
+            return Document::PAYABLE_CANCELLED;
+        }
+
+        if ($receiptStatus === Document::RECEIPT_BOOKED) {
+            return Document::PAYABLE_PAID;
+        }
+
+        $amount = filled($data['recognized_amount'] ?? null) ? (float) $data['recognized_amount'] : 0.0;
+        $paid = filled($data['payable_paid_amount'] ?? null) ? (float) $data['payable_paid_amount'] : 0.0;
+
+        if ($amount > 0 && $paid >= $amount) {
+            return Document::PAYABLE_PAID;
+        }
+
+        if ($paid > 0) {
+            return Document::PAYABLE_PARTIAL;
+        }
+
+        return $receiptStatus === Document::RECEIPT_READY
+            ? Document::PAYABLE_OPEN
+            : Document::PAYABLE_REVIEW;
     }
 
     protected function authorizeTenant(Request $request, Document $document): void

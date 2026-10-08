@@ -28,6 +28,12 @@ class Document extends Model
     public const RECEIPT_READY = 'ready';
     public const RECEIPT_BOOKED = 'booked';
 
+    public const PAYABLE_REVIEW = 'review';
+    public const PAYABLE_OPEN = 'open';
+    public const PAYABLE_PARTIAL = 'partial';
+    public const PAYABLE_PAID = 'paid';
+    public const PAYABLE_CANCELLED = 'cancelled';
+
     protected $fillable = [
         'tenant_id',
         'uploaded_by',
@@ -52,11 +58,18 @@ class Document extends Model
         'invoice_id',
         'is_booking_receipt',
         'receipt_status',
+        'payable_status',
         'recognized_amount',
+        'payable_paid_amount',
         'recognized_currency',
         'recognized_date',
+        'payable_due_date',
+        'payable_due_source',
+        'payable_due_note',
         'recognized_vendor',
         'recognized_invoice_number',
+        'payable_iban',
+        'payable_reference',
         'recognition_source',
         'recognition_notes',
         'linked_transaction_id',
@@ -69,7 +82,9 @@ class Document extends Model
         'archived_at' => 'datetime',
         'is_booking_receipt' => 'boolean',
         'recognized_amount' => 'decimal:2',
+        'payable_paid_amount' => 'decimal:2',
         'recognized_date' => 'date',
+        'payable_due_date' => 'date',
     ];
 
     protected static function booted(): void
@@ -115,6 +130,17 @@ class Document extends Model
             self::RECEIPT_NEEDS_REVIEW => 'Neu / prüfen',
             self::RECEIPT_READY => 'Noch nicht gebucht',
             self::RECEIPT_BOOKED => 'Gebucht',
+        ];
+    }
+
+    public static function payableStatuses(): array
+    {
+        return [
+            self::PAYABLE_REVIEW => 'Zu prüfen',
+            self::PAYABLE_OPEN => 'Offen',
+            self::PAYABLE_PARTIAL => 'Teilweise bezahlt',
+            self::PAYABLE_PAID => 'Bezahlt',
+            self::PAYABLE_CANCELLED => 'Storniert',
         ];
     }
 
@@ -201,6 +227,64 @@ class Document extends Model
     public function getReceiptStatusLabelAttribute(): string
     {
         return self::receiptStatuses()[$this->receipt_status] ?? 'Kein Beleg';
+    }
+
+    public function getPayableStatusLabelAttribute(): string
+    {
+        return self::payableStatuses()[$this->payable_status] ?? $this->derivedPayableStatusLabel();
+    }
+
+    public function getPayablePaidAmountAttribute($value): float
+    {
+        if ($value !== null) {
+            return round((float) $value, 2);
+        }
+
+        return $this->linkedTransaction ? round((float) $this->linkedTransaction->amount, 2) : 0.0;
+    }
+
+    public function payableRemainingAmount(): float
+    {
+        $amount = filled($this->recognized_amount) ? (float) $this->recognized_amount : 0.0;
+
+        return round(max(0, $amount - (float) $this->payable_paid_amount), 2);
+    }
+
+    public function derivedPayableStatus(): string
+    {
+        if (! $this->is_booking_receipt) {
+            return self::PAYABLE_REVIEW;
+        }
+
+        if ($this->payable_status === self::PAYABLE_CANCELLED) {
+            return self::PAYABLE_CANCELLED;
+        }
+
+        if ($this->payable_status === self::PAYABLE_PAID || (filled($this->recognized_amount) && $this->payableRemainingAmount() <= 0.009)) {
+            return self::PAYABLE_PAID;
+        }
+
+        if ((float) $this->payable_paid_amount > 0) {
+            return self::PAYABLE_PARTIAL;
+        }
+
+        if ($this->receipt_status === self::RECEIPT_READY && filled($this->recognized_amount)) {
+            return self::PAYABLE_OPEN;
+        }
+
+        return self::PAYABLE_REVIEW;
+    }
+
+    public function derivedPayableStatusLabel(): string
+    {
+        return self::payableStatuses()[$this->derivedPayableStatus()] ?? 'Zu prüfen';
+    }
+
+    public function isPayableOverdue(): bool
+    {
+        return $this->payable_due_date
+            && $this->payable_due_date->isPast()
+            && ! in_array($this->derivedPayableStatus(), [self::PAYABLE_PAID, self::PAYABLE_CANCELLED], true);
     }
 
     public function getHumanSizeAttribute(): string

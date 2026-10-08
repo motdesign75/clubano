@@ -120,7 +120,7 @@
                     <h2 class="text-lg font-semibold text-slate-900">Belege prüfen</h2>
                     <p class="mt-1 text-sm text-slate-500">Hochgeladene Rechnungen und Belege, bevor daraus Buchungen werden.</p>
                 </div>
-                <a href="{{ route('documents.index', ['category' => \App\Models\Document::CATEGORY_FINANCE]) }}" class="shrink-0 text-sm font-medium text-slate-600 hover:text-slate-950">Öffnen</a>
+                <a href="{{ route('payables.index') }}" class="shrink-0 text-sm font-medium text-slate-600 hover:text-slate-950">Öffnen</a>
             </div>
 
             <div class="mt-4 rounded-xl bg-white px-3 py-2 text-sm">

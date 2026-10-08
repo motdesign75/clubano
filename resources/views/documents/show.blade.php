@@ -111,7 +111,30 @@
                             <dt class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Empfänger</dt>
                             <dd class="mt-1 text-sm text-slate-700">{{ $document->recognized_vendor ?: 'Noch offen' }}</dd>
                         </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Zahlungsstatus</dt>
+                            <dd class="mt-1 text-sm font-semibold {{ $document->isPayableOverdue() ? 'text-rose-700' : 'text-slate-950' }}">
+                                {{ $document->payable_status_label }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Fälligkeit</dt>
+                            <dd class="mt-1 text-sm text-slate-700">{{ $document->payable_due_date?->format('d.m.Y') ?? 'Noch offen' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">IBAN</dt>
+                            <dd class="mt-1 text-sm text-slate-700">{{ $document->payable_iban ?: 'Noch offen' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Verwendungszweck</dt>
+                            <dd class="mt-1 text-sm text-slate-700">{{ $document->payable_reference ?: 'Noch offen' }}</dd>
+                        </div>
                     </dl>
+                    @if($document->payable_due_note)
+                        <div class="mt-4 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-amber-900">
+                            {{ $document->payable_due_note }}
+                        </div>
+                    @endif
                     @if($canManageFinance && $document->receipt_status !== \App\Models\Document::RECEIPT_BOOKED)
                         <a href="{{ route('documents.receipt.prepare-transaction', $document) }}" class="mt-5 inline-flex min-h-11 items-center justify-center rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
                             Buchung vorbereiten
