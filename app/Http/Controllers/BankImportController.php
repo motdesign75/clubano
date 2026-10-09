@@ -42,6 +42,7 @@ class BankImportController extends Controller
 
         $invoices = $this->invoiceChoices();
         $payableDocuments = $this->payableDocumentChoices();
+        $contractDocuments = $this->contractDocumentChoices($tenantId);
         $manualBookingChoices = Transaction::query()
             ->with(['account_from', 'account_to'])
             ->where('tenant_id', $tenantId)
@@ -93,7 +94,7 @@ class BankImportController extends Controller
             'open_payables' => $payableDocuments->filter(fn (Document $document) => $document->payableRemainingAmount() > 0.009)->count(),
             'suggested_receipts' => BankTransaction::where('tenant_id', $tenantId)
                 ->whereIn('status', [BankTransaction::STATUS_PENDING, BankTransaction::STATUS_READY])
-                ->whereIn('receipt_kind', ['system_invoice', 'document'])
+                ->whereIn('receipt_kind', ['system_invoice', 'document', 'vertrag'])
                 ->count(),
         ];
 
@@ -104,6 +105,7 @@ class BankImportController extends Controller
             'bankTransactions',
             'invoices',
             'payableDocuments',
+            'contractDocuments',
             'summary',
             'assistantStats',
             'status',
@@ -147,6 +149,7 @@ class BankImportController extends Controller
             $existingBookings = 0;
             $invoiceSuggestions = 0;
             $payableSuggestions = 0;
+            $contractSuggestions = 0;
             $dates = collect($parsed['rows'])->pluck('booking_date')->filter()->sort()->values();
             $accountsByNumber = Account::query()
                 ->where('tenant_id', $tenantId)
@@ -188,7 +191,7 @@ class BankImportController extends Controller
 
                 $suggestion = $existingBooking
                     ? null
-                    : $this->receiptSuggestionForBankRow($tenantId, $row);
+                    : $this->receiptSuggestionForBankRow($tenantId, $sourceAccountId, $row);
 
                 if ($suggestion && ! $selectedAccountId && ! empty($suggestion['selected_account_id'])) {
                     $selectedAccountId = (int) $suggestion['selected_account_id'];
@@ -238,6 +241,8 @@ class BankImportController extends Controller
                     $invoiceSuggestions++;
                 } elseif (($suggestion['receipt_kind'] ?? null) === 'document') {
                     $payableSuggestions++;
+                } elseif (($suggestion['receipt_kind'] ?? null) === 'vertrag') {
+                    $contractSuggestions++;
                 }
                 if ($selectedAccountId) {
                     $autoAssigned++;
@@ -252,6 +257,7 @@ class BankImportController extends Controller
                     'existing_booking_count' => $existingBookings,
                     'invoice_suggestion_count' => $invoiceSuggestions,
                     'payable_suggestion_count' => $payableSuggestions,
+                    'contract_suggestion_count' => $contractSuggestions,
                     'source' => $parsed['format'] === 'TRINKWERT' ? 'Trinkwert' : null,
                 ]),
                 'booked_count' => $existingBookings,
@@ -347,8 +353,14 @@ class BankImportController extends Controller
                     ->where('is_booking_receipt', true)
                     ->whereNull('archived_at')),
             ],
+            'contract_document_id' => [
+                'nullable',
+                $this->contractDocumentExistsRule($tenantId),
+            ],
             'contract_reference' => [
-                Rule::requiredIf(fn () => $request->input('receipt_kind') === 'vertrag' && ! $request->hasFile('receipt_file')),
+                Rule::requiredIf(fn () => $request->input('receipt_kind') === 'vertrag'
+                    && ! $request->hasFile('receipt_file')
+                    && blank($request->input('contract_document_id'))),
                 'nullable',
                 'string',
                 'max:255',
@@ -742,7 +754,7 @@ class BankImportController extends Controller
         return mb_substr(implode(' - ', $parts) ?: 'Bankumsatz importiert', 0, 255);
     }
 
-    private function receiptSuggestionForBankRow(int $tenantId, array $row): ?array
+    private function receiptSuggestionForBankRow(int $tenantId, int $sourceAccountId, array $row): ?array
     {
         $amount = round(abs((float) ($row['amount'] ?? 0)), 2);
 
@@ -750,9 +762,12 @@ class BankImportController extends Controller
             return null;
         }
 
-        return ($row['direction'] ?? null) === 'credit'
+        $primarySuggestion = ($row['direction'] ?? null) === 'credit'
             ? $this->invoiceSuggestionForBankRow($tenantId, $row, $amount)
             : $this->payableSuggestionForBankRow($tenantId, $row, $amount);
+
+        return $primarySuggestion
+            ?: $this->recurringContractSuggestionForBankRow($tenantId, $sourceAccountId, $row, $amount);
     }
 
     private function invoiceSuggestionForBankRow(int $tenantId, array $row, float $amount): ?array
@@ -868,6 +883,99 @@ class BankImportController extends Controller
             ]),
             'summary' => 'Eingangsrechnung ' . ($document->recognized_invoice_number ?: $document->title),
         ];
+    }
+
+    private function recurringContractSuggestionForBankRow(int $tenantId, int $sourceAccountId, array $row, float $amount): ?array
+    {
+        $isCredit = ($row['direction'] ?? null) === 'credit';
+        $bankSideColumn = $isCredit ? 'account_to_id' : 'account_from_id';
+
+        $transaction = Transaction::withoutGlobalScopes()
+            ->with(['account_from', 'account_to'])
+            ->where('tenant_id', $tenantId)
+            ->where('receipt_kind', 'vertrag')
+            ->where('amount', $amount)
+            ->where($bankSideColumn, $sourceAccountId)
+            ->latest('date')
+            ->latest('id')
+            ->limit(250)
+            ->get()
+            ->first(function (Transaction $transaction) use ($row) {
+                if ($transaction->isCancelled()) {
+                    return false;
+                }
+
+                return $this->hasRecurringContractTextOverlap($row, $transaction);
+            });
+
+        if (! $transaction) {
+            return null;
+        }
+
+        $selectedAccountId = $isCredit ? $transaction->account_from_id : $transaction->account_to_id;
+        if (! $selectedAccountId || (int) $selectedAccountId === $sourceAccountId) {
+            return null;
+        }
+
+        $receiptMeta = array_filter([
+            ...($transaction->receipt_meta ?? []),
+            'source_transaction_id' => $transaction->id,
+            'linked_at' => now()->toIso8601String(),
+            'linked_by' => auth()->id(),
+            'suggested_by' => 'bank_import_recurring_contract',
+        ]);
+
+        $label = $receiptMeta['contract_reference']
+            ?? $receiptMeta['contract_document_title']
+            ?? $transaction->description;
+
+        return [
+            'receipt_kind' => 'vertrag',
+            'selected_account_id' => $selectedAccountId,
+            'receipt_meta' => $receiptMeta,
+            'summary' => 'Dauerbeleg ' . $label,
+        ];
+    }
+
+    private function hasRecurringContractTextOverlap(array $row, Transaction $transaction): bool
+    {
+        $tokens = $this->meaningfulSearchTokens(implode(' ', array_filter([
+            $row['counterparty_name'] ?? null,
+            $row['purpose'] ?? null,
+            $row['end_to_end_id'] ?? null,
+            $row['bank_reference'] ?? null,
+        ])));
+
+        if ($tokens->isEmpty()) {
+            return false;
+        }
+
+        $meta = $transaction->receipt_meta ?? [];
+        $previousText = $this->compactReference(implode(' ', array_filter([
+            $transaction->description,
+            $meta['contract_reference'] ?? null,
+            $meta['contract_document_title'] ?? null,
+            $meta['contract_location'] ?? null,
+            $meta['counterparty_name'] ?? null,
+            $meta['bank_reference'] ?? null,
+            $meta['end_to_end_id'] ?? null,
+        ])));
+
+        return $tokens->contains(fn (string $token) => str_contains($previousText, $token));
+    }
+
+    private function meaningfulSearchTokens(string $value)
+    {
+        $stopWords = [
+            'basis', 'lastschrift', 'sepa', 'ueberweisung', 'uberweisung', 'zahlung',
+            'rechnung', 'beitrag', 'gmbh', 'eg', 'ev', 'verein',
+        ];
+
+        return collect(preg_split('/[^a-z0-9]+/', Str::lower(Str::ascii($value))) ?: [])
+            ->map(fn (string $token) => trim($token))
+            ->filter(fn (string $token) => mb_strlen($token) >= 4 && ! in_array($token, $stopWords, true))
+            ->unique()
+            ->values();
     }
 
     private function compactSearchText(array $row): string
@@ -1100,17 +1208,27 @@ class BankImportController extends Controller
         }
 
         if ($receiptKind === 'vertrag') {
+            $document = null;
+
+            if (! blank($validated['contract_document_id'] ?? null)) {
+                $document = $this->contractDocumentQuery(auth()->user()->tenant_id)
+                    ->whereKey($validated['contract_document_id'])
+                    ->firstOrFail();
+            }
+
             return [
                 'receipt_file' => $receiptFile,
                 'receipt_kind' => 'vertrag',
                 'receipt_meta' => [
-                    'contract_document_id' => null,
-                    'contract_document_title' => null,
-                    'contract_reference' => trim((string) ($validated['contract_reference'] ?? '')),
+                    'contract_document_id' => $document?->id,
+                    'contract_document_title' => $document?->title,
+                    'contract_reference' => trim((string) (($validated['contract_reference'] ?? null) ?: $document?->title ?: '')),
                     'contract_location' => blank($validated['contract_location'] ?? null)
-                        ? ($receiptFile ? 'Bankimport-Beleg' : null)
+                        ? ($document ? 'Dokumentenablage / ' . $document->category_label : ($receiptFile ? 'Bankimport-Beleg' : null))
                         : trim((string) $validated['contract_location']),
-                    'contract_date' => blank($validated['contract_date'] ?? null) ? null : $validated['contract_date'],
+                    'contract_date' => blank($validated['contract_date'] ?? null)
+                        ? $document?->document_date?->toDateString()
+                        : $validated['contract_date'],
                     'marked_at' => now()->toIso8601String(),
                     'marked_by' => auth()->id(),
                 ],
@@ -1138,6 +1256,56 @@ class BankImportController extends Controller
             'recognition_notes' => $recognition['recognition_notes'] ?? null,
             'recognized_at' => filled($recognition['recognized_amount'] ?? null) ? now()->toIso8601String() : null,
         ]);
+    }
+
+    private function contractDocumentChoices(int $tenantId, ?int $selectedDocumentId = null)
+    {
+        return Document::query()
+            ->where('tenant_id', $tenantId)
+            ->notArchived()
+            ->where(function ($query) use ($selectedDocumentId) {
+                $this->applyContractDocumentScope($query);
+
+                if ($selectedDocumentId) {
+                    $query->orWhereKey($selectedDocumentId);
+                }
+            })
+            ->orderBy('title')
+            ->get();
+    }
+
+    private function contractDocumentQuery(int $tenantId)
+    {
+        return Document::query()
+            ->where('tenant_id', $tenantId)
+            ->notArchived()
+            ->where(fn ($query) => $this->applyContractDocumentScope($query));
+    }
+
+    private function contractDocumentExistsRule(int $tenantId)
+    {
+        return Rule::exists('documents', 'id')->where(fn ($query) => $query
+            ->where('tenant_id', $tenantId)
+            ->whereNull('archived_at')
+            ->where(function ($documentQuery) {
+                $this->applyContractDocumentScope($documentQuery);
+            }));
+    }
+
+    private function applyContractDocumentScope($query): void
+    {
+        $query
+            ->where('category', Document::CATEGORY_CONTRACTS)
+            ->orWhere('tags', 'like', '%Vertrag%')
+            ->orWhere('tags', 'like', '%Dauerbeleg%')
+            ->orWhere('title', 'like', '%vertrag%')
+            ->orWhere('title', 'like', '%miete%')
+            ->orWhere('title', 'like', '%versicherung%')
+            ->orWhere('original_name', 'like', '%vertrag%')
+            ->orWhere('original_name', 'like', '%miete%')
+            ->orWhere('original_name', 'like', '%versicherung%')
+            ->orWhere('description', 'like', '%vertrag%')
+            ->orWhere('description', 'like', '%dauerbeleg%');
     }
 
     private function syncPayableDocumentFromBankTransaction(BankTransaction $bankTransaction, Transaction $transaction): void

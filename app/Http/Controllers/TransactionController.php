@@ -346,7 +346,7 @@ class TransactionController extends Controller
         $validated = $request->validate([
             'transaction_ids' => ['required', 'array', 'min:1'],
             'transaction_ids.*' => ['integer'],
-            'contract_document_id' => ['nullable', Rule::exists('documents', 'id')->where('tenant_id', auth()->user()->tenant_id)->where('category', Document::CATEGORY_CONTRACTS)],
+            'contract_document_id' => ['nullable', $this->contractDocumentExistsRule(auth()->user()->tenant_id)],
             'contract_reference' => [Rule::requiredIf(fn () => blank($request->input('contract_document_id'))), 'nullable', 'string', 'max:255'],
             'contract_location' => ['nullable', 'string', 'max:255'],
             'contract_date' => ['nullable', 'date'],
@@ -536,7 +536,7 @@ class TransactionController extends Controller
             'budget_category_id' => ['nullable', Rule::exists('budget_categories', 'id')->where('tenant_id', $tenantId)->where('active', true)],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:5120'],
             'receipt_kind' => ['nullable', Rule::in(['none', 'vertrag'])],
-            'contract_document_id' => ['nullable', Rule::exists('documents', 'id')->where('tenant_id', $tenantId)->where('category', Document::CATEGORY_CONTRACTS)],
+            'contract_document_id' => ['nullable', $this->contractDocumentExistsRule($tenantId)],
             'contract_reference' => [Rule::requiredIf(fn () => ($request->input('receipt_kind') === 'vertrag') && blank($request->input('contract_document_id'))), 'nullable', 'string', 'max:255'],
             'contract_location' => ['nullable', 'string', 'max:255'],
             'contract_date' => ['nullable', 'date'],
@@ -1366,7 +1366,7 @@ class TransactionController extends Controller
                     ->where('tenant_id', $tenantId)
                     ->where('is_booking_receipt', true)),
             ],
-            'contract_document_id' => ['nullable', Rule::exists('documents', 'id')->where('tenant_id', $tenantId)->where('category', Document::CATEGORY_CONTRACTS)],
+            'contract_document_id' => ['nullable', $this->contractDocumentExistsRule($tenantId)],
             'contract_reference' => [Rule::requiredIf(fn () => ($request->input('receipt_kind') === 'vertrag') && blank($request->input('contract_document_id'))), 'nullable', 'string', 'max:255'],
             'contract_location' => ['nullable', 'string', 'max:255'],
             'contract_date' => ['nullable', 'date'],
@@ -1620,9 +1620,7 @@ class TransactionController extends Controller
         $document = null;
 
         if (! blank($validated['contract_document_id'] ?? null)) {
-            $document = Document::query()
-                ->where('tenant_id', auth()->user()->tenant_id)
-                ->where('category', Document::CATEGORY_CONTRACTS)
+            $document = $this->contractDocumentQuery(auth()->user()->tenant_id)
                 ->whereKey($validated['contract_document_id'])
                 ->first();
         }
@@ -1632,7 +1630,7 @@ class TransactionController extends Controller
             'contract_document_title' => $document?->title,
             'contract_reference' => trim((string) (($validated['contract_reference'] ?? null) ?: $document?->title ?: '')),
             'contract_location' => blank($validated['contract_location'] ?? null)
-                ? ($document ? 'Dokumentenablage / Verträge' : null)
+                ? ($document ? 'Dokumentenablage / ' . $document->category_label : null)
                 : trim((string) $validated['contract_location']),
             'contract_date' => blank($validated['contract_date'] ?? null)
                 ? $document?->document_date?->toDateString()
@@ -1817,18 +1815,54 @@ class TransactionController extends Controller
 
     private function contractDocumentChoices(?int $selectedDocumentId = null)
     {
+        $tenantId = auth()->user()->tenant_id;
+
         return Document::query()
-            ->where('tenant_id', auth()->user()->tenant_id)
-            ->where('category', Document::CATEGORY_CONTRACTS)
+            ->where('tenant_id', $tenantId)
             ->notArchived()
-            ->when($selectedDocumentId, function ($query) use ($selectedDocumentId) {
-                $query->orWhere(function ($orQuery) use ($selectedDocumentId) {
-                    $orQuery->where('tenant_id', auth()->user()->tenant_id)
-                        ->whereKey($selectedDocumentId);
-                });
+            ->where(function ($query) use ($selectedDocumentId) {
+                $this->applyContractDocumentScope($query);
+
+                if ($selectedDocumentId) {
+                    $query->orWhereKey($selectedDocumentId);
+                }
             })
             ->orderBy('title')
             ->get();
+    }
+
+    private function contractDocumentQuery(int $tenantId)
+    {
+        return Document::query()
+            ->where('tenant_id', $tenantId)
+            ->notArchived()
+            ->where(fn ($query) => $this->applyContractDocumentScope($query));
+    }
+
+    private function contractDocumentExistsRule(int $tenantId)
+    {
+        return Rule::exists('documents', 'id')->where(fn ($query) => $query
+            ->where('tenant_id', $tenantId)
+            ->whereNull('archived_at')
+            ->where(function ($documentQuery) {
+                $this->applyContractDocumentScope($documentQuery);
+            }));
+    }
+
+    private function applyContractDocumentScope($query): void
+    {
+        $query
+            ->where('category', Document::CATEGORY_CONTRACTS)
+            ->orWhere('tags', 'like', '%Vertrag%')
+            ->orWhere('tags', 'like', '%Dauerbeleg%')
+            ->orWhere('title', 'like', '%vertrag%')
+            ->orWhere('title', 'like', '%miete%')
+            ->orWhere('title', 'like', '%versicherung%')
+            ->orWhere('original_name', 'like', '%vertrag%')
+            ->orWhere('original_name', 'like', '%miete%')
+            ->orWhere('original_name', 'like', '%versicherung%')
+            ->orWhere('description', 'like', '%vertrag%')
+            ->orWhere('description', 'like', '%dauerbeleg%');
     }
 
     protected function recalculateAccountBalances(string $tenantId, iterable $accountIds): void

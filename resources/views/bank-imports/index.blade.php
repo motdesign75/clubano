@@ -283,6 +283,7 @@
                     $showPurpose = filled($bankTransaction->purpose) && $bankTransaction->purpose !== $transactionTitle;
                     $selectedInvoiceId = old('invoice_id', $bankTransaction->receipt_meta['invoice_id'] ?? null);
                     $selectedPayableDocumentId = old('payable_document_id', $bankTransaction->receipt_meta['document_id'] ?? null);
+                    $selectedContractDocumentId = old('contract_document_id', $bankTransaction->receipt_meta['contract_document_id'] ?? null);
                     $isTrinkwert = $bankTransaction->bankImport?->format === 'TRINKWERT';
                     $trinkwertData = $bankTransaction->raw_data ?? [];
                     $isTrinkwertCreditBalance = $isTrinkwert && !empty($trinkwertData['trinkwert_is_credit_balance_redemption']);
@@ -472,6 +473,21 @@
                                             </div>
 
                                             <input name="receipt_file" type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700">
+
+                                            <div class="rounded-xl border border-indigo-200 bg-indigo-50 p-3">
+                                                <label class="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-700">Gespeicherter Vertrag / Dauerbeleg</label>
+                                                <select name="contract_document_id" class="w-full rounded-xl border-indigo-200 bg-white text-xs shadow-sm focus:border-indigo-600 focus:ring-indigo-600">
+                                                    <option value="">Keinen gespeicherten Vertrag wählen</option>
+                                                    @foreach($contractDocuments as $document)
+                                                        <option value="{{ $document->id }}" @selected((string) $selectedContractDocumentId === (string) $document->id)>
+                                                            {{ $document->title }} · {{ $document->document_date?->format('d.m.Y') ?: $document->category_label }}
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                <p class="mt-2 text-xs leading-5 text-indigo-800">
+                                                    Nutze das für Miete, Versicherungen oder andere wiederkehrende Zahlungen. Beim nächsten passenden Bankumsatz schlägt Clubano diesen Dauerbeleg automatisch wieder vor.
+                                                </p>
+                                            </div>
 
                                             <div class="grid gap-2">
                                                 <input name="contract_reference" value="{{ old('contract_reference', $bankTransaction->receipt_meta['contract_reference'] ?? '') }}" placeholder="Vertrag / Grundlage" class="rounded-xl border-slate-300 bg-white text-xs shadow-sm focus:border-slate-500 focus:ring-slate-300">

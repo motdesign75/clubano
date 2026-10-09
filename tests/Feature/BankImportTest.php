@@ -1130,6 +1130,177 @@ test('bank transactions can carry optional contract receipts into created bookin
     expect($transaction->receipt_meta['source'])->toBe('Bankumsatz-Import');
 });
 
+test('bank transactions can reuse stored contract documents as recurring evidence', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('stored-contract-receipt');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $expenseAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '6300',
+        'name' => 'Miete',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $contract = Document::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'uploaded_by' => $user->id,
+        'title' => 'Mietvertrag KWG',
+        'category' => Document::CATEGORY_FINANCE,
+        'status' => Document::STATUS_ACTIVE,
+        'tags' => ['Vertrag', 'Miete'],
+        'document_date' => '2024-10-01',
+        'disk' => 'local',
+        'path' => 'documents/test/kwg-vertrag.pdf',
+        'original_name' => 'Kwg_Vertrag.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 1234,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bankAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'umsatz.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bankAccount->id,
+        'booking_date' => '2026-08-24',
+        'amount' => -250,
+        'currency' => 'EUR',
+        'direction' => 'debit',
+        'counterparty_name' => 'KWG Sarstedt',
+        'purpose' => 'Miete KWG August',
+        'fingerprint' => 'stored-contract-receipt-test',
+        'status' => BankTransaction::STATUS_PENDING,
+    ]);
+
+    $this->actingAs($user)->patch(route('bank-imports.transactions.update', $bankTransaction), [
+        'source_account_id' => $bankAccount->id,
+        'selected_account_id' => $expenseAccount->id,
+        'receipt_kind' => 'vertrag',
+        'contract_document_id' => $contract->id,
+    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->find($bankTransaction->id);
+
+    expect($bankTransaction->receipt_kind)->toBe('vertrag');
+    expect($bankTransaction->receipt_meta['contract_document_id'])->toBe($contract->id);
+    expect($bankTransaction->receipt_meta['contract_reference'])->toBe('Mietvertrag KWG');
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $bankTransaction))->assertRedirect();
+
+    $transaction = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+
+    expect($transaction->receipt_kind)->toBe('vertrag');
+    expect($transaction->receipt_meta['contract_document_id'])->toBe($contract->id);
+    expect($transaction->receipt_meta['contract_location'])->toBe('Dokumentenablage / Finanzen');
+});
+
+test('bank imports suggest previous recurring contract receipts for matching payments', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('recurring-contract-suggestion');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $expenseAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '6300',
+        'name' => 'Miete',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $contract = Document::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'uploaded_by' => $user->id,
+        'title' => 'Mietvertrag KWG',
+        'category' => Document::CATEGORY_FINANCE,
+        'status' => Document::STATUS_ACTIVE,
+        'tags' => ['Vertrag'],
+        'document_date' => '2024-10-01',
+        'disk' => 'local',
+        'path' => 'documents/test/kwg-vertrag.pdf',
+        'original_name' => 'Kwg_Vertrag.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 1234,
+    ]);
+
+    $previous = Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-08-01',
+        'description' => 'KWG Sarstedt - Miete KWG August',
+        'amount' => 250,
+        'account_from_id' => $bankAccount->id,
+        'account_to_id' => $expenseAccount->id,
+        'tax_area' => 'ideell',
+        'receipt_number' => 'TRX-MIETE-08',
+        'receipt_kind' => 'vertrag',
+        'receipt_meta' => [
+            'contract_document_id' => $contract->id,
+            'contract_document_title' => $contract->title,
+            'contract_reference' => $contract->title,
+            'contract_location' => 'Dokumentenablage / Finanzen',
+        ],
+        'status' => 'abgeschlossen',
+        'finalized_at' => now(),
+        'finalized_by' => $user->id,
+    ]);
+
+    $csv = "Buchungstag;Betrag;Währung;Name;Verwendungszweck;Referenz\n"
+        . "01.09.2026;-250,00;EUR;KWG Sarstedt;Miete KWG September;MIETE-KWG-09\n";
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $bankAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('umsatz.csv', $csv),
+    ])->assertRedirect();
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('purpose', 'Miete KWG September')
+        ->firstOrFail();
+
+    expect($bankTransaction->status)->toBe(BankTransaction::STATUS_READY);
+    expect($bankTransaction->selected_account_id)->toBe($expenseAccount->id);
+    expect($bankTransaction->receipt_kind)->toBe('vertrag');
+    expect($bankTransaction->receipt_meta['contract_document_id'])->toBe($contract->id);
+    expect($bankTransaction->receipt_meta['source_transaction_id'])->toBe($previous->id);
+    expect($bankTransaction->receipt_meta['suggested_by'])->toBe('bank_import_recurring_contract');
+});
+
 test('saved bank transaction assignments can receive a receipt upload later', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
     Storage::fake('local');

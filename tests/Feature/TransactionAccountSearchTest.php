@@ -723,6 +723,76 @@ test('transactions can reuse a stored contract document as receipt evidence', fu
         ->and($transaction->receiptEvidenceDetail())->toBe('Mietvertrag Vereinsheim · Dokumentenablage / Verträge');
 });
 
+test('transactions can use finance documents tagged as contracts as recurring receipt evidence', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $rent = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4210',
+        'name' => 'Miete Vereinsheim',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $contract = Document::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'uploaded_by' => $user->id,
+        'title' => 'Mietvertrag KWG',
+        'category' => Document::CATEGORY_FINANCE,
+        'status' => Document::STATUS_ACTIVE,
+        'tags' => ['Vertrag', 'Miete'],
+        'document_date' => '2024-10-01',
+        'disk' => 'local',
+        'path' => 'documents/test/kwg-vertrag.pdf',
+        'original_name' => 'Kwg_Vertrag.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 1234,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('transactions.create'))
+        ->assertOk()
+        ->assertSee('Mietvertrag KWG');
+
+    $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'date' => '2026-08-01',
+            'description' => 'Miete KWG August',
+            'amount' => 450,
+            'account_from_id' => $bank->id,
+            'account_to_id' => $rent->id,
+            'status' => 'entwurf',
+            'tax_area' => 'ideell',
+            'receipt_kind' => 'vertrag',
+            'contract_document_id' => $contract->id,
+        ])
+        ->assertRedirect(route('transactions.index'));
+
+    $transaction = Transaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->where('description', 'Miete KWG August')
+        ->firstOrFail();
+
+    expect($transaction->receipt_kind)->toBe('vertrag')
+        ->and($transaction->receipt_meta['contract_document_id'])->toBe($contract->id)
+        ->and($transaction->receipt_meta['contract_reference'])->toBe('Mietvertrag KWG')
+        ->and($transaction->receiptEvidenceDetail())->toBe('Mietvertrag KWG · Dokumentenablage / Finanzen');
+});
+
 test('missing receipts can be bulk marked as contract evidence', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
