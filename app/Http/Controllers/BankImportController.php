@@ -398,13 +398,45 @@ class BankImportController extends Controller
                 : 'Konten wurden gespeichert.'));
     }
 
-    public function book(BankTransaction $bankTransaction)
+    public function book(Request $request, BankTransaction $bankTransaction)
     {
         $tenantId = auth()->user()->tenant_id;
         $this->abortIfForeignTenant($bankTransaction, $tenantId);
 
         if ($bankTransaction->status === BankTransaction::STATUS_BOOKED) {
             return back()->with('error', 'Dieser Bankumsatz wurde bereits gebucht.');
+        }
+
+        if ($request->filled('selected_account_id')) {
+            $validated = $request->validate([
+                'selected_account_id' => [
+                    'required',
+                    'integer',
+                    'different:source_account_id',
+                    Rule::exists('accounts', 'id')->where(fn ($query) => $query
+                        ->where('tenant_id', $tenantId)
+                        ->where('active', true)
+                        ->where('is_postable', true)),
+                ],
+                'source_account_id' => [
+                    'required',
+                    'integer',
+                    Rule::exists('accounts', 'id')->where(fn ($query) => $query
+                        ->where('tenant_id', $tenantId)
+                        ->where('active', true)
+                        ->where('is_postable', true)),
+                ],
+            ]);
+
+            if ((int) $validated['source_account_id'] !== (int) $bankTransaction->account_id) {
+                return $this->backToBankTransaction($bankTransaction)
+                    ->with('error', 'Das Bankkonto passt nicht mehr zu diesem Umsatz. Bitte lade die Seite neu.');
+            }
+
+            $bankTransaction->update([
+                'selected_account_id' => (int) $validated['selected_account_id'],
+                'status' => BankTransaction::STATUS_READY,
+            ]);
         }
 
         if (! $bankTransaction->selected_account_id) {

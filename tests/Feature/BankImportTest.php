@@ -979,6 +979,80 @@ test('assigned bank transactions create draft bookings and update account balanc
     expect((float) $bankAccount->fresh()->balance_current)->toBe(179.0);
 });
 
+test('booking a bank transaction uses the account selected in the current booking action', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('book-current-selection');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $wrongAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '2700',
+        'name' => 'Durchlaufende Posten',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $correctAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4300',
+        'name' => 'Erlöse Sommerfest',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bankAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'umsatz.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bankAccount->id,
+        'selected_account_id' => $wrongAccount->id,
+        'booking_date' => '2026-10-09',
+        'amount' => 75,
+        'currency' => 'EUR',
+        'direction' => 'credit',
+        'counterparty_name' => 'Max Muster',
+        'purpose' => 'Sommerfest',
+        'fingerprint' => 'book-current-selection-test',
+        'status' => BankTransaction::STATUS_READY,
+    ]);
+
+    $this->actingAs($user)->post(route('bank-imports.transactions.book', $bankTransaction), [
+        'source_account_id' => $bankAccount->id,
+        'selected_account_id' => $correctAccount->id,
+    ])->assertRedirectContains('#bank-transaction-' . $bankTransaction->id);
+
+    $transaction = Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+    $bankTransaction->refresh();
+
+    expect($bankTransaction->selected_account_id)->toBe($correctAccount->id);
+    expect($transaction->account_from_id)->toBe($correctAccount->id);
+    expect($transaction->account_to_id)->toBe($bankAccount->id);
+});
+
 test('bank transactions can carry optional contract receipts into created bookings', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
     Storage::fake('local');

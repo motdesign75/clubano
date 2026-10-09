@@ -491,6 +491,11 @@
                             @if($bankTransaction->status === \App\Models\BankTransaction::STATUS_READY)
                                 <form method="POST" action="{{ route('bank-imports.transactions.book', $bankTransaction) }}" class="mt-2">
                                     @csrf
+                                    <input type="hidden" name="source_account_id" value="{{ $bankTransaction->account_id }}">
+                                    <input type="hidden"
+                                           name="selected_account_id"
+                                           value="{{ old('selected_account_id', $bankTransaction->selected_account_id) }}"
+                                           data-book-selected-account-id>
                                     <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
                                         Buchen
                                     </button>
@@ -573,8 +578,20 @@
             for (const option of options) {
                 if (option.value === search.value) {
                     hidden.value = option.dataset.accountId ?? '';
+                    const bookHidden = search.closest('aside')?.querySelector('[data-book-selected-account-id]');
+
+                    if (bookHidden) {
+                        bookHidden.value = hidden.value;
+                    }
+
                     return;
                 }
+            }
+
+            const bookHidden = search.closest('aside')?.querySelector('[data-book-selected-account-id]');
+
+            if (bookHidden) {
+                bookHidden.value = '';
             }
         });
 
