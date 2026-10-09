@@ -65,22 +65,7 @@
             'icon' => 'banknotes',
             'minRole' => 'finance',
         ],
-        [
-            'label' => 'Mitgliederabrechnung',
-            'hint' => 'Beiträge, Fälligkeiten und Mahnungen',
-            'route' => route('membership-billing.index'),
-            'active' => request()->routeIs('membership-billing.*'),
-            'icon' => 'receipt-percent',
-            'minRole' => 'finance',
-            'badge' => $membershipBillingReminderCount,
-        ],
     ];
-
-    $membershipBillingNav = collect($primaryNav)
-        ->where('label', 'Mitgliederabrechnung')
-        ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
-        ->values()
-        ->all();
 
     $workNav = [
         [
@@ -191,108 +176,156 @@
 
     $financeNav = [
         [
-            'label' => 'Konten & Kassen',
-            'hint' => 'Bank, Kasse und Buchhaltung einrichten',
-            'route' => route('accounts.index'),
-            'active' => request()->routeIs('accounts.*'),
-            'icon' => 'clipboard-document-list',
+            'label' => 'Überblick & Kontrolle',
+            'hint' => 'Startpunkt, Prüfung und Abschluss',
+            'active' => request()->routeIs('transactions.summary')
+                || request()->routeIs('transactions.audit*')
+                || request()->routeIs('transactions.eur')
+                || request()->routeIs('transactions.journal*')
+                || request()->routeIs('transactions.corporation-tax'),
             'minRole' => 'finance',
+            'children' => [
+                [
+                    'label' => 'Finanzübersicht',
+                    'hint' => 'Offene Aufgaben, Belege und Kontostände',
+                    'route' => route('transactions.summary'),
+                    'active' => request()->routeIs('transactions.summary'),
+                    'minRole' => 'finance',
+                ],
+                [
+                    'label' => 'Kassenprüfung',
+                    'hint' => 'Bestände, Belege und offene Prüfpunkte',
+                    'route' => route('transactions.audit'),
+                    'active' => request()->routeIs('transactions.audit*'),
+                    'minRole' => 'finance',
+                ],
+                [
+                    'label' => 'Auswertungen',
+                    'hint' => 'EÜR, Journal und Jahresabschluss',
+                    'route' => route('transactions.corporation-tax'),
+                    'active' => request()->routeIs('transactions.eur') || request()->routeIs('transactions.journal*') || request()->routeIs('transactions.corporation-tax'),
+                    'minRole' => 'finance',
+                ],
+            ],
         ],
         [
-            'label' => 'Kassenbuch',
-            'hint' => 'Barbewegungen erfassen und prüfen',
-            'route' => route('transactions.cashbook'),
-            'active' => request()->routeIs('transactions.cashbook'),
-            'icon' => 'banknotes',
+            'label' => 'Konten & Buchungen',
+            'hint' => 'Bank, Kasse und Bewegungen',
+            'active' => request()->routeIs('accounts.*')
+                || request()->routeIs('transactions.cashbook')
+                || request()->routeIs('transactions.index')
+                || request()->routeIs('transactions.create')
+                || request()->routeIs('transactions.edit')
+                || request()->routeIs('transactions.cancel*')
+                || request()->routeIs('bank-imports.*'),
             'minRole' => 'finance',
+            'children' => [
+                [
+                    'label' => 'Konten & Kassen',
+                    'hint' => 'Bank, Kasse und Buchhaltung einrichten',
+                    'route' => route('accounts.index'),
+                    'active' => request()->routeIs('accounts.*'),
+                    'minRole' => 'finance',
+                ],
+                [
+                    'label' => 'Geldbewegungen',
+                    'hint' => 'Alle Buchungen sehen und korrigieren',
+                    'route' => route('transactions.index'),
+                    'active' => request()->routeIs('transactions.index') || request()->routeIs('transactions.create') || request()->routeIs('transactions.edit') || request()->routeIs('transactions.cancel*'),
+                    'minRole' => 'finance',
+                ],
+                [
+                    'label' => 'Kassenbuch',
+                    'hint' => 'Barbewegungen erfassen und prüfen',
+                    'route' => route('transactions.cashbook'),
+                    'active' => request()->routeIs('transactions.cashbook'),
+                    'minRole' => 'finance',
+                ],
+                [
+                    'label' => 'Bankumsätze',
+                    'hint' => 'Kontoauszüge importieren und verbuchen',
+                    'route' => route('bank-imports.index'),
+                    'active' => request()->routeIs('bank-imports.*'),
+                    'minRole' => 'finance',
+                ],
+            ],
         ],
         [
-            'label' => 'Finanzübersicht',
-            'hint' => 'Offene Aufgaben, Belege und Kontostände',
-            'route' => route('transactions.summary'),
-            'active' => request()->routeIs('transactions.summary'),
-            'icon' => 'chart-bar',
+            'label' => 'Rechnungen & Beiträge',
+            'hint' => 'Forderungen, Zahlungen, Mitgliedsbeiträge',
+            'active' => request()->routeIs('payables.*')
+                || request()->routeIs('invoices.*')
+                || request()->routeIs('payments.*')
+                || request()->routeIs('membership-billing.*'),
             'minRole' => 'finance',
+            'children' => [
+                [
+                    'label' => 'Eingangsrechnungen',
+                    'hint' => 'Fälligkeiten und Zahlungen prüfen',
+                    'route' => route('payables.index'),
+                    'active' => request()->routeIs('payables.*'),
+                    'minRole' => 'finance',
+                ],
+                [
+                    'label' => 'Ausgangsrechnungen',
+                    'hint' => 'Rechnungen schreiben und verfolgen',
+                    'route' => route('invoices.index'),
+                    'active' => request()->routeIs('invoices.*') || request()->routeIs('payments.*'),
+                    'minRole' => 'finance',
+                ],
+                [
+                    'label' => 'Mitgliederabrechnung',
+                    'hint' => 'Beiträge, Fälligkeiten und Mahnungen',
+                    'route' => route('membership-billing.index'),
+                    'active' => request()->routeIs('membership-billing.*'),
+                    'minRole' => 'finance',
+                    'badge' => $membershipBillingReminderCount,
+                ],
+            ],
         ],
         [
-            'label' => 'Kassenprüfung',
-            'hint' => 'Bestände, Belege und offene Prüfpunkte',
-            'route' => route('transactions.audit'),
-            'active' => request()->routeIs('transactions.audit*'),
-            'icon' => 'clipboard-document-check',
+            'label' => 'Weitere Einnahmen',
+            'hint' => 'Spenden und Gutscheine',
+            'active' => request()->routeIs('donations.*') || request()->routeIs('vouchers.*'),
             'minRole' => 'finance',
+            'children' => [
+                [
+                    'label' => 'Spenden',
+                    'hint' => 'Spenden erfassen und Bestätigungen erstellen',
+                    'route' => route('donations.index'),
+                    'active' => request()->routeIs('donations.*'),
+                    'minRole' => 'finance',
+                ],
+                [
+                    'label' => 'Gutscheine',
+                    'hint' => 'Gutscheine und Einlösungen verfolgen',
+                    'route' => route('vouchers.index'),
+                    'active' => request()->routeIs('vouchers.*'),
+                    'minRole' => 'finance',
+                ],
+            ],
         ],
         [
-            'label' => 'Eingangsrechnungen',
-            'hint' => 'Fälligkeiten und Zahlungen prüfen',
-            'route' => route('payables.index'),
-            'active' => request()->routeIs('payables.*'),
-            'icon' => 'clipboard-document-check',
-            'minRole' => 'finance',
-        ],
-        [
-            'label' => 'Geldbewegungen',
-            'hint' => 'Alles sehen, was rein- oder rausgeht',
-            'route' => route('transactions.index'),
-            'active' => request()->routeIs('transactions.index') || request()->routeIs('transactions.create') || request()->routeIs('transactions.edit') || request()->routeIs('transactions.cancel*'),
-            'icon' => 'document-text',
-            'minRole' => 'finance',
-        ],
-        [
-            'label' => 'Bankumsätze',
-            'hint' => 'Kontoauszüge importieren und sicher verbuchen',
-            'route' => route('bank-imports.index'),
-            'active' => request()->routeIs('bank-imports.*'),
-            'icon' => 'arrow-down-tray',
-            'minRole' => 'finance',
-        ],
-        [
-            'label' => 'Auswertungen',
-            'hint' => 'EÜR, Journal und Jahresabschluss vorbereiten',
-            'route' => route('transactions.corporation-tax'),
-            'active' => request()->routeIs('transactions.eur') || request()->routeIs('transactions.journal*') || request()->routeIs('transactions.corporation-tax'),
-            'icon' => 'chart-bar',
-            'minRole' => 'finance',
-        ],
-        [
-            'label' => 'Spenden',
-            'hint' => 'Spenden erfassen und Bestätigungen erstellen',
-            'route' => route('donations.index'),
-            'active' => request()->routeIs('donations.*'),
-            'icon' => 'gift',
-            'minRole' => 'finance',
-        ],
-        [
-            'label' => 'Gutscheine',
-            'hint' => 'Gutscheine anlegen und Einlösungen verfolgen',
-            'route' => route('vouchers.index'),
-            'active' => request()->routeIs('vouchers.*'),
-            'icon' => 'gift',
-            'minRole' => 'finance',
-        ],
-        [
-            'label' => 'Rechnungen',
-            'hint' => 'Rechnungen schreiben und Zahlungen verfolgen',
-            'route' => route('invoices.index'),
-            'active' => request()->routeIs('invoices.*'),
-            'icon' => 'receipt-percent',
-            'minRole' => 'finance',
-        ],
-        [
-            'label' => 'Haushaltsplan',
-            'hint' => 'Planen, vergleichen und dem Vorstand zeigen',
-            'route' => route('budgets.index'),
+            'label' => 'Planung',
+            'hint' => 'Haushalt planen und Bereiche pflegen',
             'active' => request()->routeIs('budgets.*') || request()->routeIs('budget-categories.*'),
-            'icon' => 'presentation-chart-line',
             'minRole' => 'finance',
-        ],
-        [
-            'label' => 'Haushaltsbereiche',
-            'hint' => 'Bereiche fuer Plan und Ergebnis pflegen',
-            'route' => route('budget-categories.index'),
-            'active' => request()->routeIs('budget-categories.*'),
-            'icon' => 'squares-2x2',
-            'minRole' => 'finance',
+            'children' => [
+                [
+                    'label' => 'Haushaltsplan',
+                    'hint' => 'Planen, vergleichen und vorlegen',
+                    'route' => route('budgets.index'),
+                    'active' => request()->routeIs('budgets.*'),
+                    'minRole' => 'finance',
+                ],
+                [
+                    'label' => 'Haushaltsbereiche',
+                    'hint' => 'Bereiche für Plan und Ergebnis pflegen',
+                    'route' => route('budget-categories.index'),
+                    'active' => request()->routeIs('budget-categories.*'),
+                    'minRole' => 'finance',
+                ],
+            ],
         ],
     ];
 
@@ -453,7 +486,17 @@
         ->all();
 
     $financeNav = collect($financeNav)
-        ->filter(fn ($item) => ($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false)
+        ->map(function ($item) use ($user) {
+            if (! empty($item['children'])) {
+                $item['children'] = collect($item['children'])
+                    ->filter(fn ($child) => ($user?->hasPermission($child['minRole'] ?? 'Lesen')) ?? false)
+                    ->values()
+                    ->all();
+            }
+
+            return $item;
+        })
+        ->filter(fn ($item) => (($user?->hasPermission($item['minRole'] ?? 'Lesen')) ?? false) && (empty($item['children']) || count($item['children']) > 0))
         ->values()
         ->all();
 
@@ -498,26 +541,21 @@
                 'children' => $calendarNav,
             ],
             [
-                'label' => 'Mitgliederabrechnung',
-                'hint' => 'Beiträge, Fälligkeiten, Mahnungen',
-                'icon' => 'receipt-percent',
-                'route' => route('membership-billing.index'),
-                'active' => request()->routeIs('membership-billing.*'),
-                'badge' => $membershipBillingReminderCount,
-                'children' => $membershipBillingNav,
-            ],
-            [
-                'label' => 'Geld & Rechnungen',
-                'hint' => 'Konten, Buchungen, Spenden',
+                'label' => 'Finanzen',
+                'hint' => 'Beiträge, Buchungen, Rechnungen',
                 'icon' => 'banknotes',
-                'route' => route('transactions.index'),
+                'route' => route('transactions.summary'),
                 'active' => request()->routeIs('accounts.*')
                     || request()->routeIs('transactions.*')
+                    || request()->routeIs('bank-imports.*')
                     || request()->routeIs('donations.*')
                     || request()->routeIs('invoices.*')
                     || request()->routeIs('vouchers.*')
                     || request()->routeIs('payments.*')
-                    || request()->routeIs('budgets.*'),
+                    || request()->routeIs('budgets.*')
+                    || request()->routeIs('budget-categories.*')
+                    || request()->routeIs('payables.*')
+                    || request()->routeIs('membership-billing.*'),
                 'children' => $financeNav,
             ],
             [
@@ -743,24 +781,59 @@
                     <div x-show="open" class="pb-2">
                         <div class="ml-5 space-y-1 border-l border-slate-200 pl-3">
                             @foreach($group['children'] as $child)
-                                <a href="{{ $child['route'] }}"
-                                   @if($child['active']) aria-current="page" @endif
-                                   class="flex items-start gap-2 rounded-xl px-3 py-2 text-sm transition {{ $child['active'] ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:bg-white hover:text-slate-900' }}">
-                                    <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full {{ $child['active'] ? 'bg-slate-950' : 'bg-slate-300' }}"></span>
-                                    <span class="min-w-0">
-                                        <span class="block truncate font-medium">{{ $child['label'] }}</span>
+                                @if(!empty($child['children']))
+                                    <div class="pt-2">
+                                        <div class="px-3 text-[11px] font-semibold uppercase tracking-[0.16em] {{ $child['active'] ? 'text-slate-700' : 'text-slate-400' }}">
+                                            {{ $child['label'] }}
+                                        </div>
                                         @if(!empty($child['hint']))
-                                            <span class="mt-0.5 block text-xs leading-5 {{ $child['active'] ? 'text-slate-600' : 'text-slate-400' }}">
+                                            <div class="px-3 pt-0.5 text-xs leading-5 text-slate-400">
                                                 {{ $child['hint'] }}
+                                            </div>
+                                        @endif
+                                        <div class="mt-1 space-y-1">
+                                            @foreach($child['children'] as $nestedChild)
+                                                <a href="{{ $nestedChild['route'] }}"
+                                                   @if($nestedChild['active']) aria-current="page" @endif
+                                                   class="flex items-start gap-2 rounded-xl px-3 py-2 text-sm transition {{ $nestedChild['active'] ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:bg-white hover:text-slate-900' }}">
+                                                    <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full {{ $nestedChild['active'] ? 'bg-slate-950' : 'bg-slate-300' }}"></span>
+                                                    <span class="min-w-0">
+                                                        <span class="block truncate font-medium">{{ $nestedChild['label'] }}</span>
+                                                        @if(!empty($nestedChild['hint']))
+                                                            <span class="mt-0.5 block text-xs leading-5 {{ $nestedChild['active'] ? 'text-slate-600' : 'text-slate-400' }}">
+                                                                {{ $nestedChild['hint'] }}
+                                                            </span>
+                                                        @endif
+                                                    </span>
+                                                    @if(($nestedChild['badge'] ?? 0) > 0)
+                                                        <span class="ml-auto inline-flex min-w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                                            {{ $nestedChild['badge'] }}
+                                                        </span>
+                                                    @endif
+                                                </a>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @else
+                                    <a href="{{ $child['route'] }}"
+                                       @if($child['active']) aria-current="page" @endif
+                                       class="flex items-start gap-2 rounded-xl px-3 py-2 text-sm transition {{ $child['active'] ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:bg-white hover:text-slate-900' }}">
+                                        <span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full {{ $child['active'] ? 'bg-slate-950' : 'bg-slate-300' }}"></span>
+                                        <span class="min-w-0">
+                                            <span class="block truncate font-medium">{{ $child['label'] }}</span>
+                                            @if(!empty($child['hint']))
+                                                <span class="mt-0.5 block text-xs leading-5 {{ $child['active'] ? 'text-slate-600' : 'text-slate-400' }}">
+                                                    {{ $child['hint'] }}
+                                                </span>
+                                            @endif
+                                        </span>
+                                        @if(($child['badge'] ?? 0) > 0)
+                                            <span class="ml-auto inline-flex min-w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                                                {{ $child['badge'] }}
                                             </span>
                                         @endif
-                                    </span>
-                                    @if(($child['badge'] ?? 0) > 0)
-                                        <span class="ml-auto inline-flex min-w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                                            {{ $child['badge'] }}
-                                        </span>
-                                    @endif
-                                </a>
+                                    </a>
+                                @endif
                             @endforeach
                         </div>
                     </div>
