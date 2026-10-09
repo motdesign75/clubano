@@ -263,3 +263,126 @@ test('a receipt document can be linked to a new transaction without reuploading 
         ->and($document->refresh()->receipt_status)->toBe(Document::RECEIPT_BOOKED)
         ->and($document->linked_transaction_id)->toBe($transaction->id);
 });
+
+test('booked receipt documents cannot be prepared or reused for another transaction', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createDocumentReceiptTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $expense = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4930',
+        'name' => 'Bürobedarf',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $document = Document::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'uploaded_by' => $user->id,
+        'title' => 'Papierbeleg',
+        'category' => Document::CATEGORY_FINANCE,
+        'status' => Document::STATUS_ACTIVE,
+        'disk' => 'local',
+        'path' => 'documents/papier.pdf',
+        'original_name' => 'papier.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 100,
+        'is_booking_receipt' => true,
+        'receipt_status' => Document::RECEIPT_READY,
+        'recognized_amount' => 25,
+        'recognized_vendor' => 'Papierladen',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('transactions.store'), [
+            'date' => '2026-08-19',
+            'description' => 'Papierladen',
+            'amount' => 25,
+            'account_from_id' => $bank->id,
+            'account_to_id' => $expense->id,
+            'tax_area' => 'ideell',
+            'status' => 'entwurf',
+            'receipt_document_id' => $document->id,
+        ])
+        ->assertRedirect(route('transactions.index'));
+
+    $transaction = Transaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->firstOrFail();
+
+    expect($document->refresh()->receipt_status)->toBe(Document::RECEIPT_BOOKED)
+        ->and($document->linked_transaction_id)->toBe($transaction->id);
+
+    $this->actingAs($user)
+        ->from(route('documents.show', $document))
+        ->get(route('documents.receipt.prepare-transaction', $document))
+        ->assertRedirect(route('documents.show', $document))
+        ->assertSessionHas('error', 'Dieser Beleg ist bereits mit einer Buchung verknüpft und kann nicht noch einmal gebucht werden.');
+
+    $this->actingAs($user)
+        ->from(route('transactions.create'))
+        ->post(route('transactions.store'), [
+            'date' => '2026-08-20',
+            'description' => 'Papierladen doppelt',
+            'amount' => 25,
+            'account_from_id' => $bank->id,
+            'account_to_id' => $expense->id,
+            'tax_area' => 'ideell',
+            'status' => 'entwurf',
+            'receipt_document_id' => $document->id,
+        ])
+        ->assertRedirect(route('transactions.create'))
+        ->assertSessionHas('error', 'Dieser Beleg ist bereits mit einer Buchung verknüpft. Es wurde keine zweite Buchung erzeugt.');
+
+    expect(Transaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->count())->toBe(1);
+});
+
+test('updating booked receipt data keeps the receipt booked', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createDocumentReceiptTenant();
+
+    $document = Document::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'uploaded_by' => $user->id,
+        'title' => 'Gebuchter Beleg',
+        'category' => Document::CATEGORY_FINANCE,
+        'status' => Document::STATUS_ACTIVE,
+        'disk' => 'local',
+        'path' => 'documents/gebucht.pdf',
+        'original_name' => 'gebucht.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 100,
+        'is_booking_receipt' => true,
+        'receipt_status' => Document::RECEIPT_BOOKED,
+        'payable_status' => Document::PAYABLE_PAID,
+        'recognized_amount' => 25,
+        'recognized_vendor' => 'Alter Name',
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('documents.receipt.update', $document), [
+            'recognized_amount' => 25,
+            'recognized_currency' => 'EUR',
+            'recognized_date' => '2026-08-19',
+            'recognized_vendor' => 'Korrigierter Name',
+        ])
+        ->assertRedirect();
+
+    expect($document->refresh()->receipt_status)->toBe(Document::RECEIPT_BOOKED)
+        ->and($document->payable_status)->toBe(Document::PAYABLE_PAID)
+        ->and($document->recognized_vendor)->toBe('Korrigierter Name');
+});

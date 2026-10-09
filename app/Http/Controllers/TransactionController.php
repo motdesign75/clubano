@@ -1399,6 +1399,10 @@ class TransactionController extends Controller
                 ->whereKey($validated['receipt_document_id'])
                 ->firstOrFail();
 
+            if ($message = $this->bookingReceiptConflictMessage($document)) {
+                return back()->withInput()->with('error', $message);
+            }
+
             $transaction->receipt_kind = 'document';
             $transaction->receipt_meta = [
                 'document_id' => $document->id,
@@ -1475,6 +1479,15 @@ class TransactionController extends Controller
                 'payable_paid_amount' => $transaction->amount,
                 'updated_at' => now(),
             ]);
+    }
+
+    private function bookingReceiptConflictMessage(Document $document): ?string
+    {
+        if ($document->receipt_status === Document::RECEIPT_BOOKED || $document->linked_transaction_id) {
+            return 'Dieser Beleg ist bereits mit einer Buchung verknüpft. Es wurde keine zweite Buchung erzeugt.';
+        }
+
+        return null;
     }
 
     private function budgetCategoryChoices()

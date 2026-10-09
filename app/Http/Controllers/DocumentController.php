@@ -284,12 +284,17 @@ class DocumentController extends Controller
         $this->authorizeTenant($request, $document);
 
         $validated = $this->validatedReceiptData($request);
+        $receiptStatus = $document->receipt_status === Document::RECEIPT_BOOKED
+            ? Document::RECEIPT_BOOKED
+            : Document::RECEIPT_READY;
 
         $document->update($validated + [
             'is_booking_receipt' => true,
             'category' => Document::CATEGORY_FINANCE,
-            'receipt_status' => Document::RECEIPT_READY,
-            'payable_status' => $this->payableStatusFor($validated, Document::RECEIPT_READY),
+            'receipt_status' => $receiptStatus,
+            'payable_status' => $receiptStatus === Document::RECEIPT_BOOKED
+                ? $document->payable_status
+                : $this->payableStatusFor($validated, Document::RECEIPT_READY),
         ]);
 
         return back()->with('success', 'Belegdaten wurden geprüft. Der Beleg ist jetzt buchbar.');
@@ -301,6 +306,10 @@ class DocumentController extends Controller
 
         if (! $document->is_booking_receipt) {
             return back()->with('error', 'Dieses Dokument ist nicht als Beleg markiert.');
+        }
+
+        if ($document->receipt_status === Document::RECEIPT_BOOKED || $document->linked_transaction_id) {
+            return back()->with('error', 'Dieser Beleg ist bereits mit einer Buchung verknüpft und kann nicht noch einmal gebucht werden.');
         }
 
         return redirect()->route('transactions.create', [
