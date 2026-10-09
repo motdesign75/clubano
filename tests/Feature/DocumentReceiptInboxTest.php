@@ -101,6 +101,47 @@ test('receipt upload mode guides mobile users into the receipt inbox', function 
         ->assertSee('Beleg fotografieren');
 });
 
+test('payable upload mode focuses on incoming invoice recognition', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+    Storage::fake('local');
+
+    [, $user] = createDocumentReceiptTenant();
+
+    $this->actingAs($user)
+        ->get(route('payables.create'))
+        ->assertOk()
+        ->assertSee('Eingangsrechnung hochladen')
+        ->assertSee('Zahlungsempfänger')
+        ->assertSee('Rechnungsnummer')
+        ->assertSee('Betrag')
+        ->assertSee('Fällig am')
+        ->assertSee('Clubano liest Zahlungsempfänger, Rechnungsnummer, Betrag und Fälligkeit aus');
+
+    $file = UploadedFile::fake()->create('Stadtwerke Rechnung RE-998 Gesamt 119,00 EUR fällig 15.09.2026 IBAN DE02120300000000202051.pdf', 120, 'application/pdf');
+
+    $this->actingAs($user)
+        ->post(route('documents.store'), [
+            'source' => 'payables',
+            'title' => 'Stadtwerke September',
+            'category' => Document::CATEGORY_FINANCE,
+            'status' => Document::STATUS_ACTIVE,
+            'is_booking_receipt' => '1',
+            'file' => $file,
+        ])
+        ->assertRedirect(route('payables.index'))
+        ->assertSessionHas('success', 'Eingangsrechnung wurde hochgeladen und zur Zahlung vorbereitet.');
+
+    $document = Document::withoutGlobalScopes()->firstOrFail();
+
+    expect($document->is_booking_receipt)->toBeTrue()
+        ->and($document->category)->toBe(Document::CATEGORY_FINANCE)
+        ->and($document->payable_status)->toBe(Document::PAYABLE_OPEN)
+        ->and((float) $document->recognized_amount)->toBe(119.00)
+        ->and($document->recognized_vendor)->toContain('Stadtwerke')
+        ->and($document->recognized_invoice_number)->toBe('RE-998')
+        ->and($document->payable_due_date->toDateString())->toBe('2026-09-15');
+});
+
 test('receipt recognition prefers the payable total over tax and change amounts', function () {
     $service = app(\App\Services\ReceiptRecognitionService::class);
 

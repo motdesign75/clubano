@@ -94,6 +94,11 @@ class DocumentController extends Controller
         return view('documents.create', $this->formData($request));
     }
 
+    public function createPayable(Request $request)
+    {
+        return view('documents.create', $this->formData($request, receiptMode: true, payableMode: true));
+    }
+
     public function storeFolder(Request $request)
     {
         $tenantId = $request->user()->tenant_id;
@@ -145,6 +150,10 @@ class DocumentController extends Controller
             'mime_type' => $file->getClientMimeType(),
             'size' => $file->getSize(),
         ]));
+
+        if ($request->input('source') === 'payables') {
+            return redirect()->route('payables.index')->with('success', 'Eingangsrechnung wurde hochgeladen und zur Zahlung vorbereitet.');
+        }
 
         return redirect()->route('documents.index')->with('success', filled($receiptData['is_booking_receipt'] ?? false)
             ? 'Beleg wurde abgelegt und in den Beleg-Eingang gelegt.'
@@ -354,13 +363,15 @@ class DocumentController extends Controller
         return redirect()->route('documents.index')->with('success', 'Dokument wurde gelöscht.');
     }
 
-    protected function formData(Request $request): array
+    protected function formData(Request $request, ?bool $receiptMode = null, bool $payableMode = false): array
     {
         $tenantId = $request->user()->tenant_id;
-        $receiptMode = $request->query('type') === 'receipt' || $request->boolean('receipt');
+        $receiptMode ??= $request->query('type') === 'receipt' || $request->boolean('receipt');
+        $payableMode = $payableMode || $request->query('type') === 'payable' || $request->boolean('payable');
 
         return [
             'receiptMode' => $receiptMode,
+            'payableMode' => $payableMode,
             'categories' => Document::categories(),
             'statuses' => collect(Document::statuses())->except(Document::STATUS_ARCHIVED)->all(),
             'folders' => $this->folderOptions($tenantId),

@@ -1,16 +1,21 @@
 @php
     $tagValue = old('tags', $document?->tags ? implode(', ', $document->tags) : '');
     $receiptMode = (bool) ($receiptMode ?? false);
+    $payableMode = (bool) ($payableMode ?? false);
     $isBookingReceipt = (bool) old('is_booking_receipt', $document?->is_booking_receipt ?? $receiptMode);
-    $defaultTitle = $receiptMode ? 'Beleg vom ' . now()->format('d.m.Y') : null;
+    $defaultTitle = $payableMode ? 'Eingangsrechnung vom ' . now()->format('d.m.Y') : ($receiptMode ? 'Beleg vom ' . now()->format('d.m.Y') : null);
 @endphp
 
 <form method="POST" action="{{ $action }}" enctype="multipart/form-data" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
       data-receipt-form
+      data-payable-mode="{{ $payableMode ? '1' : '0' }}"
       data-receipt-recognition-url="{{ route('documents.receipt.recognize') }}">
     @csrf
     @if($method !== 'POST')
         @method($method)
+    @endif
+    @if($payableMode)
+        <input type="hidden" name="source" value="payables">
     @endif
 
     @if ($errors->any())
@@ -25,7 +30,7 @@
                 <label for="title" class="text-sm font-semibold text-slate-900">Titel *</label>
                 <input id="title" name="title" type="text" value="{{ old('title', $document?->title ?? $defaultTitle) }}" required
                        class="mt-2 w-full rounded-lg border-slate-300 text-sm focus:border-slate-500 focus:ring-slate-300"
-                       placeholder="{{ $receiptMode ? 'z. B. Kassenbon Getränkemarkt' : 'z. B. Versicherungspolice 2026' }}">
+                       placeholder="{{ $payableMode ? 'z. B. Rechnung Stadtwerke September' : ($receiptMode ? 'z. B. Kassenbon Getränkemarkt' : 'z. B. Versicherungspolice 2026') }}">
                 @error('title') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
             </div>
 
@@ -39,7 +44,7 @@
         </div>
 
         <aside class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div class="text-sm font-semibold text-slate-900">{{ $receiptMode ? 'Foto oder Datei' : 'Datei' }}</div>
+            <div class="text-sm font-semibold text-slate-900">{{ $payableMode ? 'Rechnung' : ($receiptMode ? 'Foto oder Datei' : 'Datei') }}</div>
             @if($document)
                 <p class="mt-2 text-sm leading-6 text-slate-600">
                     Aktuell: {{ $document->original_name }} · {{ $document->human_size }}
@@ -50,15 +55,15 @@
                    @if($receiptMode && ! $document) capture="environment" @endif
                    class="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white">
             <p class="mt-2 text-xs leading-5 text-slate-500">
-                {{ $receiptMode ? 'Auf dem Handy öffnet sich direkt die Kamera. Alternativ kannst du PDF oder Bild auswählen.' : 'PDF, Bilder und Office-Dateien bis 50 MB.' }}
+                {{ $payableMode ? 'PDF oder Foto der Rechnung. Nach dem Auswählen liest Clubano Zahlungsempfänger, Rechnungsnummer, Betrag und Fälligkeit aus.' : ($receiptMode ? 'Auf dem Handy öffnet sich direkt die Kamera. Alternativ kannst du PDF oder Bild auswählen.' : 'PDF, Bilder und Office-Dateien bis 50 MB.') }}
             </p>
             <div data-receipt-recognition-status class="mt-3 hidden rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-600"></div>
             @error('file') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
         </aside>
     </section>
 
-    <section class="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
-        <label class="flex items-start gap-3">
+    <section class="rounded-2xl border {{ $payableMode ? 'border-sky-200 bg-sky-50/70' : 'border-amber-200 bg-amber-50/70' }} p-4">
+        <label class="flex items-start gap-3 {{ $payableMode ? 'hidden' : '' }}">
             <input type="hidden" name="is_booking_receipt" value="0">
             <input type="checkbox"
                    name="is_booking_receipt"
@@ -72,79 +77,85 @@
                 </span>
             </span>
         </label>
+        @if($payableMode)
+            <input type="hidden" name="is_booking_receipt" value="1">
+            <div class="rounded-xl border border-sky-200 bg-white px-4 py-3 text-sm leading-6 text-sky-900">
+                <strong>Eingangsrechnung:</strong> Clubano füllt die Zahlungsdaten automatisch vor. Bitte prüfe die Werte vor dem Speichern kurz gegen die Rechnung.
+            </div>
+        @endif
 
         <div class="mt-4 grid gap-4 md:grid-cols-4">
             <div>
-                <label for="recognized_amount" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Betrag</label>
+                <label for="recognized_amount" class="text-xs font-semibold uppercase tracking-[0.16em] {{ $payableMode ? 'text-sky-800' : 'text-amber-800' }}">Betrag</label>
                 <input id="recognized_amount" name="recognized_amount" type="number" min="0" step="0.01"
                        value="{{ old('recognized_amount', $document?->recognized_amount) }}"
-                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       class="mt-2 w-full rounded-lg {{ $payableMode ? 'border-sky-200 focus:border-sky-500 focus:ring-sky-400' : 'border-amber-200 focus:border-amber-500 focus:ring-amber-400' }} bg-white text-sm"
                        placeholder="0,00">
             </div>
 
             <div>
-                <label for="recognized_date" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Belegdatum</label>
+                <label for="recognized_date" class="text-xs font-semibold uppercase tracking-[0.16em] {{ $payableMode ? 'text-sky-800' : 'text-amber-800' }}">Rechnungsdatum</label>
                 <input id="recognized_date" name="recognized_date" type="date"
                        value="{{ old('recognized_date', $document?->recognized_date?->format('Y-m-d')) }}"
-                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400">
+                       class="mt-2 w-full rounded-lg {{ $payableMode ? 'border-sky-200 focus:border-sky-500 focus:ring-sky-400' : 'border-amber-200 focus:border-amber-500 focus:ring-amber-400' }} bg-white text-sm">
             </div>
 
             <div>
-                <label for="recognized_vendor" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Empfänger / Lieferant</label>
+                <label for="recognized_vendor" class="text-xs font-semibold uppercase tracking-[0.16em] {{ $payableMode ? 'text-sky-800' : 'text-amber-800' }}">Zahlungsempfänger</label>
                 <input id="recognized_vendor" name="recognized_vendor" type="text"
                        value="{{ old('recognized_vendor', $document?->recognized_vendor) }}"
-                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       class="mt-2 w-full rounded-lg {{ $payableMode ? 'border-sky-200 focus:border-sky-500 focus:ring-sky-400' : 'border-amber-200 focus:border-amber-500 focus:ring-amber-400' }} bg-white text-sm"
                        placeholder="z. B. Stadtwerke">
             </div>
 
             <div>
-                <label for="recognized_invoice_number" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Belegnummer</label>
+                <label for="recognized_invoice_number" class="text-xs font-semibold uppercase tracking-[0.16em] {{ $payableMode ? 'text-sky-800' : 'text-amber-800' }}">Rechnungsnummer</label>
                 <input id="recognized_invoice_number" name="recognized_invoice_number" type="text"
                        value="{{ old('recognized_invoice_number', $document?->recognized_invoice_number) }}"
-                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       class="mt-2 w-full rounded-lg {{ $payableMode ? 'border-sky-200 focus:border-sky-500 focus:ring-sky-400' : 'border-amber-200 focus:border-amber-500 focus:ring-amber-400' }} bg-white text-sm"
                        placeholder="optional">
             </div>
         </div>
 
         <div class="mt-4 grid gap-4 md:grid-cols-4">
             <div>
-                <label for="payable_due_date" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Fällig am</label>
+                <label for="payable_due_date" class="text-xs font-semibold uppercase tracking-[0.16em] {{ $payableMode ? 'text-sky-800' : 'text-amber-800' }}">Fällig am</label>
                 <input id="payable_due_date" name="payable_due_date" type="date"
                        value="{{ old('payable_due_date', $document?->payable_due_date?->format('Y-m-d')) }}"
-                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400">
+                       class="mt-2 w-full rounded-lg {{ $payableMode ? 'border-sky-200 focus:border-sky-500 focus:ring-sky-400' : 'border-amber-200 focus:border-amber-500 focus:ring-amber-400' }} bg-white text-sm">
                 <input type="hidden" name="payable_due_source" value="{{ old('payable_due_source', $document?->payable_due_source ?? 'manual') }}">
             </div>
 
             <div>
-                <label for="payable_iban" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">IBAN</label>
+                <label for="payable_iban" class="text-xs font-semibold uppercase tracking-[0.16em] {{ $payableMode ? 'text-sky-800' : 'text-amber-800' }}">IBAN</label>
                 <input id="payable_iban" name="payable_iban" type="text"
                        value="{{ old('payable_iban', $document?->payable_iban) }}"
-                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       class="mt-2 w-full rounded-lg {{ $payableMode ? 'border-sky-200 focus:border-sky-500 focus:ring-sky-400' : 'border-amber-200 focus:border-amber-500 focus:ring-amber-400' }} bg-white text-sm"
                        placeholder="optional">
             </div>
 
             <div>
-                <label for="payable_reference" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Verwendungszweck</label>
+                <label for="payable_reference" class="text-xs font-semibold uppercase tracking-[0.16em] {{ $payableMode ? 'text-sky-800' : 'text-amber-800' }}">Verwendungszweck</label>
                 <input id="payable_reference" name="payable_reference" type="text"
                        value="{{ old('payable_reference', $document?->payable_reference) }}"
-                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       class="mt-2 w-full rounded-lg {{ $payableMode ? 'border-sky-200 focus:border-sky-500 focus:ring-sky-400' : 'border-amber-200 focus:border-amber-500 focus:ring-amber-400' }} bg-white text-sm"
                        placeholder="optional">
             </div>
 
             <div>
-                <label for="payable_paid_amount" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Bereits bezahlt</label>
+                <label for="payable_paid_amount" class="text-xs font-semibold uppercase tracking-[0.16em] {{ $payableMode ? 'text-sky-800' : 'text-amber-800' }}">Bereits bezahlt</label>
                 <input id="payable_paid_amount" name="payable_paid_amount" type="number" min="0" step="0.01"
                        value="{{ old('payable_paid_amount', $document?->payable_paid_amount) }}"
-                       class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                       class="mt-2 w-full rounded-lg {{ $payableMode ? 'border-sky-200 focus:border-sky-500 focus:ring-sky-400' : 'border-amber-200 focus:border-amber-500 focus:ring-amber-400' }} bg-white text-sm"
                        placeholder="0,00">
             </div>
         </div>
 
         <div class="mt-4">
-            <label for="payable_due_note" class="text-xs font-semibold uppercase tracking-[0.16em] text-amber-800">Hinweis zur Fälligkeit</label>
+            <label for="payable_due_note" class="text-xs font-semibold uppercase tracking-[0.16em] {{ $payableMode ? 'text-sky-800' : 'text-amber-800' }}">Hinweis zur Fälligkeit</label>
             <input id="payable_due_note" name="payable_due_note" type="text"
                    value="{{ old('payable_due_note', $document?->payable_due_note) }}"
-                   class="mt-2 w-full rounded-lg border-amber-200 bg-white text-sm focus:border-amber-500 focus:ring-amber-400"
+                   class="mt-2 w-full rounded-lg {{ $payableMode ? 'border-sky-200 focus:border-sky-500 focus:ring-sky-400' : 'border-amber-200 focus:border-amber-500 focus:ring-amber-400' }} bg-white text-sm"
                    placeholder="z. B. explizit aus Rechnung erkannt oder manuell gesetzt">
         </div>
 
@@ -256,12 +267,12 @@
     </section>
 
     <div class="flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
-        <a href="{{ $document ? route('documents.show', $document) : route('documents.index') }}"
+        <a href="{{ $document ? route('documents.show', $document) : ($payableMode ? route('payables.index') : route('documents.index')) }}"
            class="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">
             Abbrechen
         </a>
         <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-lg bg-slate-950 px-5 text-sm font-semibold text-white hover:bg-slate-800">
-            {{ $document ? 'Dokument speichern' : 'Dokument ablegen' }}
+            {{ $document ? 'Dokument speichern' : ($payableMode ? 'Eingangsrechnung speichern' : 'Dokument ablegen') }}
         </button>
     </div>
 </form>
@@ -275,6 +286,7 @@
                     const receiptCheckbox = form.querySelector('input[name="is_booking_receipt"][value="1"]');
                     const statusBox = form.querySelector('[data-receipt-recognition-status]');
                     const recognitionUrl = form.dataset.receiptRecognitionUrl;
+                    const payableMode = form.dataset.payableMode === '1';
                     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
                     if (!fileInput || !receiptCheckbox || !statusBox || !recognitionUrl) {
@@ -311,6 +323,21 @@
                         return true;
                     };
 
+                    const updateTitleFromRecognition = function (data) {
+                        if (!payableMode) {
+                            return;
+                        }
+
+                        const title = form.querySelector('[name="title"]');
+                        if (!title || title.value.trim() && !title.value.startsWith('Eingangsrechnung vom ')) {
+                            return;
+                        }
+
+                        const vendor = data.recognized_vendor || 'Eingangsrechnung';
+                        const invoiceNumber = data.recognized_invoice_number ? ` ${data.recognized_invoice_number}` : '';
+                        title.value = `${vendor}${invoiceNumber}`.trim();
+                    };
+
                     fileInput.addEventListener('change', async function () {
                         const file = fileInput.files?.[0];
 
@@ -318,7 +345,9 @@
                             return;
                         }
 
-                        showStatus('Clubano liest den Beleg und sucht Betrag, Datum und Händler.', 'loading');
+                        showStatus(payableMode
+                            ? 'Clubano liest die Rechnung und sucht Zahlungsempfänger, Rechnungsnummer, Betrag und Fälligkeit.'
+                            : 'Clubano liest den Beleg und sucht Betrag, Datum und Händler.', 'loading');
 
                         const formData = new FormData();
                         formData.append('file', file);
@@ -349,16 +378,23 @@
                             filledCount += fillField('payable_due_note', data.payable_due_note) ? 1 : 0;
                             filledCount += fillField('payable_iban', data.payable_iban) ? 1 : 0;
                             filledCount += fillField('payable_reference', data.payable_reference) ? 1 : 0;
+                            updateTitleFromRecognition(data);
 
                             if (data.has_amount) {
-                                showStatus('Betrag erkannt. Bitte kurz prüfen und dann speichern.', 'success');
+                                showStatus(payableMode
+                                    ? 'Rechnungsdaten erkannt. Bitte Zahlungsempfänger, Rechnungsnummer, Betrag und Fälligkeit kurz prüfen und speichern.'
+                                    : 'Betrag erkannt. Bitte kurz prüfen und dann speichern.', 'success');
                             } else if (filledCount > 0) {
-                                showStatus('Beleg gelesen, aber kein sicherer Betrag erkannt. Bitte Betrag manuell eintragen.', 'neutral');
+                                showStatus(payableMode
+                                    ? 'Rechnung gelesen, aber kein sicherer Betrag erkannt. Bitte Betrag manuell ergänzen.'
+                                    : 'Beleg gelesen, aber kein sicherer Betrag erkannt. Bitte Betrag manuell eintragen.', 'neutral');
                             } else {
                                 showStatus('Kein sicherer Vorschlag erkannt. Du kannst die Werte manuell ergänzen.', 'neutral');
                             }
                         } catch (error) {
-                            showStatus('Beleg konnte nicht automatisch gelesen werden. Du kannst die Werte manuell eintragen.', 'error');
+                            showStatus(payableMode
+                                ? 'Rechnung konnte nicht automatisch gelesen werden. Du kannst die Zahlungsdaten manuell eintragen.'
+                                : 'Beleg konnte nicht automatisch gelesen werden. Du kannst die Werte manuell eintragen.', 'error');
                         }
                     });
                 });

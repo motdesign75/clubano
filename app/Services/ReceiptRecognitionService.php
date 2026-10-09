@@ -266,6 +266,10 @@ class ReceiptRecognitionService
 
     private function invoiceNumber(string $value): ?string
     {
+        if (preg_match('/\b((?:RE|RG|R|INV|INVOICE)[-_\s]?\d{2,}(?:[-_\/]\d{1,})*)\b/i', $value, $match)) {
+            return Str::upper(preg_replace('/[\s_]+/', '-', trim($match[1])));
+        }
+
         if (preg_match('/(?:rechnung|invoice|beleg|nr|no)[-_.:\s]*([a-z0-9-]{3,30})/i', $value, $match)) {
             return Str::upper($match[1]);
         }

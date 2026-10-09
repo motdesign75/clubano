@@ -6,11 +6,18 @@
 <div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
     <section class="overflow-hidden rounded-2xl bg-slate-950 text-white shadow-sm">
         <div class="bg-[linear-gradient(135deg,#020617_0%,#174151_58%,#1f2937_100%)] px-6 py-7 sm:px-8">
-            <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">Zahlungsübersicht</div>
-            <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Eingangsrechnungen im Blick</h1>
-            <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-300 sm:text-base">
-                Prüfen, fällige Zahlungen planen und bezahlte Belege nachvollziehen. Eine vorgemerkte Rechnung ist noch keine ausgeführte Zahlung.
-            </p>
+            <div class="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">Zahlungsübersicht</div>
+                    <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Eingangsrechnungen im Blick</h1>
+                    <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-300 sm:text-base">
+                        Rechnung hochladen, Zahlungsdaten prüfen, fällige Zahlungen planen und bezahlte Belege nachvollziehen.
+                    </p>
+                </div>
+                <a href="{{ route('payables.create') }}" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-white px-4 text-sm font-semibold text-slate-950 shadow-sm hover:bg-slate-100">
+                    Eingangsrechnung hochladen
+                </a>
+            </div>
         </div>
     </section>
 
