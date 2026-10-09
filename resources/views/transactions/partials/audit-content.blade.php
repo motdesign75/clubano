@@ -177,6 +177,43 @@
         @endforeach
     </section>
 
+    @if(($duplicateTransactionGroups ?? collect())->isNotEmpty())
+        <section class="{{ ($isPdf ?? false) ? 'audit-card' : 'rounded-2xl border border-amber-200 bg-amber-50/70 p-5 shadow-sm' }}">
+            <div class="{{ ($isPdf ?? false) ? '' : 'flex items-start justify-between gap-3' }}">
+                <div>
+                    <h2 class="{{ ($isPdf ?? false) ? '' : 'text-lg font-semibold text-amber-950' }}">Mögliche Doppelbuchungen</h2>
+                    <p class="{{ ($isPdf ?? false) ? 'muted' : 'mt-1 text-sm text-amber-800' }}">
+                        Gleicher Tag, gleicher Betrag und gleiche Konten. Diese Gruppen sollten vor der Kassenprüfung fachlich geprüft werden.
+                    </p>
+                </div>
+                <div class="{{ ($isPdf ?? false) ? '' : 'rounded-full bg-white px-3 py-1 font-mono text-lg font-semibold text-amber-900' }}">{{ $duplicateTransactionGroups->count() }}</div>
+            </div>
+
+            <div class="{{ ($isPdf ?? false) ? '' : 'mt-4 space-y-3' }}">
+                @foreach($duplicateTransactionGroups->take(6) as $group)
+                    <div class="{{ ($isPdf ?? false) ? '' : 'rounded-2xl border border-amber-200 bg-white p-4' }}">
+                        <div class="{{ ($isPdf ?? false) ? '' : 'flex items-start justify-between gap-3' }}">
+                            <div>
+                                <div class="font-semibold text-slate-900">
+                                    {{ optional($group['date'])->format('d.m.Y') ?: 'Ohne Datum' }} · {{ number_format($group['amount'], 2, ',', '.') }} €
+                                </div>
+                                <div class="{{ ($isPdf ?? false) ? 'muted' : 'mt-1 text-xs text-slate-500' }}">
+                                    {{ $group['account_from']->name ?? '—' }} → {{ $group['account_to']->name ?? '—' }}
+                                </div>
+                            </div>
+                            <span class="{{ ($isPdf ?? false) ? '' : 'rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800' }}">{{ $group['count'] }}x</span>
+                        </div>
+                        <div class="{{ ($isPdf ?? false) ? 'muted' : 'mt-2 text-xs text-slate-500' }}">
+                            @foreach($group['transactions']->take(4) as $transaction)
+                                {{ $transaction->receipt_number ?: '#' . $transaction->id }}: {{ $transaction->description }}@if(!$loop->last) · @endif
+                            @endforeach
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </section>
+    @endif
+
     <section class="{{ ($isPdf ?? false) ? '' : 'grid gap-4 lg:grid-cols-2' }}">
         <div class="{{ ($isPdf ?? false) ? 'audit-card' : 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm' }}">
             <h2 class="{{ ($isPdf ?? false) ? '' : 'text-lg font-semibold text-slate-900' }}">Offene Ausgangsrechnungen zum Stichtag</h2>

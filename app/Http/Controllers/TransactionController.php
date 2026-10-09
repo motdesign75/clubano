@@ -1040,6 +1040,7 @@ class TransactionController extends Controller
             ->take(5)
             ->values();
         $categorySummaries = $this->transactionCategorySummaries($transactions);
+        $duplicateTransactionGroups = $this->duplicateTransactionGroups($transactions);
         $today = Carbon::today();
 
         $openInvoices = Invoice::query()
@@ -1110,6 +1111,7 @@ class TransactionController extends Controller
             'pendingTransactions' => $pendingTransactions,
             'missingReceiptTransactions' => $missingReceiptTransactions,
             'categorySummaries' => $categorySummaries,
+            'duplicateTransactionGroups' => $duplicateTransactionGroups,
             'openInvoices' => $openInvoices,
             'overdueInvoices' => $overdueInvoices,
             'dueSoonInvoices' => $dueSoonInvoices,
@@ -1214,6 +1216,7 @@ class TransactionController extends Controller
         $correctionTransactions = $transactions
             ->filter(fn (Transaction $transaction) => $transaction->isCancelled())
             ->values();
+        $duplicateTransactionGroups = $this->duplicateTransactionGroups($transactions);
 
         $openInvoices = Invoice::query()
             ->where('tenant_id', $tenantId)
@@ -1243,7 +1246,8 @@ class TransactionController extends Controller
         $issueCount = $pendingTransactions->count()
             + $missingReceiptTransactions->count()
             + $uncheckedReceiptTransactions->count()
-            + $uncheckedReviewTransactions->count();
+            + $uncheckedReviewTransactions->count()
+            + $duplicateTransactionGroups->count();
 
         return [
             'tenant' => $tenant,
@@ -1263,6 +1267,7 @@ class TransactionController extends Controller
             'uncheckedReceiptTransactions' => $uncheckedReceiptTransactions,
             'uncheckedReviewTransactions' => $uncheckedReviewTransactions,
             'correctionTransactions' => $correctionTransactions,
+            'duplicateTransactionGroups' => $duplicateTransactionGroups,
             'openInvoices' => $openInvoices,
             'openPayables' => $openPayables,
             'issueCount' => $issueCount,
@@ -1578,6 +1583,35 @@ class TransactionController extends Controller
                 ];
             })
             ->sortBy(fn (array $summary) => $summary['name'] === 'Ohne Bereich' ? 'zzzz' : $summary['name'])
+            ->values();
+    }
+
+    private function duplicateTransactionGroups($transactions)
+    {
+        return $transactions
+            ->filter(fn (Transaction $transaction) => ! $transaction->isCancelled())
+            ->groupBy(function (Transaction $transaction) {
+                return implode('|', [
+                    $transaction->date?->toDateString() ?: '',
+                    number_format((float) $transaction->amount, 2, '.', ''),
+                    (int) $transaction->account_from_id,
+                    (int) $transaction->account_to_id,
+                ]);
+            })
+            ->filter(fn ($group) => $group->count() > 1)
+            ->map(function ($group) {
+                $first = $group->first();
+
+                return [
+                    'date' => $first->date,
+                    'amount' => (float) $first->amount,
+                    'account_from' => $first->account_from,
+                    'account_to' => $first->account_to,
+                    'count' => $group->count(),
+                    'transactions' => $group->sortByDesc('id')->values(),
+                ];
+            })
+            ->sortByDesc('count')
             ->values();
     }
 

@@ -8,6 +8,7 @@ use App\Models\Document;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Tenant;
+use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Str;
 
@@ -121,4 +122,63 @@ test('finance summary highlights treasurer work queues', function () {
         ->assertSee('Stadt Sarstedt')
         ->assertSee('Rechnung Getränkemarkt')
         ->assertSee('Vereinsbank');
+});
+
+test('finance summary and audit highlight possible duplicate transactions', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceSummaryTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Vereinsbank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $expense = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '6700',
+        'name' => 'Sommerfest Ausgaben',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    foreach (['Getraenke Sommerfest A', 'Getraenke Sommerfest B'] as $description) {
+        Transaction::withoutGlobalScopes()->create([
+            'tenant_id' => $tenant->id,
+            'created_by' => $user->id,
+            'date' => '2026-08-15',
+            'description' => $description,
+            'amount' => 42.50,
+            'account_from_id' => $bank->id,
+            'account_to_id' => $expense->id,
+            'tax_area' => 'ideell',
+            'status' => 'abgeschlossen',
+            'finalized_at' => now(),
+            'finalized_by' => $user->id,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('transactions.summary'))
+        ->assertOk()
+        ->assertSee('Mögliche Doppelbuchungen')
+        ->assertSee('Gleicher Tag, gleicher Betrag und gleiche Konten')
+        ->assertSee('Sommerfest Ausgaben')
+        ->assertSee('Getraenke Sommerfest A')
+        ->assertSee('Getraenke Sommerfest B')
+        ->assertSee('2x');
+
+    $this->actingAs($user)
+        ->get(route('transactions.audit'))
+        ->assertOk()
+        ->assertSee('Mögliche Doppelbuchungen')
+        ->assertSee('Getraenke Sommerfest A')
+        ->assertSee('Getraenke Sommerfest B');
 });

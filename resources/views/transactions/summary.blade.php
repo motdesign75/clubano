@@ -197,6 +197,54 @@
         </div>
     </section>
 
+    @if(($duplicateTransactionGroups ?? collect())->isNotEmpty())
+        <section class="rounded-2xl border border-amber-200 bg-amber-50/70 p-5 shadow-sm">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-amber-950">Mögliche Doppelbuchungen</h2>
+                    <p class="mt-1 text-sm text-amber-800">
+                        Gleicher Tag, gleicher Betrag und gleiche Konten. Bitte fachlich prüfen, bevor der Abschluss vorbereitet wird.
+                    </p>
+                </div>
+                <span class="rounded-full bg-white px-3 py-1 font-mono text-lg font-semibold text-amber-900">
+                    {{ ($duplicateTransactionGroups ?? collect())->count() }}
+                </span>
+            </div>
+
+            <div class="mt-4 grid gap-3 lg:grid-cols-2">
+                @foreach(($duplicateTransactionGroups ?? collect())->take(4) as $group)
+                    <div class="rounded-2xl border border-amber-200 bg-white p-4">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <div class="font-semibold text-slate-900">
+                                    {{ optional($group['date'])->format('d.m.Y') ?: 'Ohne Datum' }} · {{ number_format($group['amount'], 2, ',', '.') }} €
+                                </div>
+                                <div class="mt-1 text-xs text-slate-500">
+                                    {{ $group['account_from']->name ?? '—' }} → {{ $group['account_to']->name ?? '—' }}
+                                </div>
+                            </div>
+                            <span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                                {{ $group['count'] }}x
+                            </span>
+                        </div>
+
+                        <div class="mt-3 space-y-2">
+                            @foreach($group['transactions']->take(3) as $transaction)
+                                <a href="{{ route('transactions.edit', $transaction) }}" class="block rounded-xl border border-slate-200 px-3 py-2 text-sm hover:border-amber-300">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <span class="truncate font-medium text-slate-900">{{ $transaction->description }}</span>
+                                        <span class="text-xs text-slate-500">{{ $transaction->receipt_number ?: '#' . $transaction->id }}</span>
+                                    </div>
+                                    <div class="mt-1 text-xs text-slate-500">{{ $transaction->status === 'abgeschlossen' ? 'Abgeschlossen' : 'Offen' }}</div>
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </section>
+    @endif
+
     @if(($cashAndBankAccounts ?? collect())->isNotEmpty())
         <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
