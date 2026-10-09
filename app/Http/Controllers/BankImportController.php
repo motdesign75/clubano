@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Account;
 use App\Models\BankImport;
 use App\Models\BankTransaction;
+use App\Models\Document;
 use App\Models\Invoice;
 use App\Models\Transaction;
 use App\Services\BankStatementImportService;
@@ -40,6 +41,7 @@ class BankImportController extends Controller
             ->get();
 
         $invoices = $this->invoiceChoices();
+        $payableDocuments = $this->payableDocumentChoices();
         $manualBookingChoices = Transaction::query()
             ->with(['account_from', 'account_to'])
             ->where('tenant_id', $tenantId)
@@ -93,6 +95,7 @@ class BankImportController extends Controller
             'imports',
             'bankTransactions',
             'invoices',
+            'payableDocuments',
             'summary',
             'status',
             'importId',
@@ -286,7 +289,7 @@ class BankImportController extends Controller
                     ->where('is_postable', true)),
             ],
             'receipt_file' => ['nullable', 'file', 'mimes:jpeg,jpg,png,pdf', 'max:12288'],
-            'receipt_kind' => ['nullable', Rule::in(['none', 'upload', 'vertrag', 'system_invoice'])],
+            'receipt_kind' => ['nullable', Rule::in(['none', 'upload', 'vertrag', 'system_invoice', 'document'])],
             'invoice_id' => [
                 Rule::requiredIf(fn () => $request->input('receipt_kind') === 'system_invoice'),
                 'nullable',
@@ -294,6 +297,14 @@ class BankImportController extends Controller
                     ->where('tenant_id', $tenantId)
                     ->where('document_type', 'invoice')
                     ->whereNotIn('status', ['entwurf', 'storniert'])),
+            ],
+            'payable_document_id' => [
+                Rule::requiredIf(fn () => $request->input('receipt_kind') === 'document'),
+                'nullable',
+                Rule::exists('documents', 'id')->where(fn ($query) => $query
+                    ->where('tenant_id', $tenantId)
+                    ->where('is_booking_receipt', true)
+                    ->whereNull('archived_at')),
             ],
             'contract_reference' => [
                 Rule::requiredIf(fn () => $request->input('receipt_kind') === 'vertrag' && ! $request->hasFile('receipt_file')),
@@ -518,7 +529,17 @@ class BankImportController extends Controller
             'status' => 'entwurf',
         ]);
 
-        if ($bankTransaction->receipt_kind === 'vertrag') {
+        if ($bankTransaction->receipt_kind === 'document') {
+            $transaction->forceFill([
+                'receipt_kind' => 'document',
+                'receipt_meta' => array_filter([
+                    ...($transaction->receipt_meta ?? []),
+                    ...($bankTransaction->receipt_meta ?? []),
+                ]),
+            ])->save();
+
+            $this->syncPayableDocumentFromBankTransaction($bankTransaction, $transaction);
+        } elseif ($bankTransaction->receipt_kind === 'vertrag') {
             $transaction->forceFill([
                 'receipt_kind' => 'vertrag',
                 'receipt_meta' => array_filter([
@@ -566,6 +587,7 @@ class BankImportController extends Controller
 
         $invoice = $this->invoiceFromBankTransaction($bankTransaction);
         $receiptKind = $invoice ? 'system_invoice' : ($bankTransaction->receipt_kind ?: 'bank_import');
+        $previousDocumentId = $bankTransaction->transaction->receipt_meta['document_id'] ?? null;
         $receiptMeta = array_filter([
             ...($bankTransaction->receipt_meta ?? []),
             'source' => 'Bankumsatz-Import',
@@ -597,6 +619,15 @@ class BankImportController extends Controller
             'invoice_id' => $invoice?->id,
             'updated_by' => auth()->id(),
         ])->save();
+
+        $newDocumentId = $receiptMeta['document_id'] ?? null;
+        if ($previousDocumentId && (string) $previousDocumentId !== (string) $newDocumentId) {
+            $this->releasePayableDocument((int) $previousDocumentId, $bankTransaction->transaction->id);
+        }
+
+        if ($bankTransaction->receipt_kind === 'document') {
+            $this->syncPayableDocumentFromBankTransaction($bankTransaction, $bankTransaction->transaction);
+        }
 
         Account::query()
             ->whereIn('id', $affectedAccountIds)
@@ -804,6 +835,43 @@ class BankImportController extends Controller
             ];
         }
 
+        if ($receiptKind === 'document') {
+            app(ReceiptStorage::class)->delete($bankTransaction->receipt_file);
+
+            $document = Document::query()
+                ->where('tenant_id', auth()->user()->tenant_id)
+                ->where('is_booking_receipt', true)
+                ->notArchived()
+                ->whereKey($validated['payable_document_id'])
+                ->firstOrFail();
+
+            if (
+                $document->linked_transaction_id
+                && (! $bankTransaction->transaction_id || (int) $document->linked_transaction_id !== (int) $bankTransaction->transaction_id)
+            ) {
+                abort(422, 'Diese Eingangsrechnung ist bereits mit einer anderen Buchung verknüpft.');
+            }
+
+            return [
+                'receipt_file' => null,
+                'receipt_kind' => 'document',
+                'receipt_meta' => array_filter([
+                    'document_id' => $document->id,
+                    'document_title' => $document->title,
+                    'document_name' => $document->original_name,
+                    'recognized_amount' => filled($document->recognized_amount) ? round((float) $document->recognized_amount, 2) : null,
+                    'recognized_currency' => $document->recognized_currency ?: 'EUR',
+                    'recognized_date' => $document->recognized_date?->toDateString(),
+                    'recognized_vendor' => $document->recognized_vendor,
+                    'recognized_invoice_number' => $document->recognized_invoice_number,
+                    'payable_due_date' => $document->payable_due_date?->toDateString(),
+                    'payable_reference' => $document->payable_reference,
+                    'linked_at' => now()->toIso8601String(),
+                    'linked_by' => auth()->id(),
+                ]),
+            ];
+        }
+
         $receiptFile = $bankTransaction->receipt_file;
         $recognition = [];
 
@@ -855,6 +923,60 @@ class BankImportController extends Controller
         ]);
     }
 
+    private function syncPayableDocumentFromBankTransaction(BankTransaction $bankTransaction, Transaction $transaction): void
+    {
+        $documentId = $bankTransaction->receipt_meta['document_id'] ?? null;
+
+        if (! $documentId) {
+            return;
+        }
+
+        $document = Document::query()
+            ->where('tenant_id', $bankTransaction->tenant_id)
+            ->where('is_booking_receipt', true)
+            ->whereKey($documentId)
+            ->first();
+
+        if (! $document) {
+            return;
+        }
+
+        $paidAmount = round(abs((float) $bankTransaction->amount), 2);
+        $recognizedAmount = filled($document->recognized_amount) ? round((float) $document->recognized_amount, 2) : 0.0;
+        $payableStatus = $recognizedAmount > 0 && $paidAmount + 0.009 >= $recognizedAmount
+            ? Document::PAYABLE_PAID
+            : Document::PAYABLE_PARTIAL;
+
+        $document->update([
+            'receipt_status' => Document::RECEIPT_BOOKED,
+            'payable_status' => $payableStatus,
+            'payable_paid_amount' => $paidAmount,
+            'linked_transaction_id' => $transaction->id,
+        ]);
+    }
+
+    private function releasePayableDocument(int $documentId, int $transactionId): void
+    {
+        $document = Document::query()
+            ->where('tenant_id', auth()->user()->tenant_id)
+            ->whereKey($documentId)
+            ->where('linked_transaction_id', $transactionId)
+            ->first();
+
+        if (! $document) {
+            return;
+        }
+
+        $document->update([
+            'receipt_status' => Document::RECEIPT_READY,
+            'payable_status' => filled($document->recognized_amount)
+                ? Document::PAYABLE_OPEN
+                : Document::PAYABLE_REVIEW,
+            'payable_paid_amount' => null,
+            'linked_transaction_id' => null,
+        ]);
+    }
+
     private function paymentReviewMessage(BankTransaction $bankTransaction): ?string
     {
         $amount = round(abs((float) $bankTransaction->amount), 2);
@@ -866,9 +988,11 @@ class BankImportController extends Controller
             : null;
 
         if ($recognizedAmount !== null) {
+            $label = $bankTransaction->receipt_kind === 'document' ? 'Eingangsrechnung geprüft' : 'Beleg geprüft';
+
             $parts[] = abs($recognizedAmount - $amount) < 0.01
-                ? 'Beleg geprüft: Der erkannte Endbetrag passt zum Bankumsatz. Die Rechnung ist mit diesem Umsatz vollständig bezahlt.'
-                : 'Beleg geprüft: Der erkannte Endbetrag weicht um ' . number_format(abs($recognizedAmount - $amount), 2, ',', '.') . ' € vom Bankumsatz ab. Bitte Rechnung und Zahlung prüfen.';
+                ? $label . ': Der erkannte Endbetrag passt zum Bankumsatz. Die Rechnung ist mit diesem Umsatz vollständig bezahlt.'
+                : $label . ': Der erkannte Endbetrag weicht um ' . number_format(abs($recognizedAmount - $amount), 2, ',', '.') . ' € vom Bankumsatz ab. Bitte Rechnung und Zahlung prüfen.';
         }
 
         if ($bankTransaction->receipt_kind === 'system_invoice') {
@@ -895,6 +1019,23 @@ class BankImportController extends Controller
             ->withSum('payments as paid_amount', 'amount')
             ->orderByDesc('invoice_date')
             ->orderByDesc('id')
+            ->limit(200)
+            ->get();
+    }
+
+    private function payableDocumentChoices()
+    {
+        return Document::query()
+            ->where('tenant_id', auth()->user()->tenant_id)
+            ->where('is_booking_receipt', true)
+            ->notArchived()
+            ->where(function ($query) {
+                $query->whereNull('linked_transaction_id')
+                    ->orWhereIn('payable_status', [Document::PAYABLE_REVIEW, Document::PAYABLE_OPEN, Document::PAYABLE_PARTIAL]);
+            })
+            ->orderByRaw('payable_due_date is null')
+            ->orderBy('payable_due_date')
+            ->latest('updated_at')
             ->limit(200)
             ->get();
     }

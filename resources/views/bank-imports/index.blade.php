@@ -225,6 +225,7 @@
                         ?: 'Bankumsatz ohne Beschreibung';
                     $showPurpose = filled($bankTransaction->purpose) && $bankTransaction->purpose !== $transactionTitle;
                     $selectedInvoiceId = old('invoice_id', $bankTransaction->receipt_meta['invoice_id'] ?? null);
+                    $selectedPayableDocumentId = old('payable_document_id', $bankTransaction->receipt_meta['document_id'] ?? null);
                     $isTrinkwert = $bankTransaction->bankImport?->format === 'TRINKWERT';
                     $trinkwertData = $bankTransaction->raw_data ?? [];
                     $isTrinkwertCreditBalance = $isTrinkwert && !empty($trinkwertData['trinkwert_is_credit_balance_redemption']);
@@ -311,6 +312,8 @@
                                     <div class="mt-1 text-sm font-semibold text-slate-950">
                                         @if($bankTransaction->receipt_kind === 'vertrag')
                                             Vertrag/Dauerbeleg
+                                        @elseif($bankTransaction->receipt_kind === 'document')
+                                            Eingangsrechnung
                                         @elseif($bankTransaction->receipt_kind === 'system_invoice')
                                             Clubano-Rechnung
                                         @elseif($bankTransaction->receipt_file)
@@ -363,6 +366,7 @@
                                         <select name="receipt_kind" class="w-full rounded-xl border-slate-300 bg-white text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                                             <option value="none" @selected(blank($bankTransaction->receipt_kind))>Kein Beleg hinterlegen</option>
                                             <option value="system_invoice" @selected($bankTransaction->receipt_kind === 'system_invoice')>Clubano-Rechnung als Beleg</option>
+                                            <option value="document" @selected($bankTransaction->receipt_kind === 'document')>Eingangsrechnung als Beleg</option>
                                             <option value="upload" @selected($bankTransaction->receipt_kind === 'upload')>Einzelbeleg hochladen</option>
                                             <option value="vertrag" @selected($bankTransaction->receipt_kind === 'vertrag')>Vertrag / Dauerbeleg</option>
                                         </select>
@@ -386,6 +390,28 @@
                                                     @endforeach
                                                 </select>
                                                 <div class="mt-2 hidden rounded-lg border px-3 py-2 text-xs leading-5" data-payment-review></div>
+                                            </div>
+
+                                            <div class="rounded-xl border border-sky-200 bg-sky-50 p-3">
+                                                <label class="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-700">Eingangsrechnung auswählen</label>
+                                                <select name="payable_document_id" class="w-full rounded-xl border-sky-200 bg-white text-xs shadow-sm focus:border-sky-600 focus:ring-sky-600" data-payable-select>
+                                                    <option value="">Keine Eingangsrechnung verknüpfen</option>
+                                                    @foreach($payableDocuments as $document)
+                                                        @php
+                                                            $total = filled($document->recognized_amount) ? (float) $document->recognized_amount : 0.0;
+                                                            $remaining = $document->payableRemainingAmount();
+                                                        @endphp
+                                                        <option value="{{ $document->id }}"
+                                                                data-total="{{ number_format($total, 2, '.', '') }}"
+                                                                data-remaining="{{ number_format($remaining, 2, '.', '') }}"
+                                                                @selected((string) $selectedPayableDocumentId === (string) $document->id)>
+                                                            {{ $document->recognized_vendor ?: $document->title }} · {{ $document->recognized_invoice_number ?: $document->original_name }} · {{ number_format($remaining, 2, ',', '.') }} € offen
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                <p class="mt-2 text-xs leading-5 text-sky-800">
+                                                    Nutze das für hochgeladene Eingangsrechnungen. Beim Buchen wird der Beleg mit der Buchung verbunden und der Zahlungsstand aktualisiert.
+                                                </p>
                                             </div>
 
                                             <input name="receipt_file" type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-semibold file:text-slate-700">
@@ -505,8 +531,9 @@
         const updatePaymentReview = (form) => {
             const output = form.querySelector('[data-payment-review]');
             const select = form.querySelector('[data-invoice-select]');
+            const payableSelect = form.querySelector('[data-payable-select]');
 
-            if (! output || ! select) {
+            if (! output || ! select || ! payableSelect) {
                 return;
             }
 
@@ -514,6 +541,8 @@
             const recognizedAmount = Number.parseFloat(form.dataset.recognizedAmount || '');
             const selected = select.selectedOptions[0];
             const remaining = Number.parseFloat(selected?.dataset.remaining || '');
+            const selectedPayable = payableSelect.selectedOptions[0];
+            const payableRemaining = Number.parseFloat(selectedPayable?.dataset.remaining || '');
             const messages = [];
             let hasWarning = false;
 
@@ -539,6 +568,17 @@
                 }
             }
 
+            if (selectedPayable?.value && ! Number.isNaN(payableRemaining)) {
+                const diff = Math.abs(payableRemaining - bankAmount);
+
+                if (diff < 0.01) {
+                    messages.push('Eingangsrechnung passt: Der offene Endbetrag wird vollständig bezahlt.');
+                } else {
+                    messages.push(`Eingangsrechnung prüfen: offen ${formatEuro(payableRemaining)}, Bankumsatz ${formatEuro(bankAmount)}.`);
+                    hasWarning = true;
+                }
+            }
+
             if (messages.length === 0) {
                 output.classList.add('hidden');
                 output.textContent = '';
@@ -555,7 +595,7 @@
         document.querySelectorAll('[data-payment-review-form]').forEach(updatePaymentReview);
 
         document.addEventListener('change', (event) => {
-            const select = event.target.closest('[data-invoice-select]');
+            const select = event.target.closest('[data-invoice-select], [data-payable-select]');
 
             if (! select) {
                 return;

@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Account;
 use App\Models\BankImport;
 use App\Models\BankTransaction;
+use App\Models\Document;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Tenant;
@@ -1217,6 +1218,113 @@ test('bank transactions can use an existing invoice as internal receipt', functi
     expect($transaction->invoice_id)->toBe($invoice->id);
     expect($transaction->receipt_kind)->toBe('system_invoice');
     expect($transaction->receipt_meta['invoice_number'])->toBe('R-BANK-001');
+});
+
+test('bank transactions can use an existing payable document as receipt and mark it paid', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('payable-document-receipt');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $expenseAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4930',
+        'name' => 'Buerobedarf',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bankAccount->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'bank.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bankAccount->id,
+        'booking_date' => '2026-10-05',
+        'amount' => -119,
+        'currency' => 'EUR',
+        'direction' => 'debit',
+        'counterparty_name' => 'Stadtwerke',
+        'purpose' => 'RE-998',
+        'fingerprint' => 'payable-document-bank-transaction',
+        'status' => BankTransaction::STATUS_PENDING,
+    ]);
+
+    $document = Document::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'uploaded_by' => $user->id,
+        'title' => 'Stadtwerke September',
+        'category' => Document::CATEGORY_FINANCE,
+        'status' => Document::STATUS_ACTIVE,
+        'disk' => 'local',
+        'path' => 'documents/stadtwerke.pdf',
+        'original_name' => 'stadtwerke.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 100,
+        'is_booking_receipt' => true,
+        'receipt_status' => Document::RECEIPT_READY,
+        'payable_status' => Document::PAYABLE_OPEN,
+        'recognized_amount' => 119,
+        'recognized_currency' => 'EUR',
+        'recognized_date' => '2026-10-01',
+        'recognized_vendor' => 'Stadtwerke',
+        'recognized_invoice_number' => 'RE-998',
+        'payable_due_date' => '2026-10-15',
+        'payable_reference' => 'RE-998',
+    ]);
+
+    $this->actingAs($user)
+        ->patch(route('bank-imports.transactions.update', $bankTransaction), [
+            'source_account_id' => $bankAccount->id,
+            'selected_account_id' => $expenseAccount->id,
+            'receipt_kind' => 'document',
+            'payable_document_id' => $document->id,
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('success', fn (string $message) => str_contains($message, 'Eingangsrechnung geprüft')
+            && str_contains($message, 'vollständig bezahlt'));
+
+    $bankTransaction->refresh();
+
+    expect($bankTransaction->receipt_kind)->toBe('document')
+        ->and($bankTransaction->receipt_meta['document_id'])->toBe($document->id)
+        ->and($bankTransaction->status)->toBe(BankTransaction::STATUS_READY);
+
+    $this->actingAs($user)
+        ->post(route('bank-imports.transactions.book', $bankTransaction))
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    $transaction = Transaction::withoutGlobalScopes()
+        ->where('tenant_id', $tenant->id)
+        ->firstOrFail();
+
+    expect($transaction->receipt_kind)->toBe('document')
+        ->and($transaction->receipt_meta['document_id'])->toBe($document->id)
+        ->and($document->refresh()->receipt_status)->toBe(Document::RECEIPT_BOOKED)
+        ->and($document->payable_status)->toBe(Document::PAYABLE_PAID)
+        ->and((float) $document->payable_paid_amount)->toBe(119.00)
+        ->and($document->linked_transaction_id)->toBe($transaction->id);
 });
 
 test('bank imports relink existing invoice payment bookings instead of duplicating them', function () {
