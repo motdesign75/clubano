@@ -96,6 +96,59 @@
         </div>
     @endif
 
+    <section class="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <div class="rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-6 shadow-sm">
+            <div class="flex items-start gap-4">
+                <div class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white">
+                    <x-heroicon-o-sparkles class="size-6" />
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-[0.22em] text-blue-700">Bankimport-Assistent</div>
+                    <h2 class="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Fast wie Bank-Sync, nur ohne laufende Anbietergebühren.</h2>
+                    <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                        Lade den Export deiner Bank hoch. Clubano prüft Dubletten, erkennt vorhandene Buchungen wieder und schlägt passende Clubano-Rechnungen oder hochgeladene Eingangsrechnungen vor.
+                    </p>
+                </div>
+            </div>
+
+            <div class="mt-6 grid gap-3 md:grid-cols-3">
+                <div class="rounded-2xl border border-white bg-white/80 p-4 shadow-sm">
+                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">1. Export</div>
+                    <div class="mt-2 text-sm font-semibold text-slate-950">CAMT, MT940 oder CSV aus dem Onlinebanking laden.</div>
+                </div>
+                <div class="rounded-2xl border border-white bg-white/80 p-4 shadow-sm">
+                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">2. Prüfung</div>
+                    <div class="mt-2 text-sm font-semibold text-slate-950">Rechnungen, Belege und Dubletten werden vorgeschlagen.</div>
+                </div>
+                <div class="rounded-2xl border border-white bg-white/80 p-4 shadow-sm">
+                    <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">3. Buchen</div>
+                    <div class="mt-2 text-sm font-semibold text-slate-950">Du bestätigst nur noch, was fachlich passt.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 class="text-xl font-semibold text-slate-950">Worauf Clubano achtet</h2>
+            <dl class="mt-5 grid gap-3">
+                <div class="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+                    <dt class="text-sm font-semibold text-slate-700">Offene Clubano-Rechnungen</dt>
+                    <dd class="text-xl font-semibold text-slate-950">{{ $assistantStats['open_invoices'] }}</dd>
+                </div>
+                <div class="flex items-center justify-between gap-4 rounded-2xl bg-slate-50 px-4 py-3">
+                    <dt class="text-sm font-semibold text-slate-700">Offene Eingangsrechnungen</dt>
+                    <dd class="text-xl font-semibold text-slate-950">{{ $assistantStats['open_payables'] }}</dd>
+                </div>
+                <div class="flex items-center justify-between gap-4 rounded-2xl bg-emerald-50 px-4 py-3">
+                    <dt class="text-sm font-semibold text-emerald-800">Aktive Belegvorschläge</dt>
+                    <dd class="text-xl font-semibold text-emerald-900">{{ $assistantStats['suggested_receipts'] }}</dd>
+                </div>
+            </dl>
+            <p class="mt-4 text-xs leading-5 text-slate-500">
+                Eine echte Bankanbindung bleibt später möglich. Bis dahin spart dieser Import-Assistent Kosten und hält dich trotzdem nah an einer aktuellen Buchhaltung.
+            </p>
+        </div>
+    </section>
+
     <section class="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <form method="POST" action="{{ route('bank-imports.store') }}" enctype="multipart/form-data" class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             @csrf
@@ -148,6 +201,10 @@
             <h2 class="text-xl font-semibold text-slate-950">Letzte Importe</h2>
             <div class="mt-4 space-y-3">
                 @forelse($imports as $import)
+                    @php
+                        $suggestionCount = (int) ($import->meta['invoice_suggestion_count'] ?? 0)
+                            + (int) ($import->meta['payable_suggestion_count'] ?? 0);
+                    @endphp
                     <div class="rounded-2xl border border-slate-200 px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50">
                         <div class="flex items-start justify-between gap-3">
                             <a href="{{ route('bank-imports.index', ['import' => $import->id, 'status' => 'alle']) }}" class="min-w-0 flex-1">
@@ -159,7 +216,7 @@
                             <div class="shrink-0 text-right text-sm font-semibold text-slate-900">{{ $import->imported_count }}</div>
                         </div>
                         <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="text-xs text-slate-500">{{ $import->duplicate_count }} Dubletten, {{ $import->booked_count }} gebucht</div>
+                            <div class="text-xs text-slate-500">{{ $import->duplicate_count }} Dubletten, {{ $import->booked_count }} gebucht, {{ $suggestionCount }} Vorschläge</div>
                             <form method="POST"
                                   action="{{ route('bank-imports.destroy', $import) }}"
                                   onsubmit="return confirm('Diesen Import wirklich löschen? Bereits erzeugte Buchungen bleiben erhalten.');">

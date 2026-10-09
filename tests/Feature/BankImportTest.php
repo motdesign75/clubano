@@ -1402,3 +1402,128 @@ test('bank imports relink existing invoice payment bookings instead of duplicati
     expect($bankTransaction->transaction_id)->toBe($existingTransaction->id);
     expect($bankTransaction->selected_account_id)->toBe($incomeAccount->id);
 });
+
+test('bank imports suggest matching open clubano invoices automatically', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('invoice-suggestion');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $incomeAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8400',
+        'name' => 'Sommerfest',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'income_account_id' => $incomeAccount->id,
+        'recipient_name' => 'Max Muster',
+        'recipient_email' => 'max@example.test',
+        'invoice_number' => 'R-AUTO-001',
+        'invoice_date' => '2026-10-01',
+        'due_date' => '2026-10-15',
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Sommerfest',
+        'quantity' => 1,
+        'unit_price' => 125,
+        'tax_rate' => 0,
+    ]);
+
+    $csv = "Buchungstag;Betrag;Währung;Name;Verwendungszweck;Referenz\n"
+        . "08.10.2026;125,00;EUR;Max Muster;Zahlung Rechnung R-AUTO-001;AUTO-001\n";
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $bankAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('volksbank.csv', $csv),
+    ])->assertRedirect()
+        ->assertSessionHas('success', fn (string $message) => str_contains($message, 'Clubano-Rechnung(en) wurden erkannt'));
+
+    $bankImport = BankImport::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+
+    expect($bankImport->meta['invoice_suggestion_count'])->toBe(1);
+    expect($bankTransaction->status)->toBe(BankTransaction::STATUS_READY);
+    expect($bankTransaction->selected_account_id)->toBe($incomeAccount->id);
+    expect($bankTransaction->receipt_kind)->toBe('system_invoice');
+    expect($bankTransaction->receipt_meta['invoice_id'])->toBe($invoice->id);
+    expect($bankTransaction->raw_data['clubano_suggestion'])->toBe('Clubano-Rechnung R-AUTO-001');
+});
+
+test('bank imports suggest matching payable documents automatically', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createFinanceTenant('payable-suggestion');
+
+    $bankAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $document = Document::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'uploaded_by' => $user->id,
+        'title' => 'Stadtwerke Oktober',
+        'category' => Document::CATEGORY_FINANCE,
+        'status' => Document::STATUS_ACTIVE,
+        'disk' => 'local',
+        'path' => 'documents/stadtwerke-oktober.pdf',
+        'original_name' => 'stadtwerke-oktober.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 100,
+        'is_booking_receipt' => true,
+        'receipt_status' => Document::RECEIPT_READY,
+        'payable_status' => Document::PAYABLE_OPEN,
+        'recognized_amount' => 119,
+        'recognized_currency' => 'EUR',
+        'recognized_date' => '2026-10-01',
+        'recognized_vendor' => 'Stadtwerke',
+        'recognized_invoice_number' => 'RE-998',
+        'payable_due_date' => '2026-10-15',
+        'payable_reference' => 'RE-998',
+    ]);
+
+    $csv = "Buchungstag;Betrag;Währung;Name;Verwendungszweck;Referenz\n"
+        . "08.10.2026;-119,00;EUR;Stadtwerke;Rechnung RE-998;SW-998\n";
+
+    $this->actingAs($user)->post(route('bank-imports.store'), [
+        'account_id' => $bankAccount->id,
+        'statement_file' => UploadedFile::fake()->createWithContent('volksbank.csv', $csv),
+    ])->assertRedirect()
+        ->assertSessionHas('success', fn (string $message) => str_contains($message, 'Eingangsrechnung(en) wurden erkannt'));
+
+    $bankImport = BankImport::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+    $bankTransaction = BankTransaction::withoutGlobalScopes()->where('tenant_id', $tenant->id)->firstOrFail();
+
+    expect($bankImport->meta['payable_suggestion_count'])->toBe(1);
+    expect($bankTransaction->status)->toBe(BankTransaction::STATUS_PENDING);
+    expect($bankTransaction->selected_account_id)->toBeNull();
+    expect($bankTransaction->receipt_kind)->toBe('document');
+    expect($bankTransaction->receipt_meta['document_id'])->toBe($document->id);
+    expect($bankTransaction->raw_data['clubano_suggestion'])->toBe('Eingangsrechnung RE-998');
+});

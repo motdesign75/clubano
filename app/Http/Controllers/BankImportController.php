@@ -88,6 +88,14 @@ class BankImportController extends Controller
             'booked' => BankTransaction::where('tenant_id', $tenantId)->where('status', BankTransaction::STATUS_BOOKED)->count(),
             'ignored' => BankTransaction::where('tenant_id', $tenantId)->where('status', BankTransaction::STATUS_IGNORED)->count(),
         ];
+        $assistantStats = [
+            'open_invoices' => $invoices->filter(fn (Invoice $invoice) => $invoice->getRemainingAmount() > 0.009)->count(),
+            'open_payables' => $payableDocuments->filter(fn (Document $document) => $document->payableRemainingAmount() > 0.009)->count(),
+            'suggested_receipts' => BankTransaction::where('tenant_id', $tenantId)
+                ->whereIn('status', [BankTransaction::STATUS_PENDING, BankTransaction::STATUS_READY])
+                ->whereIn('receipt_kind', ['system_invoice', 'document'])
+                ->count(),
+        ];
 
         return view('bank-imports.index', compact(
             'bankAccounts',
@@ -97,6 +105,7 @@ class BankImportController extends Controller
             'invoices',
             'payableDocuments',
             'summary',
+            'assistantStats',
             'status',
             'importId',
             'manualBookingChoices'
@@ -136,6 +145,8 @@ class BankImportController extends Controller
             $duplicates = 0;
             $autoAssigned = 0;
             $existingBookings = 0;
+            $invoiceSuggestions = 0;
+            $payableSuggestions = 0;
             $dates = collect($parsed['rows'])->pluck('booking_date')->filter()->sort()->values();
             $accountsByNumber = Account::query()
                 ->where('tenant_id', $tenantId)
@@ -175,6 +186,14 @@ class BankImportController extends Controller
                         ?: $selectedAccountId;
                 }
 
+                $suggestion = $existingBooking
+                    ? null
+                    : $this->receiptSuggestionForBankRow($tenantId, $row);
+
+                if ($suggestion && ! $selectedAccountId && ! empty($suggestion['selected_account_id'])) {
+                    $selectedAccountId = (int) $suggestion['selected_account_id'];
+                }
+
                 if (BankTransaction::withoutGlobalScopes()
                     ->where('tenant_id', $tenantId)
                     ->where('fingerprint', $fingerprint)
@@ -200,15 +219,25 @@ class BankImportController extends Controller
                     'bank_reference' => $row['bank_reference'],
                     'fingerprint' => $fingerprint,
                     'transaction_id' => $existingBooking?->id,
+                    'receipt_kind' => $suggestion['receipt_kind'] ?? null,
+                    'receipt_meta' => $suggestion['receipt_meta'] ?? null,
                     'status' => $existingBooking
                         ? BankTransaction::STATUS_BOOKED
                         : ($selectedAccountId ? BankTransaction::STATUS_READY : BankTransaction::STATUS_PENDING),
-                    'raw_data' => $row['raw'],
+                    'raw_data' => array_filter([
+                        ...($row['raw'] ?? []),
+                        'clubano_suggestion' => $suggestion['summary'] ?? null,
+                    ]),
                 ]);
 
                 $imported++;
                 if ($existingBooking) {
                     $existingBookings++;
+                }
+                if (($suggestion['receipt_kind'] ?? null) === 'system_invoice') {
+                    $invoiceSuggestions++;
+                } elseif (($suggestion['receipt_kind'] ?? null) === 'document') {
+                    $payableSuggestions++;
                 }
                 if ($selectedAccountId) {
                     $autoAssigned++;
@@ -221,6 +250,8 @@ class BankImportController extends Controller
                 'meta' => array_filter([
                     'auto_assigned_count' => $autoAssigned,
                     'existing_booking_count' => $existingBookings,
+                    'invoice_suggestion_count' => $invoiceSuggestions,
+                    'payable_suggestion_count' => $payableSuggestions,
                     'source' => $parsed['format'] === 'TRINKWERT' ? 'Trinkwert' : null,
                 ]),
                 'booked_count' => $existingBookings,
@@ -229,10 +260,20 @@ class BankImportController extends Controller
 
         $autoAssigned = (int) ($bankImport?->meta['auto_assigned_count'] ?? 0);
         $existingBookings = (int) ($bankImport?->meta['existing_booking_count'] ?? 0);
+        $invoiceSuggestions = (int) ($bankImport?->meta['invoice_suggestion_count'] ?? 0);
+        $payableSuggestions = (int) ($bankImport?->meta['payable_suggestion_count'] ?? 0);
         $message = "{$bankImport->imported_count} Umsätze importiert, {$bankImport->duplicate_count} Dubletten übersprungen.";
 
         if ($autoAssigned > 0) {
             $message .= " {$autoAssigned} Zuordnung(en) wurden aus der Datei vorgeschlagen.";
+        }
+
+        if ($invoiceSuggestions > 0) {
+            $message .= " {$invoiceSuggestions} Clubano-Rechnung(en) wurden erkannt.";
+        }
+
+        if ($payableSuggestions > 0) {
+            $message .= " {$payableSuggestions} Eingangsrechnung(en) wurden erkannt.";
         }
 
         if ($existingBookings > 0) {
@@ -667,6 +708,150 @@ class BankImportController extends Controller
         ]);
 
         return mb_substr(implode(' - ', $parts) ?: 'Bankumsatz importiert', 0, 255);
+    }
+
+    private function receiptSuggestionForBankRow(int $tenantId, array $row): ?array
+    {
+        $amount = round(abs((float) ($row['amount'] ?? 0)), 2);
+
+        if ($amount <= 0) {
+            return null;
+        }
+
+        return ($row['direction'] ?? null) === 'credit'
+            ? $this->invoiceSuggestionForBankRow($tenantId, $row, $amount)
+            : $this->payableSuggestionForBankRow($tenantId, $row, $amount);
+    }
+
+    private function invoiceSuggestionForBankRow(int $tenantId, array $row, float $amount): ?array
+    {
+        $haystack = $this->compactSearchText($row);
+
+        $invoice = Invoice::query()
+            ->where('tenant_id', $tenantId)
+            ->where('document_type', 'invoice')
+            ->whereNotIn('status', ['entwurf', 'storniert', 'paid'])
+            ->with(['items', 'payments'])
+            ->latest('invoice_date')
+            ->latest('id')
+            ->limit(250)
+            ->get()
+            ->first(function (Invoice $invoice) use ($amount, $haystack, $row) {
+                $remaining = $invoice->getRemainingAmount();
+
+                if (abs($remaining - $amount) >= 0.01) {
+                    return false;
+                }
+
+                $invoiceNeedle = $this->compactReference($invoice->invoice_number);
+                if ($invoiceNeedle !== '' && str_contains($haystack, $invoiceNeedle)) {
+                    return true;
+                }
+
+                $recipientNeedle = $this->compactReference($invoice->recipient_name ?: $invoice->recipient_company);
+                $counterparty = $this->compactReference($row['counterparty_name'] ?? null);
+
+                return $recipientNeedle !== ''
+                    && $counterparty !== ''
+                    && (str_contains($counterparty, $recipientNeedle) || str_contains($recipientNeedle, $counterparty));
+            });
+
+        if (! $invoice) {
+            return null;
+        }
+
+        return [
+            'receipt_kind' => 'system_invoice',
+            'selected_account_id' => $invoice->income_account_id,
+            'receipt_meta' => array_filter([
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'invoice_recipient' => $invoice->recipient_name,
+                'invoice_total' => $invoice->getTotal(),
+                'invoice_remaining_amount' => $invoice->getRemainingAmount(),
+                'linked_at' => now()->toIso8601String(),
+                'linked_by' => auth()->id(),
+                'suggested_by' => 'bank_import_assistant',
+            ]),
+            'summary' => 'Clubano-Rechnung ' . $invoice->invoice_number,
+        ];
+    }
+
+    private function payableSuggestionForBankRow(int $tenantId, array $row, float $amount): ?array
+    {
+        $haystack = $this->compactSearchText($row);
+
+        $document = Document::query()
+            ->where('tenant_id', $tenantId)
+            ->where('is_booking_receipt', true)
+            ->notArchived()
+            ->where(function ($query) {
+                $query->whereNull('linked_transaction_id')
+                    ->orWhereIn('payable_status', [Document::PAYABLE_REVIEW, Document::PAYABLE_OPEN, Document::PAYABLE_PARTIAL]);
+            })
+            ->latest('updated_at')
+            ->limit(250)
+            ->get()
+            ->first(function (Document $document) use ($amount, $haystack, $row) {
+                if (abs($document->payableRemainingAmount() - $amount) >= 0.01) {
+                    return false;
+                }
+
+                foreach ([$document->recognized_invoice_number, $document->payable_reference, $document->original_name] as $reference) {
+                    $needle = $this->compactReference($reference);
+
+                    if ($needle !== '' && str_contains($haystack, $needle)) {
+                        return true;
+                    }
+                }
+
+                $vendorNeedle = $this->compactReference($document->recognized_vendor);
+                $counterparty = $this->compactReference($row['counterparty_name'] ?? null);
+
+                return $vendorNeedle !== ''
+                    && $counterparty !== ''
+                    && (str_contains($counterparty, $vendorNeedle) || str_contains($vendorNeedle, $counterparty));
+            });
+
+        if (! $document) {
+            return null;
+        }
+
+        return [
+            'receipt_kind' => 'document',
+            'receipt_meta' => array_filter([
+                'document_id' => $document->id,
+                'document_title' => $document->title,
+                'document_name' => $document->original_name,
+                'recognized_amount' => filled($document->recognized_amount) ? round((float) $document->recognized_amount, 2) : null,
+                'recognized_currency' => $document->recognized_currency ?: 'EUR',
+                'recognized_date' => $document->recognized_date?->toDateString(),
+                'recognized_vendor' => $document->recognized_vendor,
+                'recognized_invoice_number' => $document->recognized_invoice_number,
+                'payable_due_date' => $document->payable_due_date?->toDateString(),
+                'payable_reference' => $document->payable_reference,
+                'linked_at' => now()->toIso8601String(),
+                'linked_by' => auth()->id(),
+                'suggested_by' => 'bank_import_assistant',
+            ]),
+            'summary' => 'Eingangsrechnung ' . ($document->recognized_invoice_number ?: $document->title),
+        ];
+    }
+
+    private function compactSearchText(array $row): string
+    {
+        return $this->compactReference(implode(' ', array_filter([
+            $row['counterparty_name'] ?? null,
+            $row['counterparty_iban'] ?? null,
+            $row['purpose'] ?? null,
+            $row['end_to_end_id'] ?? null,
+            $row['bank_reference'] ?? null,
+        ])));
+    }
+
+    private function compactReference(?string $value): string
+    {
+        return preg_replace('/[^a-z0-9]/', '', Str::lower(Str::ascii((string) $value))) ?: '';
     }
 
     private function matchingImportedTransaction(int $tenantId, int $sourceAccountId, array $row, string $fingerprint): ?Transaction
