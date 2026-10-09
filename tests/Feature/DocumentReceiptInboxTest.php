@@ -139,7 +139,10 @@ test('payable upload mode focuses on incoming invoice recognition', function () 
         ->and((float) $document->recognized_amount)->toBe(119.00)
         ->and($document->recognized_vendor)->toContain('Stadtwerke')
         ->and($document->recognized_invoice_number)->toBe('RE-998')
-        ->and($document->payable_due_date->toDateString())->toBe('2026-09-15');
+        ->and($document->payable_due_date->toDateString())->toBe('2026-09-15')
+        ->and($document->recognition_text)->toContain('Stadtwerke Rechnung')
+        ->and($document->recognition_quality)->toBe('weak')
+        ->and($document->recognition_fields['amount']['raw'])->toBe('119,00 EUR');
 });
 
 test('receipt recognition prefers the payable total over tax and change amounts', function () {
@@ -166,8 +169,11 @@ test('receipt recognition endpoint returns suggestions for the upload form', fun
         ->assertOk()
         ->assertJsonPath('recognized_amount', '89.95')
         ->assertJsonPath('recognized_date', '2026-08-31')
+        ->assertJsonPath('recognition_quality', 'weak')
+        ->assertJsonPath('recognition_fields.amount.raw', '89,95 EUR')
         ->assertJsonPath('has_amount', true)
-        ->assertJsonPath('has_suggestion', true);
+        ->assertJsonPath('has_suggestion', true)
+        ->assertJsonFragment(['recognition_text' => 'Baumarkt Gesamt 89,95 EUR 31.08.2026']);
 });
 
 test('incoming invoices can be tracked with due date and payment details', function () {

@@ -183,6 +183,9 @@ class DocumentController extends Controller
             'payable_reference' => $suggestions['payable_reference'] ?? null,
             'recognition_source' => $suggestions['recognition_source'] ?? null,
             'recognition_notes' => $suggestions['recognition_notes'] ?? null,
+            'recognition_text' => $suggestions['recognition_text'] ?? null,
+            'recognition_quality' => $suggestions['recognition_quality'] ?? null,
+            'recognition_fields' => $suggestions['recognition_fields'] ?? null,
             'has_amount' => filled($suggestions['recognized_amount'] ?? null),
             'has_suggestion' => collect($suggestions)
                 ->only(['recognized_amount', 'recognized_date', 'recognized_vendor', 'recognized_invoice_number'])
@@ -456,6 +459,9 @@ class DocumentController extends Controller
                 'payable_due_note' => null,
                 'payable_iban' => null,
                 'payable_reference' => null,
+                'recognition_text' => null,
+                'recognition_quality' => null,
+                'recognition_fields' => null,
             ];
         }
 
@@ -472,15 +478,25 @@ class DocumentController extends Controller
             ? Document::RECEIPT_READY
             : Document::RECEIPT_NEEDS_REVIEW;
 
-        return $receiptData + [
+        $result = $receiptData + [
             'is_booking_receipt' => true,
             'category' => Document::CATEGORY_FINANCE,
             'receipt_status' => $receiptStatus,
             'payable_status' => $this->payableStatusFor($receiptData, $receiptStatus),
             'recognized_currency' => $receiptData['recognized_currency'] ?? 'EUR',
-            'recognition_source' => $suggestions['recognition_source'] ?? 'Manuell',
-            'recognition_notes' => $suggestions['recognition_notes'] ?? null,
         ];
+
+        if ($file) {
+            $result += [
+                'recognition_source' => $suggestions['recognition_source'] ?? 'Manuell',
+                'recognition_notes' => $suggestions['recognition_notes'] ?? null,
+                'recognition_text' => $suggestions['recognition_text'] ?? null,
+                'recognition_quality' => $suggestions['recognition_quality'] ?? null,
+                'recognition_fields' => $suggestions['recognition_fields'] ?? null,
+            ];
+        }
+
+        return $result;
     }
 
     protected function validatedReceiptData(Request $request, bool $required = true): array

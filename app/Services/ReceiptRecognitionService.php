@@ -26,11 +26,13 @@ class ReceiptRecognitionService
         $text = trim($this->textFromFile($file));
         $source = $text !== '' ? 'OCR/Text' : 'Dateiname';
         $searchableText = trim($readableName . ' ' . $text);
-        $amount = $this->amount($searchableText);
+        $amountAnalysis = $this->amountAnalysis($searchableText);
+        $amount = $amountAnalysis['amount'];
         $date = $this->date($searchableText);
         $vendor = $this->vendor($readableName, $text);
         $invoiceNumber = $this->invoiceNumber($searchableText);
         $due = $this->dueDate($searchableText, $date);
+        $quality = $this->quality($source, $amountAnalysis, $vendor, $invoiceNumber, $due['date']);
 
         return [
             'recognized_amount' => $amount,
@@ -44,7 +46,15 @@ class ReceiptRecognitionService
             'payable_iban' => $this->iban($searchableText),
             'payable_reference' => $this->paymentReference($searchableText, $invoiceNumber),
             'recognition_source' => $source,
-            'recognition_notes' => $this->recognitionNotes($source, $amount, $text),
+            'recognition_notes' => $this->recognitionNotes($source, $amount, $text, $quality),
+            'recognition_text' => $this->recognizedText($readableName, $text),
+            'recognition_quality' => $quality,
+            'recognition_fields' => [
+                'amount' => $amountAnalysis,
+                'vendor' => ['value' => $vendor, 'confidence' => filled($vendor) ? ($text !== '' ? 'medium' : 'weak') : 'missing'],
+                'invoice_number' => ['value' => $invoiceNumber, 'confidence' => filled($invoiceNumber) ? 'medium' : 'missing'],
+                'due_date' => ['value' => $due['date'], 'confidence' => $due['source'] === 'explicit' ? 'strong' : ($due['source'] === 'calculated' ? 'medium' : 'missing')],
+            ],
         ];
     }
 
@@ -101,11 +111,26 @@ class ReceiptRecognitionService
 
     private function amount(string $value): ?float
     {
+        return $this->amountAnalysis($value)['amount'];
+    }
+
+    /**
+     * @return array{amount: ?float, confidence: string, score: int, raw: ?string, context: ?string, candidates: int}
+     */
+    private function amountAnalysis(string $value): array
+    {
         $value = $this->normalizeOcrText($value);
         $value = $this->removeNonAmountNoise($value);
 
         if (blank($value)) {
-            return null;
+            return [
+                'amount' => null,
+                'confidence' => 'missing',
+                'score' => 0,
+                'raw' => null,
+                'context' => null,
+                'candidates' => 0,
+            ];
         }
 
         $candidates = collect();
@@ -118,12 +143,20 @@ class ReceiptRecognitionService
                 $candidates->push($candidate + [
                     'score' => $this->amountScore($context, $candidate),
                     'position' => $index,
+                    'context' => Str::limit($context, 220, ''),
                 ]);
             }
         }
 
         if ($candidates->isEmpty()) {
-            return null;
+            return [
+                'amount' => null,
+                'confidence' => 'missing',
+                'score' => 0,
+                'raw' => null,
+                'context' => null,
+                'candidates' => 0,
+            ];
         }
 
         $best = $candidates
@@ -134,7 +167,20 @@ class ReceiptRecognitionService
             ])
             ->first();
 
-        return $best ? round((float) $best['amount'], 2) : null;
+        $score = (int) ($best['score'] ?? 0);
+
+        return [
+            'amount' => $best ? round((float) $best['amount'], 2) : null,
+            'confidence' => match (true) {
+                $score >= 110 => 'strong',
+                $score >= 55 => 'medium',
+                default => 'weak',
+            },
+            'score' => $score,
+            'raw' => $best['raw'] ?? null,
+            'context' => $best['context'] ?? null,
+            'candidates' => $candidates->count(),
+        ];
     }
 
     private function date(string $value): ?string
@@ -349,8 +395,44 @@ class ReceiptRecognitionService
         return $invoiceNumber;
     }
 
-    private function recognitionNotes(string $source, ?float $amount, string $text): string
+    private function quality(string $source, array $amountAnalysis, ?string $vendor, ?string $invoiceNumber, ?string $dueDate): string
     {
+        if ($source !== 'OCR/Text') {
+            return filled($amountAnalysis['amount'] ?? null) ? 'weak' : 'missing';
+        }
+
+        $score = 0;
+        $score += match ($amountAnalysis['confidence'] ?? 'missing') {
+            'strong' => 4,
+            'medium' => 2,
+            'weak' => 1,
+            default => 0,
+        };
+        $score += filled($vendor) ? 1 : 0;
+        $score += filled($invoiceNumber) ? 1 : 0;
+        $score += filled($dueDate) ? 1 : 0;
+
+        return match (true) {
+            $score >= 6 => 'strong',
+            $score >= 3 => 'medium',
+            $score >= 1 => 'weak',
+            default => 'missing',
+        };
+    }
+
+    private function recognizedText(string $readableName, string $text): string
+    {
+        $recognized = trim($text) !== '' ? trim($text) : trim($readableName);
+
+        return Str::limit($this->normalizeOcrText($recognized), 10000, '');
+    }
+
+    private function recognitionNotes(string $source, ?float $amount, string $text, string $quality): string
+    {
+        if ($source === 'OCR/Text' && filled($amount) && $quality === 'strong') {
+            return 'Rechnungstext wurde gelesen. Betrag und weitere Rechnungsdaten wirken sicher, bitte vor dem Buchen trotzdem kurz prüfen.';
+        }
+
         if ($source === 'OCR/Text' && filled($amount)) {
             return 'Automatischer Vorschlag aus dem Belegtext. Bitte vor dem Buchen prüfen.';
         }

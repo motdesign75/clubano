@@ -58,6 +58,10 @@
                 {{ $payableMode ? 'PDF oder Foto der Rechnung. Nach dem Auswählen liest Clubano Zahlungsempfänger, Rechnungsnummer, Betrag und Fälligkeit aus.' : ($receiptMode ? 'Auf dem Handy öffnet sich direkt die Kamera. Alternativ kannst du PDF oder Bild auswählen.' : 'PDF, Bilder und Office-Dateien bis 50 MB.') }}
             </p>
             <div data-receipt-recognition-status class="mt-3 hidden rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-600"></div>
+            <details data-receipt-recognition-text class="mt-3 {{ filled($document?->recognition_text) ? '' : 'hidden' }} rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-600">
+                <summary class="cursor-pointer font-semibold text-slate-800">Gelesenen Rechnungstext anzeigen</summary>
+                <pre data-receipt-recognition-text-content class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 font-mono text-[11px] leading-5 text-slate-700">{{ $document?->recognition_text }}</pre>
+            </details>
             @error('file') <p class="mt-1 text-sm text-rose-600">{{ $message }}</p> @enderror
         </aside>
     </section>
@@ -80,7 +84,7 @@
         @if($payableMode)
             <input type="hidden" name="is_booking_receipt" value="1">
             <div class="rounded-xl border border-sky-200 bg-white px-4 py-3 text-sm leading-6 text-sky-900">
-                <strong>Eingangsrechnung:</strong> Clubano füllt die Zahlungsdaten automatisch vor. Bitte prüfe die Werte vor dem Speichern kurz gegen die Rechnung.
+                <strong>Eingangsrechnung:</strong> Clubano füllt die Zahlungsdaten automatisch vor. Die Erkennungsqualität wird nach dem Upload angezeigt; bitte prüfe Betrag und Fälligkeit vor dem Speichern kurz gegen die Rechnung.
             </div>
         @endif
 
@@ -285,6 +289,8 @@
                     const fileInput = form.querySelector('input[name="file"]');
                     const receiptCheckbox = form.querySelector('input[name="is_booking_receipt"][value="1"]');
                     const statusBox = form.querySelector('[data-receipt-recognition-status]');
+                    const textDetails = form.querySelector('[data-receipt-recognition-text]');
+                    const textContent = form.querySelector('[data-receipt-recognition-text-content]');
                     const recognitionUrl = form.dataset.receiptRecognitionUrl;
                     const payableMode = form.dataset.payableMode === '1';
                     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
@@ -305,6 +311,24 @@
                         }[tone] || ['border-slate-200', 'bg-white', 'text-slate-600'];
 
                         statusBox.classList.add(...classes);
+                    };
+
+                    const showRecognizedText = function (text) {
+                        if (!textDetails || !textContent || !text) {
+                            return;
+                        }
+
+                        textContent.textContent = text;
+                        textDetails.classList.remove('hidden');
+                    };
+
+                    const qualityLabel = function (quality) {
+                        return {
+                            strong: 'stark',
+                            medium: 'mittel',
+                            weak: 'unsicher',
+                            missing: 'nicht erkannt',
+                        }[quality] || 'unsicher';
                     };
 
                     const fillField = function (name, value) {
@@ -379,11 +403,13 @@
                             filledCount += fillField('payable_iban', data.payable_iban) ? 1 : 0;
                             filledCount += fillField('payable_reference', data.payable_reference) ? 1 : 0;
                             updateTitleFromRecognition(data);
+                            showRecognizedText(data.recognition_text);
 
                             if (data.has_amount) {
+                                const quality = qualityLabel(data.recognition_quality);
                                 showStatus(payableMode
-                                    ? 'Rechnungsdaten erkannt. Bitte Zahlungsempfänger, Rechnungsnummer, Betrag und Fälligkeit kurz prüfen und speichern.'
-                                    : 'Betrag erkannt. Bitte kurz prüfen und dann speichern.', 'success');
+                                    ? `Rechnungsdaten erkannt. Erkennungsqualität: ${quality}. Bitte Zahlungsempfänger, Rechnungsnummer, Betrag und Fälligkeit kurz prüfen und speichern.`
+                                    : `Betrag erkannt. Erkennungsqualität: ${quality}. Bitte kurz prüfen und dann speichern.`, 'success');
                             } else if (filledCount > 0) {
                                 showStatus(payableMode
                                     ? 'Rechnung gelesen, aber kein sicherer Betrag erkannt. Bitte Betrag manuell ergänzen.'

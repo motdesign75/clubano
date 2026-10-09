@@ -72,6 +72,9 @@ class Document extends Model
         'payable_reference',
         'recognition_source',
         'recognition_notes',
+        'recognition_text',
+        'recognition_quality',
+        'recognition_fields',
         'linked_transaction_id',
     ];
 
@@ -85,6 +88,7 @@ class Document extends Model
         'payable_paid_amount' => 'decimal:2',
         'recognized_date' => 'date',
         'payable_due_date' => 'date',
+        'recognition_fields' => 'array',
     ];
 
     protected static function booted(): void
