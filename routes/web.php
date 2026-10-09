@@ -505,6 +505,8 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             Route::post('/transactions/{transaction}/finalize', [$cls, 'finalize'])->name('transactions.finalize');
             Route::post('/transactions/finalize-selected', [$cls, 'finalizeSelected'])->name('transactions.finalize-selected');
             Route::get('/transactions/summary', [$cls, 'summary'])->name('transactions.summary');
+            Route::get('/kassenpruefung', [$cls, 'audit'])->name('transactions.audit');
+            Route::get('/kassenpruefung/pdf', [$cls, 'auditPdf'])->name('transactions.audit.pdf');
             Route::get('/transactions/{transaction}/eigenbeleg', [$cls, 'ownReceipt'])->name('transactions.own-receipt');
             Route::post('/transactions/{transaction}/eigenbeleg', [$cls, 'storeOwnReceipt'])->name('transactions.own-receipt.store');
             Route::get('/transactions/{transaction}/cancel', [$cls, 'cancel'])->name('transactions.cancel');

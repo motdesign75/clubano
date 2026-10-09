@@ -215,6 +215,14 @@
             'minRole' => 'finance',
         ],
         [
+            'label' => 'Kassenprüfung',
+            'hint' => 'Bestände, Belege und offene Prüfpunkte',
+            'route' => route('transactions.audit'),
+            'active' => request()->routeIs('transactions.audit*'),
+            'icon' => 'clipboard-document-check',
+            'minRole' => 'finance',
+        ],
+        [
             'label' => 'Eingangsrechnungen',
             'hint' => 'Fälligkeiten und Zahlungen prüfen',
             'route' => route('payables.index'),

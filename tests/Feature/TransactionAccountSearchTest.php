@@ -192,6 +192,134 @@ test('treasurers can open and download the cashbook print layout', function () {
     expect($response->headers->get('content-type'))->toContain('application/pdf');
 });
 
+test('treasurers can prepare a cash audit with balances and open review points', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Vereinsbank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+        'balance_start' => 100,
+        'balance_current' => 100,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8000',
+        'name' => 'Mitgliedsbeiträge',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $expense = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4930',
+        'name' => 'Bürobedarf',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-01-10',
+        'description' => 'Mitgliedsbeitrag Januar',
+        'amount' => 50,
+        'account_from_id' => $income->id,
+        'account_to_id' => $bank->id,
+        'tax_area' => 'ideell',
+        'status' => 'abgeschlossen',
+        'finalized_at' => now(),
+        'finalized_by' => $user->id,
+    ]);
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-02-05',
+        'description' => 'Druckerpapier',
+        'amount' => 12,
+        'account_from_id' => $bank->id,
+        'account_to_id' => $expense->id,
+        'tax_area' => 'ideell',
+        'receipt_kind' => 'eigenbeleg',
+        'status' => 'entwurf',
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'recipient_type' => 'contact',
+        'recipient_name' => 'Stadt Sarstedt',
+        'recipient_email' => 'amt@example.test',
+        'invoice_number' => 'R-2026-777',
+        'invoice_date' => '2026-02-01',
+        'due_date' => '2026-02-15',
+        'status' => 'open',
+        'tax_rate' => 0,
+        'discount' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Raummiete',
+        'quantity' => 1,
+        'unit' => 'Stk',
+        'unit_price' => 99,
+        'tax_rate' => 0,
+        'discount' => 0,
+    ]);
+
+    Document::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'uploaded_by' => $user->id,
+        'title' => 'Rechnung Getränkemarkt',
+        'category' => Document::CATEGORY_FINANCE,
+        'status' => Document::STATUS_ACTIVE,
+        'disk' => 'local',
+        'path' => 'documents/test/getraenkemarkt.pdf',
+        'original_name' => 'getraenkemarkt.pdf',
+        'mime_type' => 'application/pdf',
+        'size' => 1200,
+        'is_booking_receipt' => true,
+        'receipt_status' => Document::RECEIPT_READY,
+        'recognized_amount' => 42.50,
+        'payable_due_date' => '2026-02-20',
+        'recognized_vendor' => 'Getränkemarkt',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('transactions.audit', ['start' => '2026-01-01', 'end' => '2026-12-31']))
+        ->assertOk()
+        ->assertSee('Kassenprüfung')
+        ->assertSee('Bank und Kasse')
+        ->assertSee('Vereinsbank')
+        ->assertSee('Offene Buchungen')
+        ->assertSee('Fehlende Belege')
+        ->assertSee('Mitgliedsbeitrag Januar')
+        ->assertSee('Druckerpapier')
+        ->assertSee('Stadt Sarstedt')
+        ->assertSee('Rechnung Getränkemarkt');
+
+    $response = $this->actingAs($user)
+        ->get(route('transactions.audit.pdf', ['start' => '2026-01-01', 'end' => '2026-12-31']));
+
+    $response->assertOk();
+    expect($response->headers->get('content-type'))->toContain('application/pdf');
+});
+
 test('editing a transaction recalculates old and new account balances', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

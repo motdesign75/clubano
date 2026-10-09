@@ -1109,6 +1109,167 @@ class TransactionController extends Controller
         ]);
     }
 
+    public function audit(Request $request)
+    {
+        return view('transactions.audit', $this->buildAuditData($request, false));
+    }
+
+    public function auditPdf(Request $request)
+    {
+        $data = $this->buildAuditData($request, true);
+
+        $pdf = Pdf::loadView('transactions.audit', $data)->setPaper('a4', 'portrait');
+
+        return $pdf->download('Kassenpruefung_' . $data['start'] . '_' . $data['end'] . '.pdf');
+    }
+
+    private function buildAuditData(Request $request, bool $isPdf = false): array
+    {
+        $tenantId = auth()->user()->tenant_id;
+        $tenant = auth()->user()->tenant;
+        $start = $request->input('start', Carbon::now()->startOfYear()->format('Y-m-d'));
+        $end = $request->input('end', Carbon::now()->endOfYear()->format('Y-m-d'));
+        $periodStart = Carbon::parse($start)->startOfDay();
+        $periodEnd = Carbon::parse($end)->endOfDay();
+
+        $transactions = Transaction::query()
+            ->where('tenant_id', $tenantId)
+            ->whereBetween('date', [$periodStart->toDateString(), $periodEnd->toDateString()])
+            ->with(['account_from.budgetCategory', 'account_to.budgetCategory', 'budgetCategory', 'creator', 'updater', 'finalizer', 'invoice'])
+            ->orderBy('date')
+            ->orderBy('id')
+            ->get();
+
+        $cashAndBankAccounts = Account::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('type', ['bank', 'kasse'])
+            ->where('active', true)
+            ->orderBy('type')
+            ->orderBy('number')
+            ->get();
+
+        $accountRows = $cashAndBankAccounts->map(function (Account $account) use ($periodStart, $periodEnd) {
+            $openingBalance = $this->accountBalanceAt($account, $periodStart->copy()->subDay()->endOfDay());
+            $periodTransactions = Transaction::query()
+                ->where('tenant_id', $account->tenant_id)
+                ->whereBetween('date', [$periodStart->toDateString(), $periodEnd->toDateString()])
+                ->where(function ($query) use ($account) {
+                    $query->where('account_from_id', $account->id)
+                        ->orWhere('account_to_id', $account->id);
+                })
+                ->get();
+
+            $periodIn = $periodTransactions->where('account_to_id', $account->id)->sum('amount');
+            $periodOut = $periodTransactions->where('account_from_id', $account->id)->sum('amount');
+            $closingBalance = $openingBalance + $periodIn - $periodOut;
+
+            return [
+                'account' => $account,
+                'opening' => round($openingBalance, 2),
+                'in' => round($periodIn, 2),
+                'out' => round($periodOut, 2),
+                'closing' => round($closingBalance, 2),
+                'transaction_count' => $periodTransactions->count(),
+            ];
+        })->values();
+
+        $totalIncome = $transactions
+            ->filter(fn (Transaction $transaction) => $transaction->account_from?->type === 'einnahme')
+            ->sum('amount');
+        $totalExpense = $transactions
+            ->filter(fn (Transaction $transaction) => $transaction->account_to?->type === 'ausgabe')
+            ->sum('amount');
+        $transferTotal = $transactions
+            ->filter(fn (Transaction $transaction) => in_array($transaction->account_from?->type, ['bank', 'kasse'], true)
+                && in_array($transaction->account_to?->type, ['bank', 'kasse'], true))
+            ->sum('amount');
+
+        $pendingTransactions = $transactions
+            ->filter(fn (Transaction $transaction) => ! $transaction->isFinalized())
+            ->values();
+        $missingReceiptTransactions = $transactions
+            ->filter(fn (Transaction $transaction) => ! $transaction->hasAnyReceipt())
+            ->values();
+        $uncheckedReceiptTransactions = $transactions
+            ->filter(fn (Transaction $transaction) => $transaction->isFinalized() && ! $transaction->isJournalReceiptChecked())
+            ->values();
+        $uncheckedReviewTransactions = $transactions
+            ->filter(fn (Transaction $transaction) => $transaction->isFinalized() && ! $transaction->isJournalReviewed())
+            ->values();
+        $correctionTransactions = $transactions
+            ->filter(fn (Transaction $transaction) => $transaction->isCancelled())
+            ->values();
+
+        $openInvoices = Invoice::query()
+            ->where('tenant_id', $tenantId)
+            ->where('document_type', 'invoice')
+            ->where('status', 'open')
+            ->where(function ($query) use ($periodEnd) {
+                $query->whereNull('due_date')
+                    ->orWhereDate('due_date', '<=', $periodEnd->toDateString());
+            })
+            ->with(['items', 'payments'])
+            ->orderBy('due_date')
+            ->get()
+            ->filter(fn (Invoice $invoice) => $invoice->getRemainingAmount() > 0.009)
+            ->values();
+
+        $openPayables = Document::query()
+            ->where('tenant_id', $tenantId)
+            ->where('is_booking_receipt', true)
+            ->notArchived()
+            ->with(['linkedTransaction'])
+            ->orderBy('payable_due_date')
+            ->get()
+            ->filter(fn (Document $document) => ! in_array($document->derivedPayableStatus(), [Document::PAYABLE_PAID, Document::PAYABLE_CANCELLED], true))
+            ->filter(fn (Document $document) => ! $document->payable_due_date || $document->payable_due_date->lte($periodEnd))
+            ->values();
+
+        $issueCount = $pendingTransactions->count()
+            + $missingReceiptTransactions->count()
+            + $uncheckedReceiptTransactions->count()
+            + $uncheckedReviewTransactions->count();
+
+        return [
+            'tenant' => $tenant,
+            'start' => $periodStart->toDateString(),
+            'end' => $periodEnd->toDateString(),
+            'isPdf' => $isPdf,
+            'transactions' => $transactions,
+            'accountRows' => $accountRows,
+            'totalOpening' => $accountRows->sum('opening'),
+            'totalClosing' => $accountRows->sum('closing'),
+            'totalIncome' => $totalIncome,
+            'totalExpense' => $totalExpense,
+            'saldo' => $totalIncome - $totalExpense,
+            'transferTotal' => $transferTotal,
+            'pendingTransactions' => $pendingTransactions,
+            'missingReceiptTransactions' => $missingReceiptTransactions,
+            'uncheckedReceiptTransactions' => $uncheckedReceiptTransactions,
+            'uncheckedReviewTransactions' => $uncheckedReviewTransactions,
+            'correctionTransactions' => $correctionTransactions,
+            'openInvoices' => $openInvoices,
+            'openPayables' => $openPayables,
+            'issueCount' => $issueCount,
+        ];
+    }
+
+    private function accountBalanceAt(Account $account, Carbon $date): float
+    {
+        $sumIn = Transaction::query()
+            ->where('tenant_id', $account->tenant_id)
+            ->where('account_to_id', $account->id)
+            ->whereDate('date', '<=', $date->toDateString())
+            ->sum('amount');
+        $sumOut = Transaction::query()
+            ->where('tenant_id', $account->tenant_id)
+            ->where('account_from_id', $account->id)
+            ->whereDate('date', '<=', $date->toDateString())
+            ->sum('amount');
+
+        return round((float) ($account->balance_start ?? 0) + (float) $sumIn - (float) $sumOut, 2);
+    }
+
     public function journalPdf(Request $request)
     {
         $data = $this->getJournalData($request);
