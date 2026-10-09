@@ -974,3 +974,87 @@ test('draft transaction linked to an invoice pays it only after finalizing', fun
     expect(Payment::query()->where('transaction_id', $transaction->id)->exists())->toBeTrue()
         ->and($invoice->refresh()->status)->toBe('paid');
 });
+
+test('finalizing an invoice transaction is blocked when the invoice is already paid', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8006',
+        'name' => 'Mitgliedsbeiträge',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'document_type' => 'invoice',
+        'income_account_id' => $income->id,
+        'recipient_type' => 'free',
+        'recipient_name' => 'Doppelt Bezahlt',
+        'recipient_email' => 'doppelt@example.test',
+        'invoice_number' => 'R-TRX-003',
+        'invoice_date' => '2026-08-01',
+        'due_date' => '2026-08-15',
+        'status' => 'paid',
+        'paid_at' => now(),
+        'discount' => 0,
+        'tax_rate' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Mitgliedsbeitrag',
+        'quantity' => 1,
+        'unit' => 'Pauschale',
+        'unit_price' => 80,
+    ]);
+
+    Payment::create([
+        'tenant_id' => $tenant->id,
+        'invoice_id' => $invoice->id,
+        'account_id' => $bank->id,
+        'amount' => 80,
+        'payment_date' => '2026-08-10',
+        'note' => 'Bereits gebucht',
+    ]);
+
+    $transaction = Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'date' => '2026-08-10',
+        'description' => 'Zahlung Doppelt Bezahlt',
+        'amount' => 80,
+        'account_from_id' => $income->id,
+        'account_to_id' => $bank->id,
+        'invoice_id' => $invoice->id,
+        'tax_area' => 'ideell',
+        'receipt_kind' => 'system_invoice',
+        'status' => 'entwurf',
+    ]);
+
+    $this->actingAs($user)
+        ->from(route('transactions.index'))
+        ->post(route('transactions.finalize', $transaction))
+        ->assertRedirect(route('transactions.index'))
+        ->assertSessionHas('error', 'Diese Rechnung hat bereits eine passende Zahlung. Es wurde keine zweite Zahlung erzeugt.');
+
+    expect($transaction->refresh()->status)->toBe('entwurf')
+        ->and(Payment::query()->where('transaction_id', $transaction->id)->exists())->toBeFalse()
+        ->and(Payment::query()->where('invoice_id', $invoice->id)->count())->toBe(1);
+});

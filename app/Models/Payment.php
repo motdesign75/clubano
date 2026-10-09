@@ -9,6 +9,11 @@ class Payment extends Model
 {
     use BelongsToTenant;
 
+    protected $casts = [
+        'amount' => 'decimal:2',
+        'payment_date' => 'date',
+    ];
+
     protected $fillable = [
         'tenant_id',
         'invoice_id',

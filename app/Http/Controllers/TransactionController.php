@@ -261,6 +261,10 @@ class TransactionController extends Controller
             return back()->with('success', 'Die Buchung war bereits abgeschlossen.');
         }
 
+        if ($message = $this->invoicePaymentConflictMessage($transaction)) {
+            return back()->with('error', $message);
+        }
+
         $transaction->forceFill([
             'status' => 'abgeschlossen',
             'finalized_at' => now(),
@@ -295,9 +299,15 @@ class TransactionController extends Controller
         }
 
         $finalizedCount = 0;
+        $blockedMessages = [];
 
         foreach ($transactions as $transaction) {
             if ($transaction->isCancelled() || $transaction->isFinalized()) {
+                continue;
+            }
+
+            if ($message = $this->invoicePaymentConflictMessage($transaction)) {
+                $blockedMessages[] = $message;
                 continue;
             }
 
@@ -320,10 +330,15 @@ class TransactionController extends Controller
         }
 
         if ($finalizedCount === 0) {
-            return back()->with('error', 'Keine markierten Buchungen konnten abgeschlossen werden.');
+            return back()->with('error', $blockedMessages[0] ?? 'Keine markierten Buchungen konnten abgeschlossen werden.');
         }
 
-        return back()->with('success', $finalizedCount . ' Buchung(en) wurden abgeschlossen.');
+        $message = $finalizedCount . ' Buchung(en) wurden abgeschlossen.';
+        if ($blockedMessages) {
+            $message .= ' ' . count($blockedMessages) . ' Buchung(en) wurden wegen möglicher Doppelzahlung übersprungen.';
+        }
+
+        return back()->with('success', $message);
     }
 
     public function contractReceiptSelected(Request $request)
@@ -1408,6 +1423,10 @@ class TransactionController extends Controller
             abort(403, 'Ungültige Kontenzuordnung.');
         }
 
+        if ($transaction->isFinalized() && ($message = $this->invoicePaymentConflictMessage($transaction))) {
+            return back()->withInput()->with('error', $message);
+        }
+
         $transaction->save();
 
         if (! blank($validated['receipt_document_id'] ?? null)) {
@@ -1625,6 +1644,57 @@ class TransactionController extends Controller
         );
 
         $this->refreshInvoicePaymentStatus($invoice);
+    }
+
+    private function invoicePaymentConflictMessage(Transaction $transaction): ?string
+    {
+        if (! $transaction->invoice_id) {
+            return null;
+        }
+
+        $invoice = Invoice::query()
+            ->where('tenant_id', $transaction->tenant_id)
+            ->whereKey($transaction->invoice_id)
+            ->with(['items', 'payments'])
+            ->first();
+
+        if (! $invoice || ! $invoice->isInvoice() || in_array($invoice->status, ['entwurf', 'storniert'], true)) {
+            return null;
+        }
+
+        $amount = round((float) $transaction->amount, 2);
+        $paymentAccountId = $this->paymentAccountIdForTransaction($transaction);
+        $paymentDate = $transaction->date?->toDateString();
+
+        $duplicatePayment = $invoice->payments
+            ->first(function (Payment $payment) use ($transaction, $paymentAccountId, $amount, $paymentDate) {
+                if ($transaction->id && (int) $payment->transaction_id === (int) $transaction->id) {
+                    return false;
+                }
+
+                return (int) $payment->account_id === (int) $paymentAccountId
+                    && $payment->payment_date?->toDateString() === $paymentDate
+                    && round((float) $payment->amount, 2) === $amount;
+            });
+
+        if ($duplicatePayment) {
+            return 'Diese Rechnung hat bereits eine passende Zahlung. Es wurde keine zweite Zahlung erzeugt.';
+        }
+
+        $paidWithoutThisTransaction = $invoice->payments
+            ->reject(fn (Payment $payment) => $transaction->id && (int) $payment->transaction_id === (int) $transaction->id)
+            ->sum('amount');
+        $remaining = round(max(0, $invoice->getTotal() - (float) $paidWithoutThisTransaction), 2);
+
+        if ($remaining <= 0.009) {
+            return 'Diese Rechnung ist bereits vollständig bezahlt. Die Buchung wurde nicht abgeschlossen, damit keine Doppelzahlung entsteht.';
+        }
+
+        if ($amount - $remaining > 0.009) {
+            return 'Der Buchungsbetrag ist höher als der offene Rechnungsbetrag von ' . number_format($remaining, 2, ',', '.') . ' EUR. Bitte Betrag oder Zuordnung prüfen.';
+        }
+
+        return null;
     }
 
     private function paymentAccountIdForTransaction(Transaction $transaction): ?int
