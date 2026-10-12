@@ -110,6 +110,27 @@ test('staff can select members and open printable name badges', function () {
         ->assertSee('85 × 55 mm', false);
 });
 
+test('printable name badges are split into printable pages', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'member-name-badge-pages');
+
+    $members = collect(range(1, 9))->map(fn (int $number) => Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Mitglied',
+        'last_name' => (string) $number,
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]));
+
+    $this->actingAs($staff)
+        ->post(route('members.name-badges.print'), [
+            'member_ids' => $members->pluck('id')->all(),
+        ])
+        ->assertOk()
+        ->assertSee('break-after: page')
+        ->assertSeeInOrder(['Mitglied 8', '<main class="sheet">', 'Mitglied 9'], false);
+});
+
 test('viewers cannot access name badge printing', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

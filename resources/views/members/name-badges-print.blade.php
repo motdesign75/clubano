@@ -51,6 +51,13 @@
             gap: 7mm;
             align-items: start;
             justify-content: center;
+            break-after: page;
+            page-break-after: always;
+        }
+
+        .sheet:last-child {
+            break-after: auto;
+            page-break-after: auto;
         }
 
         .badge {
@@ -161,29 +168,31 @@
         <button type="button" onclick="window.print()">Drucken</button>
     </div>
 
-    <main class="sheet">
-        @foreach($members as $member)
-            @php
-                $name = trim(implode(' ', array_filter([$member->first_name, $member->last_name])));
-                $name = $name !== '' ? $name : ($member->full_name ?: ($member->organization ?: 'Ohne Namen'));
-            @endphp
-            <article class="badge">
-                <div class="logo-wrap">
-                    @if($logoUrl)
-                        <img src="{{ $logoUrl }}" alt="{{ $tenantName }}" class="logo">
-                    @else
-                        <div class="logo-placeholder">{{ mb_substr($tenantName, 0, 1) }}</div>
-                    @endif
-                </div>
-                <div class="content">
-                    <div class="club">{{ $tenantName }}</div>
-                    <div class="name">{{ $name }}</div>
-                    @if($member->organization)
-                        <div class="meta">{{ $member->organization }}</div>
-                    @endif
-                </div>
-            </article>
-        @endforeach
-    </main>
+    @foreach($members->chunk(8) as $pageMembers)
+        <main class="sheet">
+            @foreach($pageMembers as $member)
+                @php
+                    $name = trim(implode(' ', array_filter([$member->first_name, $member->last_name])));
+                    $name = $name !== '' ? $name : ($member->full_name ?: ($member->organization ?: 'Ohne Namen'));
+                @endphp
+                <article class="badge">
+                    <div class="logo-wrap">
+                        @if($logoUrl)
+                            <img src="{{ $logoUrl }}" alt="{{ $tenantName }}" class="logo">
+                        @else
+                            <div class="logo-placeholder">{{ mb_substr($tenantName, 0, 1) }}</div>
+                        @endif
+                    </div>
+                    <div class="content">
+                        <div class="club">{{ $tenantName }}</div>
+                        <div class="name">{{ $name }}</div>
+                        @if($member->organization)
+                            <div class="meta">{{ $member->organization }}</div>
+                        @endif
+                    </div>
+                </article>
+            @endforeach
+        </main>
+    @endforeach
 </body>
 </html>
