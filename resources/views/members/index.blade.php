@@ -327,6 +327,10 @@
                        class="inline-flex rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
                         WhatsApp exportieren
                     </a>
+                    <a href="{{ route('members.name-badges', ['member_ids' => $memberIdQuery]) }}"
+                       class="inline-flex rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                        Namensschilder
+                    </a>
                 </div>
             </div>
         </div>

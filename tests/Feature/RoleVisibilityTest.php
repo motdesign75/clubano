@@ -79,6 +79,52 @@ test('members index hides management actions for viewers and shows them for staf
     $staffResponse->assertSee('Archivieren');
 });
 
+test('staff can select members and open printable name badges', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'member-name-badges');
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Mara',
+        'last_name' => 'Muster',
+        'email' => 'mara@example.test',
+        'member_id' => 'M-100',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $this->actingAs($staff)
+        ->get(route('members.name-badges'))
+        ->assertOk()
+        ->assertSee('Namensschilder drucken')
+        ->assertSee('Mara Muster');
+
+    $this->actingAs($staff)
+        ->post(route('members.name-badges.print'), [
+            'member_ids' => [$member->id],
+        ])
+        ->assertOk()
+        ->assertSee('Mara Muster')
+        ->assertSee('85 × 55 mm', false);
+});
+
+test('viewers cannot access name badge printing', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $viewer] = createTenantWithUser(User::ROLE_VIEWER, 'member-name-badges-viewer');
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Vera',
+        'last_name' => 'Viewer',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $this->actingAs($viewer)
+        ->get(route('members.name-badges'))
+        ->assertForbidden();
+});
+
 test('members index search finds organization members without searching their contact person', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 

@@ -528,6 +528,14 @@
                 'active' => request()->routeIs('members.*') || request()->routeIs('contacts.*') || request()->routeIs('data-update-requests.*'),
                 'children' => collect([
                     collect($primaryNav)->firstWhere('label', 'Mitglieder'),
+                    [
+                        'label' => 'Namensschilder',
+                        'hint' => 'Mitglieder auswählen und Schilder drucken',
+                        'route' => route('members.name-badges'),
+                        'active' => request()->routeIs('members.name-badges*'),
+                        'icon' => 'identification',
+                        'minRole' => 'Mitarbeiter',
+                    ],
                     collect($workNav)->firstWhere('label', 'Kontakte & Firmen'),
                     collect($workNav)->firstWhere('label', 'Stammdaten prüfen'),
                 ])->filter()->values()->all(),
@@ -616,8 +624,11 @@
     }
 
     $moduleGroups = collect($moduleGroups)
-        ->map(function ($group) {
-            $group['children'] = collect($group['children'] ?? [])->filter()->values()->all();
+        ->map(function ($group) use ($user) {
+            $group['children'] = collect($group['children'] ?? [])
+                ->filter(fn ($child) => ($user?->hasPermission($child['minRole'] ?? 'Lesen')) ?? false)
+                ->values()
+                ->all();
             $group['route'] = $group['children'][0]['route'] ?? $group['route'];
 
             return $group;

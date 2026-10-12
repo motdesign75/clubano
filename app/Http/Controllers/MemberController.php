@@ -740,6 +740,79 @@ class MemberController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 
+    public function nameBadges(Request $request)
+    {
+        $tenantId = auth()->user()->tenant_id;
+        $search = trim((string) $request->input('search'));
+        $selectedMemberIds = collect(explode(',', (string) $request->input('member_ids')))
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $members = Member::query()
+            ->where('tenant_id', $tenantId)
+            ->notArchived()
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($inner) use ($search) {
+                    $inner->where('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%")
+                        ->orWhere('organization', 'like', "%{$search}%")
+                        ->orWhere('member_id', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+                });
+            })
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->limit(300)
+            ->get();
+
+        return view('members.name-badges', [
+            'members' => $members,
+            'selectedMemberIds' => $selectedMemberIds->all(),
+            'search' => $search,
+        ]);
+    }
+
+    public function printNameBadges(Request $request)
+    {
+        $tenantId = auth()->user()->tenant_id;
+
+        $validated = $request->validate([
+            'member_ids' => ['required', 'array', 'min:1'],
+            'member_ids.*' => [
+                'integer',
+                Rule::exists('members', 'id')->where(fn ($query) => $query
+                    ->where('tenant_id', $tenantId)
+                    ->whereNull('archived_at')),
+            ],
+        ]);
+
+        $memberIds = collect($validated['member_ids'])
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+
+        $members = Member::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', $memberIds)
+            ->notArchived()
+            ->get()
+            ->sortBy(fn (Member $member) => $memberIds->search((int) $member->id))
+            ->values();
+
+        if ($members->isEmpty()) {
+            return redirect()
+                ->route('members.name-badges')
+                ->with('error', 'Bitte wähle mindestens ein Mitglied für Namensschilder aus.');
+        }
+
+        return view('members.name-badges-print', [
+            'members' => $members,
+            'tenant' => auth()->user()->tenant,
+        ]);
+    }
+
     private function authorizeMember(Member $member): void
     {
         abort_if($member->tenant_id !== app('currentTenant')->id, 403, 'Unberechtigter Zugriff.');

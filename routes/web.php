@@ -287,6 +287,8 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::get('/members', [$cls, 'index'])->name('members.index');
         Route::get('/members/bic-lookup', [$cls, 'lookupBic'])->middleware('tenant.role:Mitarbeiter')->name('members.bic-lookup');
         Route::get('/members/communication/export', [$cls, 'communicationExport'])->middleware('tenant.role:Mitarbeiter')->name('members.communication.export');
+        Route::get('/members/name-badges', [$cls, 'nameBadges'])->middleware('tenant.role:Mitarbeiter')->name('members.name-badges');
+        Route::post('/members/name-badges/print', [$cls, 'printNameBadges'])->middleware('tenant.role:Mitarbeiter')->name('members.name-badges.print');
         Route::get('/members/{member}/photo', [$cls, 'photo'])->middleware('tenant.role:Lesen')->name('members.photo');
         Route::get('/members/{member}', [$cls, 'show'])->name('members.show');
         Route::patch('/members/{member}/family-billing', [$cls, 'updateFamilyBilling'])->middleware('tenant.role:Mitarbeiter')->name('members.family-billing.update');
