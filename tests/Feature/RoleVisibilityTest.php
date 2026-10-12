@@ -105,6 +105,8 @@ test('staff can select members and open printable name badges', function () {
         ])
         ->assertOk()
         ->assertSee('Mara Muster')
+        ->assertDontSee('M-100')
+        ->assertDontSee('Mitglied Nr.')
         ->assertSee('85 × 55 mm', false);
 });
 

@@ -180,8 +180,6 @@
                     <div class="name">{{ $name }}</div>
                     @if($member->organization)
                         <div class="meta">{{ $member->organization }}</div>
-                    @elseif($member->member_id)
-                        <div class="meta">Mitglied Nr. {{ $member->member_id }}</div>
                     @endif
                 </div>
             </article>
