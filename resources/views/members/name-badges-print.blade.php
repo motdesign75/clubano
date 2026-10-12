@@ -118,13 +118,15 @@
         .club {
             overflow: hidden;
             color: #64748b;
-            font-size: 8pt;
+            display: -webkit-box;
+            font-size: 6.8pt;
             font-weight: 700;
-            letter-spacing: 0.08em;
-            line-height: 1.2;
-            text-overflow: ellipsis;
+            letter-spacing: 0.04em;
+            line-height: 1.18;
+            max-height: 16pt;
             text-transform: uppercase;
-            white-space: nowrap;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
         }
 
         .name {

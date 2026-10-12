@@ -107,6 +107,8 @@ test('staff can select members and open printable name badges', function () {
         ->assertSee('Mara Muster')
         ->assertDontSee('M-100')
         ->assertDontSee('Mitglied Nr.')
+        ->assertDontSee('text-overflow: ellipsis')
+        ->assertDontSee('white-space: nowrap')
         ->assertSee('85 × 55 mm', false);
 });
 
