@@ -39,7 +39,7 @@
         <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Arbeitsweise</div>
             <div class="mt-2 text-lg font-semibold text-slate-950">Plan, Ist, Abweichung</div>
-            <p class="mt-2 text-sm leading-6 text-slate-600">Keine zweite Buchhaltung. Clubano vergleicht den Plan direkt mit euren abgeschlossenen Buchungen.</p>
+            <p class="mt-2 text-sm leading-6 text-slate-600">Keine zweite Arbeit: Neue Plaene werden aus den Vorjahresbuchungen vorbereitet und danach mit echten Buchungen verglichen.</p>
         </div>
         <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Fuer Vorstand & Kasse</div>

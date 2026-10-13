@@ -306,3 +306,80 @@ test('budget plan area results prefer the transaction category over the account 
         ->assertSee('Veranstaltungen')
         ->assertSee('250,00');
 });
+
+test('new budget plans are prepared from previous year transactions with budget areas', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createBudgetCategoryTenant('prefill');
+
+    $events = BudgetCategory::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Veranstaltungen',
+        'color' => 'amber',
+        'sort_order' => 10,
+        'active' => true,
+    ]);
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Bank',
+        'number' => '1200',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Erlöse Sommerfest',
+        'number' => '8400',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $expense = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Kosten Sommerfest',
+        'number' => '6400',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'date' => '2026-06-01',
+        'description' => 'Sommerfest Verkauf',
+        'amount' => 1200,
+        'account_from_id' => $income->id,
+        'account_to_id' => $bank->id,
+        'budget_category_id' => $events->id,
+        'status' => 'abgeschlossen',
+    ]);
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'date' => '2026-06-02',
+        'description' => 'Sommerfest Einkauf',
+        'amount' => 300,
+        'account_from_id' => $bank->id,
+        'account_to_id' => $expense->id,
+        'budget_category_id' => $events->id,
+        'status' => 'abgeschlossen',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('budgets.create', ['year' => 2027]))
+        ->assertOk()
+        ->assertSee('Aus Buchungen 2026 vorbereitet')
+        ->assertSee('Clubano hat 2 Position(en)')
+        ->assertSee('1200.00')
+        ->assertSee('300.00')
+        ->assertSee('Aus Ist-Buchungen 2026 uebernommen.');
+});

@@ -38,6 +38,8 @@ class BudgetPlanController extends Controller
         $accounts = $this->budgetAccounts();
         $categories = $this->budgetCategories();
         $sourcePlan = null;
+        $targetYear = (int) $request->input('year', now()->addYear()->year);
+        $sourceActualYear = (int) $request->input('from_actual_year', $targetYear - 1);
 
         if ($request->filled('copy_from')) {
             $sourcePlan = BudgetPlan::query()
@@ -46,13 +48,24 @@ class BudgetPlanController extends Controller
         }
 
         $plan = new BudgetPlan([
-            'year' => (int) $request->input('year', now()->addYear()->year),
-            'title' => 'Haushaltsplan ' . $request->input('year', now()->addYear()->year),
+            'year' => $targetYear,
+            'title' => 'Haushaltsplan ' . $targetYear,
             'status' => 'entwurf',
         ]);
 
-        $items = $sourcePlan
-            ? $sourcePlan->items->map(fn (BudgetPlanItem $item) => [
+        $items = [[
+            'account_id' => '',
+            'budget_category_id' => '',
+            'type' => 'income',
+            'period_amount' => '',
+            'planning_cycle' => 'monthly',
+            'planned_amount' => '',
+            'notes' => '',
+        ]];
+        $actualPrefillCount = 0;
+
+        if ($sourcePlan) {
+            $items = $sourcePlan->items->map(fn (BudgetPlanItem $item) => [
                 'account_id' => $item->account_id,
                 'budget_category_id' => $item->budget_category_id ?: $item->account?->budget_category_id,
                 'type' => $item->type,
@@ -60,20 +73,19 @@ class BudgetPlanController extends Controller
                 'planning_cycle' => $item->planning_cycle ?? 'yearly',
                 'planned_amount' => number_format((float) $item->planned_amount, 2, '.', ''),
                 'notes' => $item->notes,
-            ])->values()->all()
-            : [[
-                'account_id' => '',
-                'budget_category_id' => '',
-                'type' => 'income',
-                'period_amount' => '',
-                'planning_cycle' => 'monthly',
-                'planned_amount' => '',
-                'notes' => '',
-            ]];
+            ])->values()->all();
+        } else {
+            $actualItems = $this->itemsFromActualTransactions($sourceActualYear);
+
+            if ($actualItems !== []) {
+                $items = $actualItems;
+                $actualPrefillCount = count($actualItems);
+            }
+        }
 
         $mode = 'create';
 
-        return view('budgets.form', compact('plan', 'accounts', 'categories', 'items', 'mode', 'sourcePlan'));
+        return view('budgets.form', compact('plan', 'accounts', 'categories', 'items', 'mode', 'sourcePlan', 'sourceActualYear', 'actualPrefillCount'));
     }
 
     public function store(Request $request)
@@ -305,6 +317,74 @@ class BudgetPlanController extends Controller
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
+    }
+
+    protected function itemsFromActualTransactions(int $year): array
+    {
+        return Transaction::query()
+            ->whereYear('date', $year)
+            ->where('status', 'abgeschlossen')
+            ->with(['budgetCategory', 'account_from.budgetCategory', 'account_to.budgetCategory'])
+            ->get()
+            ->map(fn (Transaction $transaction) => $this->plannedItemSeedFromTransaction($transaction, $year))
+            ->filter()
+            ->groupBy(fn (array $item) => $item['account_id'] . ':' . ($item['budget_category_id'] ?? 'none'))
+            ->map(function (Collection $items) use ($year) {
+                $first = $items->first();
+                $total = (float) $items->sum('amount');
+
+                return [
+                    'account_id' => $first['account_id'],
+                    'budget_category_id' => $first['budget_category_id'],
+                    'type' => $first['type'],
+                    'period_amount' => number_format($total, 2, '.', ''),
+                    'planning_cycle' => 'yearly',
+                    'planned_amount' => number_format($total, 2, '.', ''),
+                    'notes' => 'Aus Ist-Buchungen ' . $year . ' uebernommen.',
+                    'sort_key' => $first['sort_key'],
+                ];
+            })
+            ->sortBy('sort_key')
+            ->map(fn (array $item) => collect($item)->except('sort_key')->all())
+            ->values()
+            ->all();
+    }
+
+    protected function plannedItemSeedFromTransaction(Transaction $transaction, int $year): ?array
+    {
+        $account = null;
+        $type = null;
+
+        if ($transaction->account_from?->type === 'einnahme') {
+            $account = $transaction->account_from;
+            $type = 'income';
+        }
+
+        if ($transaction->account_to?->type === 'ausgabe') {
+            $account = $transaction->account_to;
+            $type = 'expense';
+        }
+
+        if (!$account) {
+            return null;
+        }
+
+        $category = $this->categoryForTransaction($transaction);
+        $sortPrefix = $type === 'income' ? '0' : '1';
+
+        return [
+            'account_id' => $account->id,
+            'budget_category_id' => $category?->id ?: $account->budget_category_id,
+            'type' => $type,
+            'amount' => (float) $transaction->amount,
+            'sort_key' => implode('|', [
+                $sortPrefix,
+                $category?->name ?? 'zzzz',
+                $account->number ?? '',
+                $account->name ?? '',
+                $year,
+            ]),
+        ];
     }
 
     protected function actualAmountsForYear(int $year): array

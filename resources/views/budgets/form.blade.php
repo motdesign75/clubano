@@ -50,6 +50,10 @@
                 <div class="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm text-slate-200">
                     Vorlage aus {{ $sourcePlan->year }} uebernommen
                 </div>
+            @elseif(($actualPrefillCount ?? 0) > 0)
+                <div class="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 px-5 py-4 text-sm text-emerald-50">
+                    Aus Buchungen {{ $sourceActualYear }} vorbereitet
+                </div>
             @endif
         </div>
     </section>
@@ -98,6 +102,11 @@
             <aside class="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
                 <p class="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">So bleibt es einfach</p>
                 <div class="mt-4 space-y-3 text-sm leading-6 text-slate-600">
+                    @if(($actualPrefillCount ?? 0) > 0)
+                        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
+                            Clubano hat {{ $actualPrefillCount }} Position(en) aus den abgeschlossenen Buchungen {{ $sourceActualYear }} vorbereitet. Die Werte sind Jahreswerte und koennen fuer {{ $plan->year }} angepasst werden.
+                        </div>
+                    @endif
                     <p>Pro Position ein Bereich und ein Konto. Dadurch bleibt der spaetere Ist-Vergleich sauber.</p>
                     <p>Betrag und Rhythmus reichen. Den Jahreswert rechnet Clubano automatisch hoch.</p>
                     <p>Bereiche zeigen spaeter, wo Ueberschuesse entstehen und wo Defizite drohen.</p>
