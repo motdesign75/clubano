@@ -118,7 +118,8 @@ class BudgetPlanController extends Controller
 
         $pdf = Pdf::loadView('budgets.pdf', array_merge($data, [
             'tenant' => $tenant,
-        ]))->setPaper('a4');
+            'pdfData' => $this->buildPdfData($data['items']),
+        ]))->setPaper('a4', 'landscape');
 
         return $pdf->download('Haushaltsplan_' . $budget->year . '.pdf');
     }
@@ -368,6 +369,135 @@ class BudgetPlanController extends Controller
         $categorySummaries = $this->buildCategorySummaries($items, $actualCategoryTotals);
 
         return compact('budget', 'items', 'summary', 'categorySummaries');
+    }
+
+    protected function buildPdfData(Collection $items): array
+    {
+        $incomeRows = $this->budgetPdfRows($items->where('type', 'income')->values(), 'income');
+        $expenseRows = $this->budgetPdfRows($items->where('type', 'expense')->values(), 'expense');
+        $incomeTotals = $this->budgetPdfTotals($incomeRows);
+        $expenseTotals = $this->budgetPdfTotals($expenseRows);
+
+        $monthly = $this->budgetPdfMonthlySummary($items);
+
+        return [
+            'incomeRows' => $incomeRows,
+            'expenseRows' => $expenseRows,
+            'incomeTotals' => $incomeTotals,
+            'expenseTotals' => $expenseTotals,
+            'quarterResult' => collect(range(0, 3))
+                ->map(fn (int $index) => $incomeTotals['quarters'][$index] - $expenseTotals['quarters'][$index])
+                ->all(),
+            'annualResult' => $incomeTotals['total'] - $expenseTotals['total'],
+            'monthly' => $monthly,
+        ];
+    }
+
+    protected function budgetPdfRows(Collection $items, string $type): array
+    {
+        return $items
+            ->reject(fn (array $item) => $item['is_unplanned_actual'])
+            ->sortBy(fn (array $item) => implode('|', [
+                $item['category_name'],
+                (string) ($item['account']->number ?? ''),
+                (string) ($item['account']->name ?? ''),
+            ]))
+            ->values()
+            ->map(function (array $item, int $index) use ($type) {
+                $total = (float) $item['planned_amount'];
+
+                return [
+                    'number' => $index + 1,
+                    'label' => trim(($item['account']->number ? $item['account']->number . ' - ' : '') . $item['account']->name),
+                    'category' => $item['category_name'],
+                    'quarters' => $this->spreadAmount($total, 4),
+                    'total' => $total,
+                    'type' => $type,
+                ];
+            })
+            ->all();
+    }
+
+    protected function budgetPdfTotals(array $rows): array
+    {
+        $quarters = collect(range(0, 3))
+            ->map(fn (int $index) => collect($rows)->sum(fn (array $row) => $row['quarters'][$index] ?? 0))
+            ->all();
+
+        return [
+            'quarters' => $quarters,
+            'total' => collect($rows)->sum('total'),
+        ];
+    }
+
+    protected function budgetPdfMonthlySummary(Collection $items): array
+    {
+        $months = [
+            'Januar',
+            'Februar',
+            'Maerz',
+            'April',
+            'Mai',
+            'Juni',
+            'Juli',
+            'August',
+            'September',
+            'Oktober',
+            'November',
+            'Dezember',
+        ];
+
+        $incomeByMonth = array_fill(0, 12, 0.0);
+        $expenseByMonth = array_fill(0, 12, 0.0);
+
+        $items
+            ->reject(fn (array $item) => $item['is_unplanned_actual'])
+            ->each(function (array $item) use (&$incomeByMonth, &$expenseByMonth) {
+                $spread = $this->spreadAmount((float) $item['planned_amount'], 12);
+
+                foreach ($spread as $index => $amount) {
+                    if ($item['type'] === 'income') {
+                        $incomeByMonth[$index] += $amount;
+                    } else {
+                        $expenseByMonth[$index] += $amount;
+                    }
+                }
+            });
+
+        $cumulative = 0.0;
+
+        return collect($months)
+            ->map(function (string $month, int $index) use ($incomeByMonth, $expenseByMonth, &$cumulative) {
+                $saldo = $incomeByMonth[$index] - $expenseByMonth[$index];
+                $cumulative += $saldo;
+
+                return [
+                    'month' => $month,
+                    'income' => $incomeByMonth[$index],
+                    'expense' => $expenseByMonth[$index],
+                    'saldo' => $saldo,
+                    'cumulative' => $cumulative,
+                ];
+            })
+            ->all();
+    }
+
+    protected function spreadAmount(float $amount, int $parts): array
+    {
+        if ($parts <= 0) {
+            return [];
+        }
+
+        $base = floor(($amount / $parts) * 100) / 100;
+        $values = array_fill(0, $parts, $base);
+        $remainder = round($amount - ($base * $parts), 2);
+
+        for ($index = 0; $remainder >= 0.01 && $index < $parts; $index++) {
+            $values[$index] = round($values[$index] + 0.01, 2);
+            $remainder = round($remainder - 0.01, 2);
+        }
+
+        return $values;
     }
 
     protected function validatePlan(Request $request, ?BudgetPlan $budget = null): array

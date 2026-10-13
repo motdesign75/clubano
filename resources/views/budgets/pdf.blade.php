@@ -4,190 +4,369 @@
     <meta charset="UTF-8">
     <title>{{ $budget->title }}</title>
     <style>
-        @page { margin: 16mm 14mm 16mm; }
-        body { font-family: DejaVu Sans, sans-serif; font-size: 9.5pt; color: #0f172a; line-height: 1.45; }
-        .header-table, .summary-table, .position-table, .footer-table { width: 100%; border-collapse: collapse; }
-        .header-table td, .footer-table td { vertical-align: top; }
-        .brand { font-size: 18pt; font-weight: bold; }
-        .brand-meta { margin-top: 3mm; font-size: 9pt; color: #475569; }
-        .title { margin: 8mm 0 3mm; font-size: 20pt; font-weight: bold; }
-        .subtitle { font-size: 9pt; color: #64748b; margin-bottom: 7mm; }
-        .summary-grid { margin-top: 5mm; }
-        .summary-box {
-            width: 31.5%;
-            display: inline-block;
-            vertical-align: top;
-            margin-right: 2.3%;
+        @page { margin: 11mm 10mm 12mm; }
+        body {
+            font-family: DejaVu Sans, sans-serif;
+            font-size: 8.6pt;
+            color: #111827;
+            line-height: 1.25;
+        }
+        .title {
+            text-align: center;
+            color: #263f8f;
+            font-size: 20pt;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            margin: 0 0 1mm;
+        }
+        .year {
+            text-align: center;
+            font-size: 12pt;
+            font-weight: 800;
             margin-bottom: 4mm;
-            border: 1px solid #dbe4ff;
-            border-radius: 12px;
-            padding: 10px 11px;
-            box-sizing: border-box;
+        }
+        .meta-table,
+        .budget-table,
+        .overview-table,
+        .signature-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .meta-table td {
+            border: 1px solid #111827;
+            padding: 5px 7px;
+            height: 22px;
+            vertical-align: middle;
+        }
+        .meta-label {
+            width: 13%;
+            font-weight: 800;
             background: #f8fafc;
         }
-        .summary-box:nth-child(3n) { margin-right: 0; }
-        .label { font-size: 7.6pt; font-weight: bold; letter-spacing: 0.16em; text-transform: uppercase; color: #64748b; }
-        .value { margin-top: 2mm; font-size: 15pt; font-weight: bold; }
-        .section-title { margin: 9mm 0 3mm; font-size: 13pt; font-weight: bold; }
-        .section-copy { margin: 0 0 4mm; font-size: 8.7pt; color: #475569; }
-        .category-card { border: 1px solid #dbe4ff; border-radius: 12px; padding: 8px 10px; margin-bottom: 3mm; background: #f8fafc; }
-        .category-title { font-size: 11pt; font-weight: bold; }
-        .category-grid { margin-top: 3mm; }
-        .category-metric { width: 31%; display: inline-block; vertical-align: top; margin-right: 2%; font-size: 8.4pt; }
-        .category-metric:nth-child(3n) { margin-right: 0; }
-        .position-table { border: 1px solid #dbe4ff; border-radius: 12px; overflow: hidden; }
-        .position-table th { padding: 8px 9px; text-align: left; background: #eef2ff; color: #334155; font-size: 7.8pt; font-weight: bold; letter-spacing: 0.12em; text-transform: uppercase; border-bottom: 1px solid #dbe4ff; }
-        .position-table td { padding: 8px 9px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
-        .position-table tr:last-child td { border-bottom: none; }
-        .right { text-align: right; }
-        .note { margin-top: 1.5mm; font-size: 8.3pt; color: #475569; white-space: pre-line; }
-        .footer { margin-top: 10mm; border-top: 1px solid #cbd5e1; padding-top: 3mm; font-size: 8pt; color: #475569; }
+        .meta-value {
+            background: #e6f1f7;
+        }
+        .section-bar {
+            margin-top: 7mm;
+            padding: 8px 0;
+            color: #fff;
+            font-weight: 800;
+            text-align: center;
+            text-transform: uppercase;
+            font-size: 12pt;
+        }
+        .income-bar { background: #16b981; }
+        .expense-bar { background: #ef3f3f; }
+        .blue { background: #263f8f; color: #fff; }
+        .green { background: #16b981; color: #fff; }
+        .red { background: #ef3f3f; color: #fff; }
+        .budget-table th,
+        .budget-table td,
+        .overview-table th,
+        .overview-table td {
+            border: 1px solid #111827;
+            padding: 4px 5px;
+        }
+        .budget-table th,
+        .overview-table th {
+            background: #263f8f;
+            color: #fff;
+            font-weight: 800;
+            text-align: center;
+        }
+        .budget-table tbody tr:nth-child(even) td,
+        .overview-table tbody tr:nth-child(even) td {
+            background: #f1f2f4;
+        }
+        .nr { width: 5%; text-align: center; }
+        .label-col { width: 31%; }
+        .amount { text-align: right; white-space: nowrap; }
+        .category {
+            margin-top: 1px;
+            font-size: 7.2pt;
+            color: #475569;
+        }
+        .sum-row td {
+            font-weight: 800;
+            color: #fff;
+        }
+        .result-row td {
+            font-weight: 800;
+            color: #fff;
+        }
+        .small-note {
+            margin-top: 3mm;
+            color: #475569;
+            font-size: 7.4pt;
+        }
+        .page-break { page-break-before: always; }
+        .overview-title {
+            color: #263f8f;
+            font-size: 18pt;
+            font-weight: 800;
+            text-align: center;
+            text-transform: uppercase;
+            margin-bottom: 5mm;
+        }
+        .overview-wrap {
+            width: 58%;
+        }
+        .chart-row {
+            margin-top: 8mm;
+        }
+        .chart-box {
+            display: inline-block;
+            vertical-align: top;
+            width: 48%;
+            min-height: 72mm;
+            border: 1px solid #94a3b8;
+            padding: 8px 10px;
+            box-sizing: border-box;
+        }
+        .chart-box + .chart-box {
+            margin-left: 2%;
+        }
+        .chart-title {
+            text-align: center;
+            font-size: 14pt;
+            font-weight: 800;
+            margin-bottom: 7mm;
+        }
+        .bar-line {
+            margin-bottom: 5px;
+            font-size: 7.4pt;
+        }
+        .bar-label {
+            display: inline-block;
+            width: 22mm;
+        }
+        .bar-track {
+            display: inline-block;
+            width: 82mm;
+            height: 6px;
+            background: #e5e7eb;
+            vertical-align: middle;
+        }
+        .bar-fill-income { height: 6px; background: #16b981; }
+        .bar-fill-expense { height: 6px; background: #ef3f3f; }
+        .signature-table {
+            margin-top: 8mm;
+        }
+        .signature-table td {
+            width: 33.3%;
+            padding-top: 13mm;
+            border-bottom: 1px solid #111827;
+        }
+        .footer {
+            margin-top: 5mm;
+            font-size: 7pt;
+            color: #475569;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
-    <table class="header-table">
+@php
+    $money = fn ($value) => number_format((float) $value, 2, ',', '.') . ' €';
+    $maxMonthly = max(1, collect($pdfData['monthly'])->max(fn ($row) => max(abs($row['income']), abs($row['expense']), abs($row['saldo']))));
+@endphp
+
+<div class="title">Haushaltsplan fuer Vereine</div>
+<div class="year">Geschaeftsjahr: {{ $budget->year }}</div>
+
+<table class="meta-table">
+    <tr>
+        <td class="meta-label">Verein</td>
+        <td class="meta-value" colspan="3">{{ $tenant->name }}</td>
+        <td class="meta-label">Erstellt am</td>
+        <td class="meta-value amount">{{ now()->format('d.m.Y') }}</td>
+    </tr>
+    <tr>
+        <td class="meta-label">Status</td>
+        <td class="meta-value">{{ $budget->isReleased() ? 'Freigegeben' : 'Entwurf' }}</td>
+        <td class="meta-label">Titel</td>
+        <td class="meta-value" colspan="3">{{ $budget->title }}</td>
+    </tr>
+</table>
+
+@if($budget->notes)
+    <div class="small-note">{{ $budget->notes }}</div>
+@endif
+
+<div class="section-bar income-bar">Einnahmen</div>
+<table class="budget-table">
+    <thead>
         <tr>
-            <td style="width: 68%;">
-                <div class="brand">{{ $tenant->name }}</div>
-                <div class="brand-meta">
-                    {{ $tenant->address }}<br>
-                    {{ $tenant->zip }} {{ $tenant->city }}
-                    @if($tenant->email)<br>{{ $tenant->email }}@endif
-                </div>
-            </td>
-            <td style="width: 32%; text-align: right;">
-                <div class="label">Stand</div>
-                <div style="margin-top: 2mm; font-size: 10pt;">{{ now()->format('d.m.Y H:i') }}</div>
-                <div style="margin-top: 4mm;" class="label">Status</div>
-                <div style="margin-top: 2mm; font-size: 10pt;">{{ $budget->isReleased() ? 'Freigegeben' : 'Entwurf' }}</div>
-            </td>
+            <th class="nr">Nr.</th>
+            <th class="label-col">Einnahmeart</th>
+            <th>Q1 (Jan-Maerz)</th>
+            <th>Q2 (Apr-Jun)</th>
+            <th>Q3 (Jul-Sep)</th>
+            <th>Q4 (Okt-Dez)</th>
+            <th>Gesamt</th>
         </tr>
-    </table>
-
-    <div class="title">{{ $budget->title }}</div>
-    <div class="subtitle">
-        Haushaltsplan fuer das Jahr {{ $budget->year }} mit direktem Vergleich zu den abgeschlossenen Buchungen in Clubano.
-    </div>
-
-    @if($budget->notes)
-        <div style="margin-bottom: 6mm; font-size: 9pt; color: #334155; white-space: pre-line;">{{ $budget->notes }}</div>
-    @endif
-
-    <div class="summary-grid">
-        <div class="summary-box">
-            <div class="label">Plan Einnahmen</div>
-            <div class="value">{{ number_format($summary['planned_income'], 2, ',', '.') }} €</div>
-        </div>
-        <div class="summary-box">
-            <div class="label">Plan Ausgaben</div>
-            <div class="value">{{ number_format($summary['planned_expense'], 2, ',', '.') }} €</div>
-        </div>
-        <div class="summary-box">
-            <div class="label">Plan Ergebnis</div>
-            <div class="value">{{ number_format($summary['planned_result'], 2, ',', '.') }} €</div>
-        </div>
-        <div class="summary-box">
-            <div class="label">Ist Einnahmen</div>
-            <div class="value">{{ number_format($summary['actual_income'], 2, ',', '.') }} €</div>
-        </div>
-        <div class="summary-box">
-            <div class="label">Ist Ausgaben</div>
-            <div class="value">{{ number_format($summary['actual_expense'], 2, ',', '.') }} €</div>
-        </div>
-        <div class="summary-box">
-            <div class="label">Abweichung Ergebnis</div>
-            <div class="value">{{ number_format($summary['variance_result'], 2, ',', '.') }} €</div>
-        </div>
-    </div>
-
-    <div class="section-title">Ergebnis nach Haushaltsbereich</div>
-    <p class="section-copy">
-        Bereiche zeigen, welche Teile des Vereins einen Ueberschuss erwirtschaften und wo ein Defizit entsteht.
-    </p>
-    @forelse($categorySummaries as $group)
-        @php($categorySummary = $group['summary'])
-        <div class="category-card">
-            <div class="category-title">{{ $group['name'] }}</div>
-            <div style="margin-top: 1mm; font-size: 8.2pt; color: #64748b;">{{ $group['items']->count() }} Positionen und Ist-Werte</div>
-            <div class="category-grid">
-                <div class="category-metric">
-                    <div class="label">Plan Ergebnis</div>
-                    <strong>{{ number_format($categorySummary['planned_result'], 2, ',', '.') }} €</strong>
-                </div>
-                <div class="category-metric">
-                    <div class="label">Ist Ergebnis</div>
-                    <strong>{{ number_format($categorySummary['actual_result'], 2, ',', '.') }} €</strong>
-                </div>
-                <div class="category-metric">
-                    <div class="label">Abweichung</div>
-                    <strong>{{ number_format($categorySummary['variance_result'], 2, ',', '.') }} €</strong>
-                </div>
-            </div>
-        </div>
-    @empty
-        <p class="section-copy">Noch keine Bereiche auswertbar.</p>
-    @endforelse
-
-    @foreach (['income' => 'Einnahmen', 'expense' => 'Ausgaben'] as $type => $label)
-        <div class="section-title">{{ $label }}</div>
-        <p class="section-copy">
-            {{ $type === 'income' ? 'Geplante Mittelzufluesse und ihr aktueller Stand im Jahr ' . $budget->year . '.' : 'Geplante Mittelabfluesse und ihre aktuelle Beanspruchung im Jahr ' . $budget->year . '.' }}
-        </p>
-
-        <table class="position-table">
-            <thead>
-                <tr>
-                    <th style="width: 28%;">Konto</th>
-                    <th style="width: 16%;">Bereich</th>
-                    <th style="width: 14%;">Nr.</th>
-                    <th style="width: 14%;">Rhythmus</th>
-                    <th style="width: 14%;" class="right">Plan</th>
-                    <th style="width: 14%;" class="right">Ist</th>
-                    <th style="width: 14%;" class="right">Abweichung</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse ($items->where('type', $type) as $item)
-                    <tr>
-                        <td>
-                            <strong>{{ $item['account']->name }}</strong>
-                            @if($item['notes'])
-                                <div class="note">{{ $item['notes'] }}</div>
-                            @endif
-                        </td>
-                        <td>
-                            {{ $item['category_name'] }}
-                            @if($item['is_unplanned_actual'])
-                                <div class="note">Nicht geplant</div>
-                            @endif
-                        </td>
-                        <td>{{ $item['account']->number ?: '—' }}</td>
-                        <td>{{ number_format($item['period_amount'], 2, ',', '.') }} € {{ $item['planning_cycle_label'] }}</td>
-                        <td class="right">{{ number_format($item['planned_amount'], 2, ',', '.') }} €</td>
-                        <td class="right">{{ number_format($item['actual_amount'], 2, ',', '.') }} €</td>
-                        <td class="right">{{ number_format($item['variance'], 2, ',', '.') }} €</td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="7">Noch keine Positionen vorhanden.</td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
-    @endforeach
-
-    <div class="footer">
-        <table class="footer-table">
+    </thead>
+    <tbody>
+        @forelse($pdfData['incomeRows'] as $row)
             <tr>
-                <td style="width: 55%;">
-                    {{ $tenant->name }}<br>
-                    Haushaltsplan {{ $budget->year }}
+                <td class="nr">{{ $row['number'] }}</td>
+                <td>
+                    <strong>{{ $row['label'] }}</strong>
+                    <div class="category">{{ $row['category'] }}</div>
                 </td>
-                <td style="width: 45%; text-align: right;">
-                    Erstellt mit Clubano am {{ now()->format('d.m.Y') }}
-                </td>
+                @foreach($row['quarters'] as $amount)
+                    <td class="amount">{{ $money($amount) }}</td>
+                @endforeach
+                <td class="amount"><strong>{{ $money($row['total']) }}</strong></td>
             </tr>
-        </table>
+        @empty
+            <tr><td colspan="7">Noch keine Einnahmen geplant.</td></tr>
+        @endforelse
+        <tr class="sum-row">
+            <td class="green" colspan="2">Summe Einnahmen</td>
+            @foreach($pdfData['incomeTotals']['quarters'] as $amount)
+                <td class="green amount">{{ $money($amount) }}</td>
+            @endforeach
+            <td class="green amount">{{ $money($pdfData['incomeTotals']['total']) }}</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="section-bar expense-bar">Ausgaben</div>
+<table class="budget-table">
+    <thead>
+        <tr>
+            <th class="nr">Nr.</th>
+            <th class="label-col">Ausgabeart</th>
+            <th>Q1 (Jan-Maerz)</th>
+            <th>Q2 (Apr-Jun)</th>
+            <th>Q3 (Jul-Sep)</th>
+            <th>Q4 (Okt-Dez)</th>
+            <th>Gesamt</th>
+        </tr>
+    </thead>
+    <tbody>
+        @forelse($pdfData['expenseRows'] as $row)
+            <tr>
+                <td class="nr">{{ $row['number'] }}</td>
+                <td>
+                    <strong>{{ $row['label'] }}</strong>
+                    <div class="category">{{ $row['category'] }}</div>
+                </td>
+                @foreach($row['quarters'] as $amount)
+                    <td class="amount">{{ $money($amount) }}</td>
+                @endforeach
+                <td class="amount"><strong>{{ $money($row['total']) }}</strong></td>
+            </tr>
+        @empty
+            <tr><td colspan="7">Noch keine Ausgaben geplant.</td></tr>
+        @endforelse
+        <tr class="sum-row">
+            <td class="red" colspan="2">Summe Ausgaben</td>
+            @foreach($pdfData['expenseTotals']['quarters'] as $amount)
+                <td class="red amount">{{ $money($amount) }}</td>
+            @endforeach
+            <td class="red amount">{{ $money($pdfData['expenseTotals']['total']) }}</td>
+        </tr>
+        <tr class="result-row">
+            <td class="blue" colspan="2">Jahresergebnis</td>
+            @foreach($pdfData['quarterResult'] as $amount)
+                <td class="green amount">{{ $money($amount) }}</td>
+            @endforeach
+            <td class="green amount">{{ $money($pdfData['annualResult']) }}</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="small-note">
+    Hinweis: Da Planpositionen in Clubano noch keinen konkreten Faelligkeitsmonat speichern, werden Jahreswerte fuer die Quartals- und Monatsuebersicht anteilig verteilt.
+</div>
+
+<div class="page-break"></div>
+
+<div class="overview-title">Jahresuebersicht</div>
+<div class="overview-wrap">
+    <table class="overview-table">
+        <thead>
+            <tr>
+                <th>Monat</th>
+                <th>Einnahmen</th>
+                <th>Ausgaben</th>
+                <th>Saldo</th>
+                <th>Kumuliert</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach($pdfData['monthly'] as $row)
+                <tr>
+                    <td><strong>{{ $row['month'] }}</strong></td>
+                    <td class="amount">{{ $money($row['income']) }}</td>
+                    <td class="amount">{{ $money($row['expense']) }}</td>
+                    <td class="amount">{{ $money($row['saldo']) }}</td>
+                    <td class="amount"><strong>{{ $money($row['cumulative']) }}</strong></td>
+                </tr>
+            @endforeach
+            <tr class="sum-row">
+                <td class="blue">Gesamt</td>
+                <td class="blue amount">{{ $money($pdfData['incomeTotals']['total']) }}</td>
+                <td class="blue amount">{{ $money($pdfData['expenseTotals']['total']) }}</td>
+                <td class="blue amount">{{ $money($pdfData['annualResult']) }}</td>
+                <td class="blue amount">{{ $money($pdfData['annualResult']) }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="chart-row">
+    <div class="chart-box">
+        <div class="chart-title">Finanzentwicklung im Jahresverlauf</div>
+        @foreach($pdfData['monthly'] as $row)
+            @php
+                $incomeWidth = min(100, abs($row['income']) / $maxMonthly * 100);
+                $expenseWidth = min(100, abs($row['expense']) / $maxMonthly * 100);
+            @endphp
+            <div class="bar-line">
+                <span class="bar-label">{{ mb_substr($row['month'], 0, 3) }}</span>
+                <span class="bar-track"><span class="bar-fill-income" style="display:block;width: {{ $incomeWidth }}%;"></span></span>
+            </div>
+            <div class="bar-line">
+                <span class="bar-label"></span>
+                <span class="bar-track"><span class="bar-fill-expense" style="display:block;width: {{ $expenseWidth }}%;"></span></span>
+            </div>
+        @endforeach
+        <div class="small-note">Gruen: Einnahmen, Rot: Ausgaben</div>
     </div>
+    <div class="chart-box">
+        <div class="chart-title">Verteilung Einnahmen vs. Ausgaben</div>
+        @php
+            $totalVolume = max(1, $pdfData['incomeTotals']['total'] + $pdfData['expenseTotals']['total']);
+            $incomeShare = $pdfData['incomeTotals']['total'] / $totalVolume * 100;
+            $expenseShare = $pdfData['expenseTotals']['total'] / $totalVolume * 100;
+        @endphp
+        <div style="margin-top: 18mm;">
+            <div style="font-size: 12pt; font-weight: 800;">Einnahmen</div>
+            <div class="bar-track" style="width: 100%; height: 12px;"><span class="bar-fill-income" style="display:block;width: {{ $incomeShare }}%; height: 12px;"></span></div>
+            <div class="amount">{{ $money($pdfData['incomeTotals']['total']) }} ({{ number_format($incomeShare, 1, ',', '.') }} %)</div>
+        </div>
+        <div style="margin-top: 12mm;">
+            <div style="font-size: 12pt; font-weight: 800;">Ausgaben</div>
+            <div class="bar-track" style="width: 100%; height: 12px;"><span class="bar-fill-expense" style="display:block;width: {{ $expenseShare }}%; height: 12px;"></span></div>
+            <div class="amount">{{ $money($pdfData['expenseTotals']['total']) }} ({{ number_format($expenseShare, 1, ',', '.') }} %)</div>
+        </div>
+    </div>
+</div>
+
+<table class="signature-table">
+    <tr>
+        <td>Ort, Datum</td>
+        <td>Vorstand</td>
+        <td>Kasse</td>
+    </tr>
+</table>
+
+<div class="footer">
+    Erstellt mit Clubano am {{ now()->format('d.m.Y H:i') }}
+</div>
 </body>
 </html>

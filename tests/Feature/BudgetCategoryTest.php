@@ -786,3 +786,71 @@ test('existing budget plans can refresh categories from previous year actuals', 
     expect($plan->items)->toHaveCount(1);
     expect($plan->items->first()->budget_category_id)->toBe($events->id);
 });
+
+test('budget plans can be downloaded as a club budget pdf', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createBudgetCategoryTenant('pdf-download');
+
+    $events = BudgetCategory::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Veranstaltungen',
+        'color' => 'amber',
+        'sort_order' => 20,
+        'active' => true,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Erlöse Sommerfest',
+        'number' => '8009',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $expense = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Werbekosten',
+        'number' => '4600',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $plan = BudgetPlan::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'year' => 2027,
+        'title' => 'Haushaltsplan 2027',
+        'status' => 'entwurf',
+    ]);
+
+    $plan->items()->createMany([
+        [
+            'account_id' => $income->id,
+            'budget_category_id' => $events->id,
+            'type' => 'income',
+            'period_amount' => '1200.00',
+            'planning_cycle' => 'yearly',
+            'planned_amount' => '1200.00',
+            'sort_order' => 0,
+        ],
+        [
+            'account_id' => $expense->id,
+            'budget_category_id' => $events->id,
+            'type' => 'expense',
+            'period_amount' => '300.00',
+            'planning_cycle' => 'yearly',
+            'planned_amount' => '300.00',
+            'sort_order' => 1,
+        ],
+    ]);
+
+    $response = $this->actingAs($user)->get(route('budgets.pdf', $plan));
+
+    $response->assertOk();
+    $response->assertHeader('content-type', 'application/pdf');
+    expect($response->getContent())->toStartWith('%PDF');
+});
