@@ -861,6 +861,7 @@ class MemberController extends Controller
                     ->where('tenant_id', $tenantId)
                     ->whereNull('archived_at')),
             ],
+            'display_mode' => ['required', Rule::in(['person', 'organization'])],
             'show_contribution' => ['nullable', 'boolean'],
             'show_payment_method' => ['nullable', 'boolean'],
         ]);
@@ -888,6 +889,7 @@ class MemberController extends Controller
         return view('members.print-list-print', [
             'members' => $members,
             'tenant' => auth()->user()->tenant,
+            'displayMode' => $validated['display_mode'],
             'showContribution' => $request->boolean('show_contribution'),
             'showPaymentMethod' => $request->boolean('show_payment_method'),
         ]);

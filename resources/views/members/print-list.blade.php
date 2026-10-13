@@ -58,6 +58,29 @@
         @csrf
 
         <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="mb-5">
+                <div class="text-sm font-semibold text-slate-950">Darstellung</div>
+                <div class="mt-1 text-sm text-slate-500">Lege fest, was in der Liste als Hauptname erscheinen soll.</div>
+            </div>
+
+            <div class="mb-5 grid gap-4 md:grid-cols-2">
+                <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:bg-slate-100">
+                    <input type="radio" name="display_mode" value="person" checked class="mt-1 border-slate-300 text-slate-950 focus:ring-slate-800">
+                    <span>
+                        <span class="block text-sm font-semibold text-slate-950">Vor- und Nachname</span>
+                        <span class="mt-1 block text-sm leading-6 text-slate-500">Gut für klassische Mitgliederlisten mit Personen im Mittelpunkt.</span>
+                    </span>
+                </label>
+
+                <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:bg-slate-100">
+                    <input type="radio" name="display_mode" value="organization" class="mt-1 border-slate-300 text-slate-950 focus:ring-slate-800">
+                    <span>
+                        <span class="block text-sm font-semibold text-slate-950">Firmenname / Organisation</span>
+                        <span class="mt-1 block text-sm leading-6 text-slate-500">Gut für Firmenmitglieder, Sponsoren oder Organisationen.</span>
+                    </span>
+                </label>
+            </div>
+
             <div class="grid gap-4 md:grid-cols-2">
                 <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 transition hover:bg-slate-100">
                     <input type="checkbox" name="show_contribution" value="1" class="mt-1 rounded border-slate-300 text-slate-950 focus:ring-slate-800">

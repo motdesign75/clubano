@@ -138,6 +138,25 @@
     @php
         $tenantName = $tenant?->name ?: config('app.name', 'Clubano');
         $generatedAt = now()->format('d.m.Y H:i');
+        $isOrganizationMode = ($displayMode ?? 'person') === 'organization';
+        $displayLabel = $isOrganizationMode ? 'Firmenname / Organisation' : 'Vor- und Nachname';
+        $displayMember = function ($member) use ($isOrganizationMode) {
+            $personName = trim(implode(' ', array_filter([$member->first_name, $member->last_name])));
+            $personName = $personName !== '' ? $personName : trim((string) ($member->full_name ?? ''));
+            $organization = trim((string) ($member->organization ?? ''));
+
+            if ($isOrganizationMode) {
+                return [
+                    'primary' => $organization !== '' ? $organization : ($personName !== '' ? $personName : 'Ohne Namen'),
+                    'secondary' => $organization !== '' && $personName !== '' ? $personName : null,
+                ];
+            }
+
+            return [
+                'primary' => $personName !== '' ? $personName : ($organization !== '' ? $organization : 'Ohne Namen'),
+                'secondary' => $personName !== '' && $organization !== '' ? $organization : null,
+            ];
+        };
     @endphp
 
     <div class="toolbar">
@@ -148,7 +167,7 @@
     <header class="heading">
         <div>
             <h1>Mitgliederliste</h1>
-            <div class="meta">Erstellt am {{ $generatedAt }} · {{ $members->count() }} Mitglied(er)</div>
+            <div class="meta">Erstellt am {{ $generatedAt }} · {{ $members->count() }} Mitglied(er) · Darstellung: {{ $displayLabel }}</div>
         </div>
         <div class="tenant">{{ $tenantName }}</div>
     </header>
@@ -156,7 +175,7 @@
     <table>
         <thead>
             <tr>
-                <th style="width: 20%;">Name</th>
+                <th style="width: 20%;">{{ $isOrganizationMode ? 'Firma / Organisation' : 'Name' }}</th>
                 <th style="width: 11%;">Mitglieds-Nr.</th>
                 <th style="width: 18%;">Mitgliedschaft</th>
                 <th style="width: 20%;">Kontakt</th>
@@ -172,8 +191,7 @@
         <tbody>
             @foreach($members as $member)
                 @php
-                    $name = trim(implode(' ', array_filter([$member->first_name, $member->last_name])));
-                    $name = $name !== '' ? $name : ($member->full_name ?: ($member->organization ?: 'Ohne Namen'));
+                    $display = $displayMember($member);
                     $amount = $member->membership_amount ?? $member->membership?->amount;
                     $interval = $member->membership_interval ?: $member->membership?->interval;
                     $address = array_filter([
@@ -183,9 +201,9 @@
                 @endphp
                 <tr>
                     <td>
-                        <div class="name">{{ $name }}</div>
-                        @if($member->organization)
-                            <div class="muted">{{ $member->organization }}</div>
+                        <div class="name">{{ $display['primary'] }}</div>
+                        @if($display['secondary'])
+                            <div class="muted">{{ $display['secondary'] }}</div>
                         @endif
                     </td>
                     <td>{{ $member->member_id ?: '—' }}</td>

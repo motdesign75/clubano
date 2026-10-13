@@ -185,6 +185,7 @@ test('staff can print a member list with optional contribution and payment metho
     $this->actingAs($staff)
         ->post(route('members.print-list.print'), [
             'member_ids' => [$member->id],
+            'display_mode' => 'person',
         ])
         ->assertOk()
         ->assertSee('Lina Liste')
@@ -194,6 +195,7 @@ test('staff can print a member list with optional contribution and payment metho
     $this->actingAs($staff)
         ->post(route('members.print-list.print'), [
             'member_ids' => [$member->id],
+            'display_mode' => 'person',
             'show_contribution' => '1',
             'show_payment_method' => '1',
         ])
@@ -201,6 +203,31 @@ test('staff can print a member list with optional contribution and payment metho
         ->assertSee('Lina Liste')
         ->assertSee('72,00 €')
         ->assertSee('SEPA-Lastschrift');
+});
+
+test('staff can choose organization names for printed member lists', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'member-print-list-organization');
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Lina',
+        'last_name' => 'Kontakt',
+        'organization' => 'Musterfirma GmbH',
+        'member_id' => 'F-100',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $this->actingAs($staff)
+        ->post(route('members.print-list.print'), [
+            'member_ids' => [$member->id],
+            'display_mode' => 'organization',
+        ])
+        ->assertOk()
+        ->assertSee('Darstellung: Firmenname / Organisation')
+        ->assertSee('Firma / Organisation')
+        ->assertSeeInOrder(['<div class="name">Musterfirma GmbH</div>', 'Lina Kontakt'], false);
 });
 
 test('viewers cannot access member list printing', function () {
