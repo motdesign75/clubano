@@ -18,6 +18,7 @@ use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\BankImportController;
 use App\Http\Controllers\DonationController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\FinanceForecastController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\EventCategoryController;
 use App\Http\Controllers\DocumentationController;
@@ -564,6 +565,10 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
         Route::patch('/mitgliederabrechnung/einstellungen', [MembershipBillingController::class, 'updateSettings'])
             ->name('membership-billing.settings');
     });
+
+    Route::get('/finanzvorschau', [FinanceForecastController::class, 'index'])
+        ->middleware('tenant.role:finance')
+        ->name('finance-forecast.index');
 
     $when($C.'BudgetPlanController', function($cls){
         Route::middleware('tenant.role:finance')->group(function () use ($cls) {

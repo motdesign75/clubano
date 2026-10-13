@@ -308,9 +308,16 @@
         [
             'label' => 'Planung',
             'hint' => 'Haushalt planen und Bereiche pflegen',
-            'active' => request()->routeIs('budgets.*') || request()->routeIs('budget-categories.*'),
+            'active' => request()->routeIs('finance-forecast.*') || request()->routeIs('budgets.*') || request()->routeIs('budget-categories.*'),
             'minRole' => 'finance',
             'children' => [
+                [
+                    'label' => 'Finanzvorschau',
+                    'hint' => 'Beitraege, offene Posten und Ausgaben planen',
+                    'route' => route('finance-forecast.index'),
+                    'active' => request()->routeIs('finance-forecast.*'),
+                    'minRole' => 'finance',
+                ],
                 [
                     'label' => 'Haushaltsplan',
                     'hint' => 'Planen, vergleichen und vorlegen',
