@@ -457,7 +457,7 @@ test('existing budget plans can import newly assigned actual budget areas', func
     Transaction::withoutGlobalScopes()->create([
         'tenant_id' => $tenant->id,
         'created_by' => $user->id,
-        'date' => '2027-06-01',
+        'date' => '2026-06-01',
         'description' => 'Sommerfest Verkauf',
         'amount' => 450,
         'account_from_id' => $eventIncome->id,
@@ -533,7 +533,7 @@ test('budget actual import updates existing uncategorized plan items', function 
     Transaction::withoutGlobalScopes()->create([
         'tenant_id' => $tenant->id,
         'created_by' => $user->id,
-        'date' => '2027-05-01',
+        'date' => '2026-05-01',
         'description' => 'Kartoffelmarkt',
         'amount' => 140,
         'account_from_id' => $eventIncome->id,
@@ -551,6 +551,166 @@ test('budget actual import updates existing uncategorized plan items', function 
 
     expect($plan->items)->toHaveCount(1);
     expect($plan->items->first()->budget_category_id)->toBe($events->id);
+});
+
+test('budget actual import replaces stale generated account assignments', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createBudgetCategoryTenant('stale-account-refresh');
+
+    $office = BudgetCategory::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Öffentlichkeitsarbeit',
+        'color' => 'rose',
+        'sort_order' => 20,
+        'active' => true,
+    ]);
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Bank',
+        'number' => '1200',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $staleAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Geschenke nicht abzugsfähig',
+        'number' => '4635',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $actualAccount = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Veranstaltungsbedarf',
+        'number' => '4909',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $plan = BudgetPlan::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'year' => 2027,
+        'title' => 'Haushaltsplan 2027',
+        'status' => 'entwurf',
+    ]);
+
+    $plan->items()->create([
+        'account_id' => $staleAccount->id,
+        'budget_category_id' => null,
+        'type' => 'expense',
+        'period_amount' => '100.00',
+        'planning_cycle' => 'yearly',
+        'planned_amount' => '100.00',
+        'notes' => 'Aus erfassten Buchungen 2026 uebernommen.',
+        'sort_order' => 0,
+    ]);
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'date' => '2026-06-17',
+        'description' => 'Auslage Sommerfest',
+        'amount' => 100,
+        'account_from_id' => $bank->id,
+        'account_to_id' => $actualAccount->id,
+        'budget_category_id' => $office->id,
+        'status' => 'entwurf',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('budgets.import-actuals', $plan))
+        ->assertRedirect(route('budgets.show', $plan))
+        ->assertSessionHas('success');
+
+    $plan->refresh()->load('items');
+
+    expect($plan->items)->toHaveCount(1);
+    expect($plan->items->first()->account_id)->toBe($actualAccount->id);
+    expect($plan->items->first()->budget_category_id)->toBe($office->id);
+});
+
+test('budget actual import keeps manual plan items unchanged', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createBudgetCategoryTenant('manual-plan-safe');
+
+    $events = BudgetCategory::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Veranstaltungen',
+        'color' => 'amber',
+        'sort_order' => 20,
+        'active' => true,
+    ]);
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Bank',
+        'number' => '1200',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Sommerfest',
+        'number' => '8009',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $plan = BudgetPlan::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'year' => 2027,
+        'title' => 'Haushaltsplan 2027',
+        'status' => 'entwurf',
+    ]);
+
+    $manualItem = $plan->items()->create([
+        'account_id' => $income->id,
+        'budget_category_id' => null,
+        'type' => 'income',
+        'period_amount' => '999.00',
+        'planning_cycle' => 'yearly',
+        'planned_amount' => '999.00',
+        'notes' => 'Manuell geplant.',
+        'sort_order' => 0,
+    ]);
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'date' => '2026-06-01',
+        'description' => 'Sommerfest Verkauf',
+        'amount' => 70,
+        'account_from_id' => $income->id,
+        'account_to_id' => $bank->id,
+        'budget_category_id' => $events->id,
+        'status' => 'entwurf',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('budgets.import-actuals', $plan))
+        ->assertRedirect(route('budgets.show', $plan))
+        ->assertSessionHas('info');
+
+    $manualItem->refresh();
+
+    expect((float) $manualItem->planned_amount)->toBe(999.0);
+    expect($manualItem->budget_category_id)->toBeNull();
+    expect($manualItem->notes)->toBe('Manuell geplant.');
 });
 
 test('existing budget plans can refresh categories from previous year actuals', function () {

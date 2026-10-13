@@ -180,119 +180,140 @@ class BudgetPlanController extends Controller
     {
         $budget->load('items.account.budgetCategory');
 
-        $existingKeys = $budget->items
-            ->map(fn (BudgetPlanItem $item) => $this->budgetItemKey(
-                (int) $item->account_id,
-                $item->budget_category_id ?: $item->account?->budget_category_id
-            ))
-            ->all();
+        [$added, $updated, $removed] = $this->syncActualItemsForYear($budget, (int) $budget->year - 1);
 
-        $nextSortOrder = (int) ($budget->items->max('sort_order') ?? -1) + 1;
-        $added = 0;
-        $updated = 0;
-        $usedUncategorizedItemIds = [];
-
-        $updated += $this->applyActualCategoriesToExistingItems($budget, (int) $budget->year - 1, $usedUncategorizedItemIds);
-
-        $budget->refresh()->load('items.account.budgetCategory');
-        $existingKeys = $budget->items
-            ->map(fn (BudgetPlanItem $item) => $this->budgetItemKey(
-                (int) $item->account_id,
-                $item->budget_category_id ?: $item->account?->budget_category_id
-            ))
-            ->all();
-
-        foreach ($this->itemsFromActualTransactions((int) $budget->year) as $item) {
-            $key = $this->budgetItemKey((int) $item['account_id'], $item['budget_category_id'] ?? null);
-
-            if (in_array($key, $existingKeys, true)) {
-                continue;
-            }
-
-            $uncategorizedItem = $budget->items->first(function (BudgetPlanItem $planItem) use ($item, $usedUncategorizedItemIds) {
-                return (int) $planItem->account_id === (int) $item['account_id']
-                    && blank($planItem->budget_category_id)
-                    && ! in_array($planItem->id, $usedUncategorizedItemIds, true);
-            });
-
-            if ($uncategorizedItem && ! blank($item['budget_category_id'])) {
-                $uncategorizedItem->update([
-                    'budget_category_id' => $item['budget_category_id'],
-                    'notes' => filled($uncategorizedItem->notes)
-                        ? $uncategorizedItem->notes
-                        : $item['notes'],
-                ]);
-
-                $existingKeys[] = $key;
-                $usedUncategorizedItemIds[] = $uncategorizedItem->id;
-                $updated++;
-
-                continue;
-            }
-
-            $budget->items()->create([
-                'account_id' => $item['account_id'],
-                'budget_category_id' => $item['budget_category_id'] ?: null,
-                'type' => $item['type'],
-                'period_amount' => $item['period_amount'],
-                'planning_cycle' => $item['planning_cycle'],
-                'planned_amount' => BudgetPlanItem::annualAmountFor(
-                    $item['planning_cycle'],
-                    (float) $item['period_amount']
-                ),
-                'notes' => $item['notes'],
-                'sort_order' => $nextSortOrder++,
-            ]);
-
-            $existingKeys[] = $key;
-            $added++;
-        }
-
-        $changed = $added + $updated;
+        $changed = $added + $updated + $removed;
         $message = $changed > 0
-            ? $added . ' Position(en) wurden ergaenzt und ' . $updated . ' vorhandene Position(en) wurden einem Haushaltsbereich zugeordnet.'
-            : 'Es wurden keine neuen Positionen gefunden. Alle passenden Ist-Buchungen sind bereits im Haushaltsplan enthalten.';
+            ? $added . ' Position(en) wurden ergaenzt, ' . $updated . ' aktualisiert und ' . $removed . ' veraltete Ist-Position(en) entfernt.'
+            : 'Es wurden keine Aenderungen gefunden. Die Ist-Buchungen sind bereits im Haushaltsplan enthalten.';
 
         return redirect()
             ->route('budgets.show', $budget)
             ->with($changed > 0 ? 'success' : 'info', $message);
     }
 
-    protected function applyActualCategoriesToExistingItems(BudgetPlan $budget, int $sourceYear, array &$usedUncategorizedItemIds): int
+    protected function syncActualItemsForYear(BudgetPlan $budget, int $sourceYear): array
     {
         if ($sourceYear < 2000) {
+            return [0, 0, 0];
+        }
+
+        $actualItems = collect($this->itemsFromActualTransactions($sourceYear));
+        $usedItemIds = [];
+        $added = 0;
+        $updated = 0;
+
+        foreach ($actualItems as $item) {
+            $key = $this->budgetItemKey((int) $item['account_id'], $item['budget_category_id'] ?? null);
+
+            $planItem = $budget->items->first(fn (BudgetPlanItem $existing) => $this->budgetItemKey(
+                (int) $existing->account_id,
+                $existing->budget_category_id ?: $existing->account?->budget_category_id
+            ) === $key && ! in_array($existing->id, $usedItemIds, true));
+
+            if (! $planItem && ! blank($item['budget_category_id'] ?? null)) {
+                $planItem = $budget->items->first(function (BudgetPlanItem $existing) use ($item, $sourceYear, $usedItemIds) {
+                    return (int) $existing->account_id === (int) $item['account_id']
+                        && blank($existing->budget_category_id)
+                        && $this->isImportedActualItem($existing, $sourceYear)
+                        && ! in_array($existing->id, $usedItemIds, true);
+                });
+            }
+
+            if (! $planItem) {
+                $planItem = $budget->items->first(function (BudgetPlanItem $existing) use ($item, $sourceYear, $usedItemIds) {
+                    return $this->isImportedActualItem($existing, $sourceYear)
+                        && $existing->type === $item['type']
+                        && (float) $existing->period_amount === (float) $item['period_amount']
+                        && ! in_array($existing->id, $usedItemIds, true);
+                });
+            }
+
+            if (! $planItem) {
+                $planItem = $budget->items->first(function (BudgetPlanItem $existing) use ($item, $usedItemIds) {
+                    return (int) $existing->account_id === (int) $item['account_id']
+                        && ! in_array($existing->id, $usedItemIds, true);
+                });
+            }
+
+            if ($planItem) {
+                if ($this->isImportedActualItem($planItem, $sourceYear)) {
+                    $updated += $this->updateActualBudgetItem($planItem, $item);
+                }
+
+                $usedItemIds[] = $planItem->id;
+
+                continue;
+            }
+
+            $created = $this->createActualBudgetItem($budget, $item);
+            $budget->items->push($created);
+            $usedItemIds[] = $created->id;
+            $added++;
+        }
+
+        $removed = $budget->items
+            ->filter(fn (BudgetPlanItem $item) => $this->isImportedActualItem($item, $sourceYear)
+                && ! in_array($item->id, $usedItemIds, true))
+            ->each
+            ->delete()
+            ->count();
+
+        return [$added, $updated, $removed];
+    }
+
+    protected function createActualBudgetItem(BudgetPlan $budget, array $item): BudgetPlanItem
+    {
+        return $budget->items()->create([
+            'account_id' => $item['account_id'],
+            'budget_category_id' => $item['budget_category_id'] ?: null,
+            'type' => $item['type'],
+            'period_amount' => $item['period_amount'],
+            'planning_cycle' => $item['planning_cycle'],
+            'planned_amount' => BudgetPlanItem::annualAmountFor(
+                $item['planning_cycle'],
+                (float) $item['period_amount']
+            ),
+            'notes' => $item['notes'],
+            'sort_order' => (int) ($budget->items->max('sort_order') ?? -1) + 1,
+        ]);
+    }
+
+    protected function updateActualBudgetItem(BudgetPlanItem $planItem, array $item): int
+    {
+        $attributes = [
+            'account_id' => $item['account_id'],
+            'budget_category_id' => $item['budget_category_id'] ?: null,
+            'type' => $item['type'],
+            'period_amount' => $item['period_amount'],
+            'planning_cycle' => $item['planning_cycle'],
+            'planned_amount' => BudgetPlanItem::annualAmountFor(
+                $item['planning_cycle'],
+                (float) $item['period_amount']
+            ),
+            'notes' => $item['notes'],
+        ];
+
+        $dirty = collect($attributes)->contains(function ($value, string $key) use ($planItem) {
+            if (in_array($key, ['period_amount', 'planned_amount'], true)) {
+                return (float) $planItem->{$key} !== (float) $value;
+            }
+
+            return (string) ($planItem->{$key} ?? '') !== (string) ($value ?? '');
+        });
+
+        if (! $dirty) {
             return 0;
         }
 
-        $updated = 0;
+        $planItem->update($attributes);
 
-        foreach ($this->itemsFromActualTransactions($sourceYear) as $item) {
-            if (blank($item['budget_category_id'] ?? null)) {
-                continue;
-            }
+        return 1;
+    }
 
-            $uncategorizedItem = $budget->items->first(function (BudgetPlanItem $planItem) use ($item, $usedUncategorizedItemIds) {
-                return (int) $planItem->account_id === (int) $item['account_id']
-                    && blank($planItem->budget_category_id)
-                    && ! in_array($planItem->id, $usedUncategorizedItemIds, true);
-            });
-
-            if (! $uncategorizedItem) {
-                continue;
-            }
-
-            $uncategorizedItem->update([
-                'budget_category_id' => $item['budget_category_id'],
-                'notes' => filled($uncategorizedItem->notes)
-                    ? $uncategorizedItem->notes
-                    : $item['notes'],
-            ]);
-
-            $usedUncategorizedItemIds[] = $uncategorizedItem->id;
-            $updated++;
-        }
-
-        return $updated;
+    protected function isImportedActualItem(BudgetPlanItem $item, int $sourceYear): bool
+    {
+        return str_contains((string) $item->notes, 'Buchungen ' . $sourceYear . ' uebernommen.');
     }
 
     public function duplicate(BudgetPlan $budget)
