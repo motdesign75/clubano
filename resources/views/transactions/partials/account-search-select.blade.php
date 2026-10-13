@@ -35,6 +35,7 @@
         open: false,
         query: '',
         selected: @js($selectedValue),
+        syncKey: @js($syncKey ?? null),
         options: @js($accountOptions),
         normalize(value) {
             return value.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -57,13 +58,13 @@
             this.selected = option.id;
             this.query = '';
             this.open = false;
-            window.dispatchEvent(new CustomEvent('account-selected', { detail: { field: '{{ $name }}', value: option.id } }));
+            window.dispatchEvent(new CustomEvent('account-selected', { detail: { field: '{{ $name }}', value: option.id, syncKey: this.syncKey } }));
         },
         clear() {
             this.selected = '';
             this.query = '';
             this.open = true;
-            window.dispatchEvent(new CustomEvent('account-selected', { detail: { field: '{{ $name }}', value: '' } }));
+            window.dispatchEvent(new CustomEvent('account-selected', { detail: { field: '{{ $name }}', value: '', syncKey: this.syncKey } }));
         }
     }"
     class="space-y-2"

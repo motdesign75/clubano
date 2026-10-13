@@ -112,22 +112,28 @@
             </label>
             <div class="mt-4 grid gap-4 lg:grid-cols-2">
                 <div>
-                    <label for="cash_account_id" class="mb-1 block text-sm font-medium text-slate-600">Bank oder Kasse</label>
-                    <select id="cash_account_id" name="cash_account_id" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-900 focus:ring-slate-900">
-                        <option value="">Bitte wählen</option>
-                        @foreach($cashAccounts as $account)
-                            <option value="{{ $account->id }}" @selected(old('cash_account_id') == $account->id)>{{ $account->number }} {{ $account->name }}</option>
-                        @endforeach
-                    </select>
+                    @include('transactions.partials.account-search-select', [
+                        'name' => 'cash_account_id',
+                        'id' => 'cash_account_id',
+                        'label' => 'Bank oder Kasse',
+                        'accounts' => $cashAccounts,
+                        'selectedId' => old('cash_account_id'),
+                        'required' => false,
+                        'placeholder' => 'Bank oder Kasse suchen',
+                        'labelClass' => 'mb-1 block text-sm font-medium text-slate-600',
+                    ])
                 </div>
                 <div>
-                    <label for="income_account_id" class="mb-1 block text-sm font-medium text-slate-600">Einnahmekonto</label>
-                    <select id="income_account_id" name="income_account_id" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-900 focus:ring-slate-900">
-                        <option value="">Bitte wählen</option>
-                        @foreach($incomeAccounts as $account)
-                            <option value="{{ $account->id }}" @selected(old('income_account_id') == $account->id)>{{ $account->number }} {{ $account->name }}</option>
-                        @endforeach
-                    </select>
+                    @include('transactions.partials.account-search-select', [
+                        'name' => 'income_account_id',
+                        'id' => 'donation_income_account_id',
+                        'label' => 'Einnahmekonto',
+                        'accounts' => $incomeAccounts,
+                        'selectedId' => old('income_account_id'),
+                        'required' => false,
+                        'placeholder' => 'Einnahmekonto suchen',
+                        'labelClass' => 'mb-1 block text-sm font-medium text-slate-600',
+                    ])
                 </div>
             </div>
         </section>

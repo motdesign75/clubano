@@ -233,15 +233,15 @@
                             </div>
 
                             <div class="md:col-span-2">
-                                <label for="income_account_id" class="mb-1 block text-sm font-medium text-slate-700">Ertragskonto</label>
-                                <select name="income_account_id" id="income_account_id" class="w-full rounded-2xl border-slate-300" required>
-                                    <option value="">Bitte auswaehlen</option>
-                                    @foreach($incomeAccounts as $account)
-                                        <option value="{{ $account->id }}" @selected(old('income_account_id', $formInvoice?->income_account_id ?? $suggestedIncomeAccount?->id) == $account->id)>
-                                            {{ $account->number ? $account->number . ' - ' : '' }}{{ $account->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
+                                @include('transactions.partials.account-search-select', [
+                                    'name' => 'income_account_id',
+                                    'id' => 'income_account_id',
+                                    'label' => 'Ertragskonto',
+                                    'accounts' => $incomeAccounts,
+                                    'selectedId' => old('income_account_id', $formInvoice?->income_account_id ?? $suggestedIncomeAccount?->id),
+                                    'placeholder' => 'Ertragskonto suchen',
+                                    'labelClass' => 'mb-1 block text-sm font-medium text-slate-700',
+                                ])
                                 <p class="mt-2 text-sm text-slate-500">{{ $incomeAccountHint ?? 'Bitte waehle das passende Ertragskonto.' }}</p>
                             </div>
                         </div>

@@ -2,6 +2,8 @@
 
 use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Account;
+use App\Models\BankImport;
+use App\Models\BankTransaction;
 use App\Models\Document;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
@@ -78,6 +80,127 @@ test('treasurers can search from and to accounts while editing a transaction', f
         ->assertSee('1200 - Bank')
         ->assertSee('8006 - Mitgliedsbeiträge')
         ->assertSee('SKR-Test');
+});
+
+test('finance assignment views use searchable account pickers', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createTransactionSearchTenant();
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '1200',
+        'name' => 'Bank',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'chart_name' => 'SKR-Test',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $income = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '8006',
+        'name' => 'Mitgliedsbeiträge',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'chart_name' => 'SKR-Test',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $expense = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'number' => '4930',
+        'name' => 'Bürobedarf',
+        'type' => 'ausgabe',
+        'tax_area' => 'ideell',
+        'chart_name' => 'SKR-Test',
+        'active' => true,
+        'is_postable' => true,
+    ]);
+
+    $invoice = Invoice::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'updated_by' => $user->id,
+        'income_account_id' => $income->id,
+        'recipient_name' => 'Max Muster',
+        'recipient_street' => 'Musterstrasse 1',
+        'recipient_zip' => '12345',
+        'recipient_city' => 'Musterstadt',
+        'recipient_country' => 'Deutschland',
+        'invoice_number' => 'R-SUCHE-1',
+        'invoice_date' => now()->toDateString(),
+        'due_date' => now()->addDays(14)->toDateString(),
+        'status' => 'open',
+        'discount' => 0,
+        'tax_rate' => 0,
+        'total' => 0,
+    ]);
+
+    InvoiceItem::create([
+        'invoice_id' => $invoice->id,
+        'description' => 'Mitgliedsbeitrag',
+        'quantity' => 1,
+        'unit' => 'Pauschale',
+        'unit_price' => 25,
+    ]);
+
+    $bankImport = BankImport::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'account_id' => $bank->id,
+        'uploaded_by' => $user->id,
+        'filename' => 'umsatz.csv',
+        'format' => 'CSV',
+        'status' => 'review',
+        'row_count' => 1,
+        'imported_count' => 1,
+    ]);
+
+    BankTransaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'bank_import_id' => $bankImport->id,
+        'account_id' => $bank->id,
+        'booking_date' => now()->toDateString(),
+        'amount' => -19.99,
+        'currency' => 'EUR',
+        'direction' => 'debit',
+        'purpose' => 'Büromaterial',
+        'fingerprint' => 'account-search-picker',
+        'status' => BankTransaction::STATUS_PENDING,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('bank-imports.index', ['import' => $bankImport->id]))
+        ->assertOk()
+        ->assertSee('Bankkonto oder Kasse suchen')
+        ->assertSee('Gegenkonto suchen')
+        ->assertDontSee('bank-import-account-options');
+
+    $this->actingAs($user)
+        ->get(route('invoices.create'))
+        ->assertOk()
+        ->assertSee('Ertragskonto suchen')
+        ->assertSee('8006 - Mitgliedsbeiträge');
+
+    $this->actingAs($user)
+        ->get(route('payments.create', $invoice))
+        ->assertOk()
+        ->assertSee('Ertragskonto suchen')
+        ->assertSee('Bank oder Kasse suchen');
+
+    $this->actingAs($user)
+        ->get(route('donations.create'))
+        ->assertOk()
+        ->assertSee('Bank oder Kasse suchen')
+        ->assertSee('Einnahmekonto suchen');
+
+    $this->actingAs($user)
+        ->get(route('budgets.create'))
+        ->assertOk()
+        ->assertSee('Konto suchen')
+        ->assertSee('Suche nach Nummer, Name, Bereich oder Kontoart');
 });
 
 test('treasurers can open and download the printable booking journal', function () {

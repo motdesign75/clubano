@@ -23,25 +23,9 @@
         \App\Models\BankTransaction::STATUS_DUPLICATE => 'bg-violet-50 text-violet-800 border-violet-200',
     ];
 
-    $accountGroups = $postingAccounts->groupBy('type');
-    $accountOptions = $postingAccounts->mapWithKeys(fn ($account) => [
-        $account->id => trim($account->number . ' · ' . $account->name),
-    ]);
-    $accountTypeLabels = [
-        'bank' => 'Bank & Kasse',
-        'kasse' => 'Bank & Kasse',
-        'einnahme' => 'Einnahmen',
-        'ausgabe' => 'Ausgaben',
-    ];
 @endphp
 
 <div class="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
-    <datalist id="bank-import-account-options">
-        @foreach($postingAccounts as $account)
-            <option value="{{ $accountOptions[$account->id] }}" data-account-id="{{ $account->id }}"></option>
-        @endforeach
-    </datalist>
-
     <section class="rounded-3xl bg-slate-950 px-6 py-6 text-white shadow-sm sm:px-8">
         <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div class="max-w-3xl">
@@ -166,15 +150,15 @@
 
             <div class="mt-6 grid gap-4 md:grid-cols-2">
                 <div>
-                    <label for="account_id" class="mb-1 block text-sm font-semibold text-slate-700">Bankkonto oder Kasse</label>
-                    <select id="account_id" name="account_id" required class="w-full rounded-2xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
-                        <option value="">Konto wählen</option>
-                        @foreach($bankAccounts as $account)
-                            <option value="{{ $account->id }}" @selected(old('account_id') == $account->id)>
-                                {{ $account->number }} · {{ $account->name }}
-                            </option>
-                        @endforeach
-                    </select>
+                    @include('transactions.partials.account-search-select', [
+                        'name' => 'account_id',
+                        'id' => 'bank_import_account_id',
+                        'label' => 'Bankkonto oder Kasse',
+                        'accounts' => $bankAccounts,
+                        'selectedId' => old('account_id'),
+                        'placeholder' => 'Bankkonto oder Kasse suchen',
+                        'labelClass' => 'mb-1 block text-sm font-semibold text-slate-700',
+                    ])
                     @if($bankAccounts->isEmpty())
                         <p class="mt-2 text-xs text-rose-700">Bitte zuerst unter Konten & Kassen ein Bankkonto oder eine Kasse anlegen.</p>
                     @endif
@@ -402,19 +386,17 @@
 
                                 <input type="hidden" name="source_account_id" value="{{ $bankTransaction->account_id }}">
 
-                                <div data-account-field>
-                                    <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Gegenkonto</label>
-                                    <input type="hidden"
-                                           name="selected_account_id"
-                                           value="{{ old('selected_account_id', $bankTransaction->selected_account_id) }}"
-                                           data-account-id-input>
-                                    <input type="search"
-                                           value="{{ $accountOptions[old('selected_account_id', $bankTransaction->selected_account_id)] ?? '' }}"
-                                           list="bank-import-account-options"
-                                           autocomplete="off"
-                                           placeholder="Kontonummer oder Name suchen"
-                                           data-account-search
-                                           class="w-full rounded-xl border-slate-300 bg-white text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                                <div>
+                                    @include('transactions.partials.account-search-select', [
+                                        'name' => 'selected_account_id',
+                                        'id' => 'selected_account_id_' . $bankTransaction->id,
+                                        'label' => 'Gegenkonto',
+                                        'accounts' => $postingAccounts,
+                                        'selectedId' => old('selected_account_id', $bankTransaction->selected_account_id),
+                                        'placeholder' => 'Gegenkonto suchen',
+                                        'labelClass' => 'mb-1 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500',
+                                        'syncKey' => 'bank-transaction-' . $bankTransaction->id,
+                                    ])
                                     <p class="mt-2 text-xs text-slate-500">Tippe z. B. „1200“, „Miete“ oder „Versicherung“.</p>
                                 </div>
 
@@ -511,7 +493,7 @@
                                     <input type="hidden"
                                            name="selected_account_id"
                                            value="{{ old('selected_account_id', $bankTransaction->selected_account_id) }}"
-                                           data-book-selected-account-id>
+                                           data-book-selected-account-id="bank-transaction-{{ $bankTransaction->id }}">
                                     <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white hover:bg-slate-800">
                                         Buchen
                                     </button>
@@ -574,40 +556,17 @@
 
 @push('scripts')
     <script>
-        document.addEventListener('input', (event) => {
-            const search = event.target.closest('[data-account-search]');
+        window.addEventListener('account-selected', (event) => {
+            const syncKey = event.detail?.syncKey;
 
-            if (! search) {
+            if (! syncKey) {
                 return;
             }
 
-            const field = search.closest('[data-account-field]');
-            const hidden = field?.querySelector('[data-account-id-input]');
-            const options = document.getElementById('bank-import-account-options')?.options ?? [];
-
-            if (! hidden) {
-                return;
-            }
-
-            hidden.value = '';
-
-            for (const option of options) {
-                if (option.value === search.value) {
-                    hidden.value = option.dataset.accountId ?? '';
-                    const bookHidden = search.closest('aside')?.querySelector('[data-book-selected-account-id]');
-
-                    if (bookHidden) {
-                        bookHidden.value = hidden.value;
-                    }
-
-                    return;
-                }
-            }
-
-            const bookHidden = search.closest('aside')?.querySelector('[data-book-selected-account-id]');
+            const bookHidden = document.querySelector(`[data-book-selected-account-id="${syncKey}"]`);
 
             if (bookHidden) {
-                bookHidden.value = '';
+                bookHidden.value = event.detail?.value || '';
             }
         });
 

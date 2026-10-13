@@ -34,15 +34,15 @@
 
                     <div class="mt-6 grid gap-4 md:grid-cols-2">
                         <div>
-                            <label for="income_account_id" class="mb-1 block text-sm font-medium text-slate-700">Ertragskonto</label>
-                            <select name="income_account_id" id="income_account_id" class="w-full rounded-2xl border-slate-300" required>
-                                <option value="">Bitte auswaehlen</option>
-                                @foreach($incomeAccounts as $acc)
-                                    <option value="{{ $acc->id }}" @selected(old('income_account_id', $suggestedIncomeAccount?->id) == $acc->id)>
-                                        {{ $acc->number ? $acc->number . ' - ' : '' }}{{ $acc->name }}
-                                    </option>
-                                @endforeach
-                            </select>
+                            @include('transactions.partials.account-search-select', [
+                                'name' => 'income_account_id',
+                                'id' => 'payment_income_account_id',
+                                'label' => 'Ertragskonto',
+                                'accounts' => $incomeAccounts,
+                                'selectedId' => old('income_account_id', $suggestedIncomeAccount?->id),
+                                'placeholder' => 'Ertragskonto suchen',
+                                'labelClass' => 'mb-1 block text-sm font-medium text-slate-700',
+                            ])
                             <p class="mt-1 text-xs leading-5 text-slate-500">
                                 Die Auswahl wird für diese Rechnung und die daraus erzeugte Finanzbuchung gespeichert.
                             </p>
@@ -52,14 +52,15 @@
                         </div>
 
                         <div>
-                            <label for="account_id" class="mb-1 block text-sm font-medium text-slate-700">Geldkonto</label>
-                            <select name="account_id" id="account_id" class="w-full rounded-2xl border-slate-300" required>
-                                @foreach($accounts as $acc)
-                                    <option value="{{ $acc->id }}" @selected(old('account_id') == $acc->id)>
-                                        {{ $acc->number ? $acc->number . ' - ' : '' }}{{ $acc->name }}
-                                    </option>
-                                @endforeach
-                            </select>
+                            @include('transactions.partials.account-search-select', [
+                                'name' => 'account_id',
+                                'id' => 'payment_account_id',
+                                'label' => 'Geldkonto',
+                                'accounts' => $accounts,
+                                'selectedId' => old('account_id'),
+                                'placeholder' => 'Bank oder Kasse suchen',
+                                'labelClass' => 'mb-1 block text-sm font-medium text-slate-700',
+                            ])
                             @error('account_id')
                                 <p class="mt-1 text-sm text-rose-600">{{ $message }}</p>
                             @enderror

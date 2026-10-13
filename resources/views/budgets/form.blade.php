@@ -4,12 +4,26 @@
 
 @section('content')
 @php
-    $accountOptions = $accounts->map(fn ($account) => [
+    $categoryNameById = $categories->pluck('name', 'id');
+    $accountOptions = $accounts->map(function ($account) use ($categoryNameById) {
+        $label = trim(($account->number ? $account->number . ' · ' : '') . $account->name);
+        $typeLabel = $account->type === 'einnahme' ? 'Einnahme' : 'Ausgabe';
+        $meta = collect([
+            $typeLabel,
+            $account->tax_area ? str_replace('_', ' ', $account->tax_area) : null,
+            $categoryNameById[$account->budget_category_id] ?? null,
+            $account->chart_name,
+        ])->filter()->implode(' · ');
+
+        return [
         'id' => $account->id,
-        'label' => trim(($account->number ? $account->number . ' · ' : '') . $account->name),
+        'label' => $label,
+        'meta' => $meta,
+        'search' => $label . ' ' . $meta,
         'type' => $account->type === 'einnahme' ? 'income' : 'expense',
         'budget_category_id' => $account->budget_category_id,
-    ])->values();
+    ];
+    })->values();
     $categoryOptions = $categories->map(fn ($category) => [
         'id' => $category->id,
         'label' => $category->name,
@@ -148,15 +162,60 @@
 
                                 <div>
                                     <label class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Konto</label>
-                                    <select :name="`items[${index}][account_id]`" x-model="item.account_id" @change="syncTypeFromAccount(item)"
-                                            class="mt-2 w-full rounded-2xl border-slate-200 bg-white text-sm shadow-sm focus:border-slate-400 focus:ring-slate-300" required>
-                                        <option value="">Bitte waehlen</option>
-                                        <template x-for="account in accountOptions" :key="account.id">
-                                            <option :value="String(account.id)"
-                                                    :selected="String(item.account_id) === String(account.id)"
-                                                    x-text="account.label"></option>
-                                        </template>
-                                    </select>
+                                    <div class="relative mt-2" x-data="{ open: false, query: '' }" @keydown.escape.window="open = false">
+                                        <input type="hidden"
+                                               :name="`items[${index}][account_id]`"
+                                               :value="item.account_id"
+                                               required>
+                                        <div class="rounded-2xl border border-slate-200 bg-white shadow-sm focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-200">
+                                            <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
+                                                <input type="search"
+                                                       x-model.debounce.120ms="query"
+                                                       @focus="open = true"
+                                                       @input="open = true"
+                                                       placeholder="Konto suchen"
+                                                       class="min-h-10 flex-1 border-0 bg-transparent p-0 text-sm text-slate-900 placeholder:text-slate-400 focus:ring-0"
+                                                       autocomplete="off">
+                                                <button type="button"
+                                                        x-show="item.account_id"
+                                                        x-cloak
+                                                        @click="item.account_id = ''; query = ''; open = true"
+                                                        class="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                                                        aria-label="Konto entfernen">
+                                                    &times;
+                                                </button>
+                                            </div>
+                                            <button type="button"
+                                                    @click="open = !open"
+                                                    class="flex w-full items-start justify-between gap-3 px-3 py-3 text-left">
+                                                <span class="min-w-0">
+                                                    <span class="block truncate text-sm font-semibold text-slate-900" x-text="item.account_id ? selectedAccountLabel(item) : 'Bitte Konto waehlen'"></span>
+                                                    <span class="mt-0.5 block truncate text-xs text-slate-500" x-text="item.account_id ? selectedAccountMeta(item) : 'Suche nach Nummer, Name, Bereich oder Kontoart'"></span>
+                                                </span>
+                                                <span class="shrink-0 text-slate-400">▾</span>
+                                            </button>
+                                        </div>
+                                        <div x-show="open"
+                                             x-transition
+                                             x-cloak
+                                             class="absolute z-30 mt-2 max-h-72 w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                                            <template x-for="account in filteredAccounts(query)" :key="account.id">
+                                                <button type="button"
+                                                        @click="chooseAccount(item, account); query = ''; open = false"
+                                                        class="flex w-full items-start justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-slate-50"
+                                                        :class="String(item.account_id) === String(account.id) ? 'bg-blue-50 text-blue-900' : 'text-slate-700'">
+                                                    <span class="min-w-0">
+                                                        <span class="block truncate text-sm font-semibold" x-text="account.label"></span>
+                                                        <span class="mt-0.5 block truncate text-xs text-slate-500" x-text="account.meta"></span>
+                                                    </span>
+                                                    <span x-show="String(item.account_id) === String(account.id)" class="shrink-0 text-xs font-semibold text-blue-700">Ausgewählt</span>
+                                                </button>
+                                            </template>
+                                            <div x-show="filteredAccounts(query).length === 0" class="px-3 py-6 text-center text-sm text-slate-500">
+                                                Kein Konto gefunden.
+                                            </div>
+                                        </div>
+                                    </div>
                                     @error('items.*.account_id')<p class="mt-2 text-sm text-rose-600">{{ $message }}</p>@enderror
                                 </div>
 
@@ -271,6 +330,24 @@
 
                 this.items.splice(index, 1);
             },
+            normalize(value) {
+                return value.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            },
+            filteredAccounts(query) {
+                const term = this.normalize((query || '').trim());
+
+                if (term === '') {
+                    return this.accountOptions.slice(0, 18);
+                }
+
+                return this.accountOptions
+                    .filter((account) => this.normalize(account.search).includes(term))
+                    .slice(0, 30);
+            },
+            chooseAccount(item, account) {
+                item.account_id = String(account.id);
+                this.syncTypeFromAccount(item);
+            },
             syncTypeFromAccount(item) {
                 item.account_id = item.account_id !== null && item.account_id !== undefined && item.account_id !== '' ? String(item.account_id) : '';
                 const selected = this.accountOptions.find((account) => String(account.id) === String(item.account_id));
@@ -311,6 +388,11 @@
                 const selected = this.accountOptions.find((account) => String(account.id) === String(item.account_id));
 
                 return selected ? selected.label : 'Neue Position';
+            },
+            selectedAccountMeta(item) {
+                const selected = this.accountOptions.find((account) => String(account.id) === String(item.account_id));
+
+                return selected ? selected.meta : 'Suche nach Nummer, Name, Bereich oder Kontoart';
             },
             selectedCategoryLabel(item) {
                 const selected = this.categoryOptions.find((category) => String(category.id) === String(item.budget_category_id));
