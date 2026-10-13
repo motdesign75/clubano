@@ -851,6 +851,38 @@ class MemberController extends Controller
 
     public function printList(Request $request)
     {
+        $data = $this->buildPrintListData($request);
+
+        if ($data['members']->isEmpty()) {
+            return redirect()
+                ->route('members.print-list')
+                ->with('error', 'Bitte wähle mindestens ein Mitglied für die Mitgliederliste aus.');
+        }
+
+        return view('members.print-list-print', array_merge($data, [
+            'isPdf' => false,
+        ]));
+    }
+
+    public function printListPdf(Request $request)
+    {
+        $data = $this->buildPrintListData($request);
+
+        if ($data['members']->isEmpty()) {
+            return redirect()
+                ->route('members.print-list')
+                ->with('error', 'Bitte wähle mindestens ein Mitglied für die Mitgliederliste aus.');
+        }
+
+        $pdf = Pdf::loadView('members.print-list-print', array_merge($data, [
+            'isPdf' => true,
+        ]))->setPaper('a4', 'landscape');
+
+        return $pdf->download('Mitgliederliste_' . now()->format('Y-m-d') . '.pdf');
+    }
+
+    private function buildPrintListData(Request $request): array
+    {
         $tenantId = auth()->user()->tenant_id;
 
         $validated = $request->validate([
@@ -880,19 +912,13 @@ class MemberController extends Controller
             ->sortBy(fn (Member $member) => $memberIds->search((int) $member->id))
             ->values();
 
-        if ($members->isEmpty()) {
-            return redirect()
-                ->route('members.print-list')
-                ->with('error', 'Bitte wähle mindestens ein Mitglied für die Mitgliederliste aus.');
-        }
-
-        return view('members.print-list-print', [
+        return [
             'members' => $members,
             'tenant' => auth()->user()->tenant,
             'displayMode' => $validated['display_mode'],
             'showContribution' => $request->boolean('show_contribution'),
             'showPaymentMethod' => $request->boolean('show_payment_method'),
-        ]);
+        ];
     }
 
     private function authorizeMember(Member $member): void

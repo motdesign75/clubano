@@ -15,7 +15,7 @@
 
         body {
             margin: 0;
-            background: #e5e7eb;
+            background: {{ ($isPdf ?? false) ? '#ffffff' : '#e5e7eb' }};
             color: #0f172a;
             font-family: Arial, Helvetica, sans-serif;
             font-size: 8.4pt;
@@ -23,12 +23,12 @@
         }
 
         .print-page {
-            width: 297mm;
-            min-height: 210mm;
-            margin: 0 auto;
-            padding: 12mm;
+            width: {{ ($isPdf ?? false) ? 'auto' : '297mm' }};
+            min-height: {{ ($isPdf ?? false) ? 'auto' : '210mm' }};
+            margin: {{ ($isPdf ?? false) ? '0' : '0 auto' }};
+            padding: {{ ($isPdf ?? false) ? '0' : '12mm' }};
             background: #ffffff;
-            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
+            box-shadow: {{ ($isPdf ?? false) ? 'none' : '0 18px 45px rgba(15, 23, 42, 0.16)' }};
         }
 
         .toolbar {
@@ -253,10 +253,12 @@
         };
     @endphp
 
-    <div class="toolbar">
-        <div>{{ $members->count() }} Mitglied(er) in der Druckliste.</div>
-        <button type="button" onclick="window.print()">Drucken</button>
-    </div>
+    @unless($isPdf ?? false)
+        <div class="toolbar">
+            <div>{{ $members->count() }} Mitglied(er) in der Druckliste.</div>
+            <button type="button" onclick="window.print()">Drucken</button>
+        </div>
+    @endunless
 
     <main class="print-page">
         <header class="heading">
@@ -351,7 +353,9 @@
             </tbody>
         </table>
 
-        <div class="print-footer">DIN A4 quer · {{ $tenantName }}</div>
+        @unless($isPdf ?? false)
+            <div class="print-footer">DIN A4 quer · {{ $tenantName }}</div>
+        @endunless
     </main>
 </body>
 </html>

@@ -121,8 +121,14 @@
                         Auswahl leeren
                     </button>
                     <button type="submit"
+                            formaction="{{ route('members.print-list.print') }}"
                             class="inline-flex min-h-10 items-center justify-center rounded-full bg-slate-950 px-5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800">
                         Mitgliederliste drucken
+                    </button>
+                    <button type="submit"
+                            formaction="{{ route('members.print-list.pdf') }}"
+                            class="inline-flex min-h-10 items-center justify-center rounded-full border border-slate-950 px-5 text-sm font-semibold text-slate-950 shadow-sm hover:bg-slate-50">
+                        PDF herunterladen
                     </button>
                 </div>
             </div>

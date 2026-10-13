@@ -230,6 +230,32 @@ test('staff can choose organization names for printed member lists', function ()
         ->assertSeeInOrder(['<div class="name">Musterfirma GmbH</div>', 'Lina Kontakt'], false);
 });
 
+test('staff can download member list as pdf', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'member-print-list-pdf');
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Paula',
+        'last_name' => 'Pdf',
+        'organization' => 'PDF Verein',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $response = $this->actingAs($staff)
+        ->post(route('members.print-list.pdf'), [
+            'member_ids' => [$member->id],
+            'display_mode' => 'organization',
+            'show_contribution' => '1',
+            'show_payment_method' => '1',
+        ]);
+
+    $response->assertOk();
+    expect($response->headers->get('content-type'))->toContain('application/pdf');
+    expect($response->getContent())->toStartWith('%PDF');
+});
+
 test('viewers cannot access member list printing', function () {
     $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
 
