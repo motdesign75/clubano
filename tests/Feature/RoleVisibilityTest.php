@@ -9,6 +9,7 @@ use App\Models\EventBooking;
 use App\Models\EventCategory;
 use App\Models\EventInvitation;
 use App\Models\Member;
+use App\Models\Membership;
 use App\Models\OperatorAuditLog;
 use App\Models\Protocol;
 use App\Models\PublicForm;
@@ -147,6 +148,75 @@ test('viewers cannot access name badge printing', function () {
 
     $this->actingAs($viewer)
         ->get(route('members.name-badges'))
+        ->assertForbidden();
+});
+
+test('staff can print a member list with optional contribution and payment method columns', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $staff] = createTenantWithUser(User::ROLE_STAFF, 'member-print-list');
+
+    $membership = Membership::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Erwachsene',
+        'amount' => 72,
+        'interval' => 'jährlich',
+    ]);
+
+    $member = Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Lina',
+        'last_name' => 'Liste',
+        'email' => 'lina@example.test',
+        'member_id' => 'M-200',
+        'entry_date' => now()->subMonth()->toDateString(),
+        'membership_id' => $membership->id,
+        'membership_amount' => 72,
+        'membership_interval' => 'jährlich',
+        'payment_method' => 'sepa_lastschrift',
+    ]);
+
+    $this->actingAs($staff)
+        ->get(route('members.print-list'))
+        ->assertOk()
+        ->assertSee('Mitgliederliste drucken')
+        ->assertSee('Lina Liste');
+
+    $this->actingAs($staff)
+        ->post(route('members.print-list.print'), [
+            'member_ids' => [$member->id],
+        ])
+        ->assertOk()
+        ->assertSee('Lina Liste')
+        ->assertDontSee('72,00 €')
+        ->assertDontSee('SEPA-Lastschrift');
+
+    $this->actingAs($staff)
+        ->post(route('members.print-list.print'), [
+            'member_ids' => [$member->id],
+            'show_contribution' => '1',
+            'show_payment_method' => '1',
+        ])
+        ->assertOk()
+        ->assertSee('Lina Liste')
+        ->assertSee('72,00 €')
+        ->assertSee('SEPA-Lastschrift');
+});
+
+test('viewers cannot access member list printing', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $viewer] = createTenantWithUser(User::ROLE_VIEWER, 'member-print-list-viewer');
+
+    Member::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'first_name' => 'Vera',
+        'last_name' => 'Liste',
+        'entry_date' => now()->subMonth()->toDateString(),
+    ]);
+
+    $this->actingAs($viewer)
+        ->get(route('members.print-list'))
         ->assertForbidden();
 });
 
