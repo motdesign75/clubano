@@ -69,6 +69,7 @@
     }"
     class="space-y-2"
     @keydown.escape.window="open = false"
+    @click.away="open = false"
 >
     <label for="{{ $fieldId }}_search" class="{{ $labelClass ?? 'mb-1 block text-sm font-medium text-slate-600' }}">{{ $label }}</label>
     <input type="hidden" name="{{ $name }}" :value="selected" @if($isRequired) required @endif>
@@ -81,7 +82,8 @@
             <input
                 id="{{ $fieldId }}_search"
                 type="search"
-                x-model.debounce.120ms="query"
+                x-ref="searchInput"
+                x-model="query"
                 @focus="open = true"
                 @input="open = true"
                 class="min-h-10 flex-1 border-0 bg-transparent p-0 text-sm text-slate-900 placeholder:text-slate-400 focus:ring-0"
@@ -92,7 +94,7 @@
                 type="button"
                 x-show="selected"
                 x-cloak
-                @click="clear()"
+                @click="clear(); $nextTick(() => $refs.searchInput?.focus())"
                 class="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                 aria-label="Auswahl entfernen"
             >
@@ -102,7 +104,7 @@
 
         <button
             type="button"
-            @click="open = !open"
+            @click="open = !open; if (open) { $nextTick(() => $refs.searchInput?.focus()) }"
             class="flex w-full items-start justify-between gap-3 px-3 py-3 text-left"
         >
             <span class="min-w-0">

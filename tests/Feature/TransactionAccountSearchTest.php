@@ -77,6 +77,8 @@ test('treasurers can search from and to accounts while editing a transaction', f
         ->assertOk()
         ->assertSee('Von-Konto suchen, z. B. 1200 oder Bank')
         ->assertSee('Nach-Konto suchen, z. B. 8006 oder Beitrag')
+        ->assertSee('x-ref="searchInput"', false)
+        ->assertSee('$refs.searchInput?.focus()', false)
         ->assertSee('1200 - Bank')
         ->assertSee('8006 - Mitgliedsbeiträge')
         ->assertSee('SKR-Test');
