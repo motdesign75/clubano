@@ -189,11 +189,34 @@ class BudgetPlanController extends Controller
 
         $nextSortOrder = (int) ($budget->items->max('sort_order') ?? -1) + 1;
         $added = 0;
+        $updated = 0;
+        $usedUncategorizedItemIds = [];
 
         foreach ($this->itemsFromActualTransactions((int) $budget->year) as $item) {
             $key = $this->budgetItemKey((int) $item['account_id'], $item['budget_category_id'] ?? null);
 
             if (in_array($key, $existingKeys, true)) {
+                continue;
+            }
+
+            $uncategorizedItem = $budget->items->first(function (BudgetPlanItem $planItem) use ($item, $usedUncategorizedItemIds) {
+                return (int) $planItem->account_id === (int) $item['account_id']
+                    && blank($planItem->budget_category_id)
+                    && ! in_array($planItem->id, $usedUncategorizedItemIds, true);
+            });
+
+            if ($uncategorizedItem && ! blank($item['budget_category_id'])) {
+                $uncategorizedItem->update([
+                    'budget_category_id' => $item['budget_category_id'],
+                    'notes' => filled($uncategorizedItem->notes)
+                        ? $uncategorizedItem->notes
+                        : $item['notes'],
+                ]);
+
+                $existingKeys[] = $key;
+                $usedUncategorizedItemIds[] = $uncategorizedItem->id;
+                $updated++;
+
                 continue;
             }
 
@@ -215,13 +238,14 @@ class BudgetPlanController extends Controller
             $added++;
         }
 
-        $message = $added > 0
-            ? $added . ' Position(en) wurden aus den erfassten Buchungen ' . $budget->year . ' in den Haushaltsplan uebernommen.'
+        $changed = $added + $updated;
+        $message = $changed > 0
+            ? $added . ' Position(en) wurden ergaenzt und ' . $updated . ' vorhandene Position(en) wurden einem Haushaltsbereich zugeordnet.'
             : 'Es wurden keine neuen Positionen gefunden. Alle passenden Ist-Buchungen sind bereits im Haushaltsplan enthalten.';
 
         return redirect()
             ->route('budgets.show', $budget)
-            ->with($added > 0 ? 'success' : 'info', $message);
+            ->with($changed > 0 ? 'success' : 'info', $message);
     }
 
     public function duplicate(BudgetPlan $budget)
