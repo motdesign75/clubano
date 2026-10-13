@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureTenantIsSubscribed;
 use App\Models\Account;
 use App\Models\BudgetCategory;
+use App\Models\BudgetPlan;
 use App\Models\BudgetPlanItem;
 use App\Models\Tenant;
 use App\Models\Transaction;
@@ -382,4 +383,98 @@ test('new budget plans are prepared from previous year transactions with budget 
         ->assertSee('1200.00')
         ->assertSee('300.00')
         ->assertSee('Aus Ist-Buchungen 2026 uebernommen.');
+});
+
+test('existing budget plans can import newly assigned actual budget areas', function () {
+    $this->withoutMiddleware(EnsureTenantIsSubscribed::class);
+
+    [$tenant, $user] = createBudgetCategoryTenant('import-actuals');
+
+    $membership = BudgetCategory::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Mitgliedschaft',
+        'color' => 'blue',
+        'sort_order' => 10,
+        'active' => true,
+    ]);
+
+    $events = BudgetCategory::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Veranstaltungen',
+        'color' => 'amber',
+        'sort_order' => 20,
+        'active' => true,
+    ]);
+
+    $bank = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Bank',
+        'number' => '1200',
+        'type' => 'bank',
+        'tax_area' => 'ideell',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $membershipIncome = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Mitgliedsbeiträge',
+        'number' => '8000',
+        'type' => 'einnahme',
+        'tax_area' => 'ideell',
+        'budget_category_id' => $membership->id,
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $eventIncome = Account::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'name' => 'Erlöse Sommerfest',
+        'number' => '8400',
+        'type' => 'einnahme',
+        'tax_area' => 'zweckbetrieb',
+        'active' => true,
+        'online' => false,
+    ]);
+
+    $plan = BudgetPlan::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'year' => 2027,
+        'title' => 'Haushaltsplan 2027',
+        'status' => 'entwurf',
+    ]);
+
+    $plan->items()->create([
+        'account_id' => $membershipIncome->id,
+        'budget_category_id' => $membership->id,
+        'type' => 'income',
+        'period_amount' => '1000.00',
+        'planning_cycle' => 'yearly',
+        'planned_amount' => '1000.00',
+        'sort_order' => 0,
+    ]);
+
+    Transaction::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id,
+        'created_by' => $user->id,
+        'date' => '2027-06-01',
+        'description' => 'Sommerfest Verkauf',
+        'amount' => 450,
+        'account_from_id' => $eventIncome->id,
+        'account_to_id' => $bank->id,
+        'budget_category_id' => $events->id,
+        'status' => 'abgeschlossen',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('budgets.import-actuals', $plan))
+        ->assertRedirect(route('budgets.show', $plan))
+        ->assertSessionHas('success');
+
+    $plan->refresh()->load('items');
+
+    expect($plan->items)->toHaveCount(2);
+    expect($plan->items->last()->account_id)->toBe($eventIncome->id);
+    expect($plan->items->last()->budget_category_id)->toBe($events->id);
+    expect((float) $plan->items->last()->planned_amount)->toBe(450.0);
 });

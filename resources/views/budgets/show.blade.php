@@ -29,6 +29,12 @@
                 <a href="{{ route('budgets.edit', $budget) }}" class="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100">
                     Bearbeiten
                 </a>
+                <form method="POST" action="{{ route('budgets.import-actuals', $budget) }}">
+                    @csrf
+                    <button type="submit" class="inline-flex items-center justify-center rounded-full border border-emerald-300/40 bg-emerald-300/10 px-5 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-300/20">
+                        Ist-Buchungen uebernehmen
+                    </button>
+                </form>
                 <form method="POST" action="{{ route('budgets.duplicate', $budget) }}">
                     @csrf
                     <button type="submit" class="inline-flex items-center justify-center rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/5">

@@ -176,6 +176,54 @@ class BudgetPlanController extends Controller
             ->with('success', 'Der Haushaltsplan wurde aktualisiert.');
     }
 
+    public function importActuals(BudgetPlan $budget)
+    {
+        $budget->load('items.account.budgetCategory');
+
+        $existingKeys = $budget->items
+            ->map(fn (BudgetPlanItem $item) => $this->budgetItemKey(
+                (int) $item->account_id,
+                $item->budget_category_id ?: $item->account?->budget_category_id
+            ))
+            ->all();
+
+        $nextSortOrder = (int) ($budget->items->max('sort_order') ?? -1) + 1;
+        $added = 0;
+
+        foreach ($this->itemsFromActualTransactions((int) $budget->year) as $item) {
+            $key = $this->budgetItemKey((int) $item['account_id'], $item['budget_category_id'] ?? null);
+
+            if (in_array($key, $existingKeys, true)) {
+                continue;
+            }
+
+            $budget->items()->create([
+                'account_id' => $item['account_id'],
+                'budget_category_id' => $item['budget_category_id'] ?: null,
+                'type' => $item['type'],
+                'period_amount' => $item['period_amount'],
+                'planning_cycle' => $item['planning_cycle'],
+                'planned_amount' => BudgetPlanItem::annualAmountFor(
+                    $item['planning_cycle'],
+                    (float) $item['period_amount']
+                ),
+                'notes' => $item['notes'],
+                'sort_order' => $nextSortOrder++,
+            ]);
+
+            $existingKeys[] = $key;
+            $added++;
+        }
+
+        $message = $added > 0
+            ? $added . ' Position(en) wurden aus den Ist-Buchungen ' . $budget->year . ' in den Haushaltsplan uebernommen.'
+            : 'Es wurden keine neuen Positionen gefunden. Alle passenden Ist-Buchungen sind bereits im Haushaltsplan enthalten.';
+
+        return redirect()
+            ->route('budgets.show', $budget)
+            ->with($added > 0 ? 'success' : 'info', $message);
+    }
+
     public function duplicate(BudgetPlan $budget)
     {
         $targetYear = $budget->year + 1;
@@ -385,6 +433,11 @@ class BudgetPlanController extends Controller
                 $year,
             ]),
         ];
+    }
+
+    protected function budgetItemKey(int $accountId, mixed $budgetCategoryId): string
+    {
+        return $accountId . ':' . ((string) ($budgetCategoryId ?: 'none'));
     }
 
     protected function actualAmountsForYear(int $year): array

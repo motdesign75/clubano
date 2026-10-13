@@ -574,6 +574,7 @@ Route::middleware(['auth', 'tenant.subscribed'])->group(function () use ($when, 
             Route::get('/haushaltsplan/{budget}/pdf', [$cls, 'pdf'])->name('budgets.pdf');
             Route::get('/haushaltsplan/{budget}/bearbeiten', [$cls, 'edit'])->name('budgets.edit');
             Route::put('/haushaltsplan/{budget}', [$cls, 'update'])->name('budgets.update');
+            Route::post('/haushaltsplan/{budget}/ist-uebernehmen', [$cls, 'importActuals'])->name('budgets.import-actuals');
             Route::post('/haushaltsplan/{budget}/duplizieren', [$cls, 'duplicate'])->name('budgets.duplicate');
         });
     });
