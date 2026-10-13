@@ -104,7 +104,7 @@
                 <div class="mt-4 space-y-3 text-sm leading-6 text-slate-600">
                     @if(($actualPrefillCount ?? 0) > 0)
                         <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
-                            Clubano hat {{ $actualPrefillCount }} Position(en) aus den abgeschlossenen Buchungen {{ $sourceActualYear }} vorbereitet. Die Werte sind Jahreswerte und koennen fuer {{ $plan->year }} angepasst werden.
+                            Clubano hat {{ $actualPrefillCount }} Position(en) aus den erfassten Buchungen {{ $sourceActualYear }} vorbereitet. Die Werte sind Jahreswerte und koennen fuer {{ $plan->year }} angepasst werden.
                         </div>
                     @endif
                     <p>Pro Position ein Bereich und ein Konto. Dadurch bleibt der spaetere Ist-Vergleich sauber.</p>

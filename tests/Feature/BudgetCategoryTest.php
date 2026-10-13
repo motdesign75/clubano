@@ -382,7 +382,7 @@ test('new budget plans are prepared from previous year transactions with budget 
         ->assertSee('Clubano hat 2 Position(en)')
         ->assertSee('1200.00')
         ->assertSee('300.00')
-        ->assertSee('Aus Ist-Buchungen 2026 uebernommen.');
+        ->assertSee('Aus erfassten Buchungen 2026 uebernommen.');
 });
 
 test('existing budget plans can import newly assigned actual budget areas', function () {
@@ -463,7 +463,7 @@ test('existing budget plans can import newly assigned actual budget areas', func
         'account_from_id' => $eventIncome->id,
         'account_to_id' => $bank->id,
         'budget_category_id' => $events->id,
-        'status' => 'abgeschlossen',
+        'status' => 'entwurf',
     ]);
 
     $this->actingAs($user)

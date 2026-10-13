@@ -216,7 +216,7 @@ class BudgetPlanController extends Controller
         }
 
         $message = $added > 0
-            ? $added . ' Position(en) wurden aus den Ist-Buchungen ' . $budget->year . ' in den Haushaltsplan uebernommen.'
+            ? $added . ' Position(en) wurden aus den erfassten Buchungen ' . $budget->year . ' in den Haushaltsplan uebernommen.'
             : 'Es wurden keine neuen Positionen gefunden. Alle passenden Ist-Buchungen sind bereits im Haushaltsplan enthalten.';
 
         return redirect()
@@ -371,9 +371,9 @@ class BudgetPlanController extends Controller
     {
         return Transaction::query()
             ->whereYear('date', $year)
-            ->where('status', 'abgeschlossen')
             ->with(['budgetCategory', 'account_from.budgetCategory', 'account_to.budgetCategory'])
             ->get()
+            ->reject(fn (Transaction $transaction) => $transaction->isCancelled() || $transaction->status === 'storniert')
             ->map(fn (Transaction $transaction) => $this->plannedItemSeedFromTransaction($transaction, $year))
             ->filter()
             ->groupBy(fn (array $item) => $item['account_id'] . ':' . ($item['budget_category_id'] ?? 'none'))
@@ -388,7 +388,7 @@ class BudgetPlanController extends Controller
                     'period_amount' => number_format($total, 2, '.', ''),
                     'planning_cycle' => 'yearly',
                     'planned_amount' => number_format($total, 2, '.', ''),
-                    'notes' => 'Aus Ist-Buchungen ' . $year . ' uebernommen.',
+                    'notes' => 'Aus erfassten Buchungen ' . $year . ' uebernommen.',
                     'sort_key' => $first['sort_key'],
                 ];
             })
