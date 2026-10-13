@@ -192,6 +192,16 @@ class BudgetPlanController extends Controller
         $updated = 0;
         $usedUncategorizedItemIds = [];
 
+        $updated += $this->applyActualCategoriesToExistingItems($budget, (int) $budget->year - 1, $usedUncategorizedItemIds);
+
+        $budget->refresh()->load('items.account.budgetCategory');
+        $existingKeys = $budget->items
+            ->map(fn (BudgetPlanItem $item) => $this->budgetItemKey(
+                (int) $item->account_id,
+                $item->budget_category_id ?: $item->account?->budget_category_id
+            ))
+            ->all();
+
         foreach ($this->itemsFromActualTransactions((int) $budget->year) as $item) {
             $key = $this->budgetItemKey((int) $item['account_id'], $item['budget_category_id'] ?? null);
 
@@ -246,6 +256,43 @@ class BudgetPlanController extends Controller
         return redirect()
             ->route('budgets.show', $budget)
             ->with($changed > 0 ? 'success' : 'info', $message);
+    }
+
+    protected function applyActualCategoriesToExistingItems(BudgetPlan $budget, int $sourceYear, array &$usedUncategorizedItemIds): int
+    {
+        if ($sourceYear < 2000) {
+            return 0;
+        }
+
+        $updated = 0;
+
+        foreach ($this->itemsFromActualTransactions($sourceYear) as $item) {
+            if (blank($item['budget_category_id'] ?? null)) {
+                continue;
+            }
+
+            $uncategorizedItem = $budget->items->first(function (BudgetPlanItem $planItem) use ($item, $usedUncategorizedItemIds) {
+                return (int) $planItem->account_id === (int) $item['account_id']
+                    && blank($planItem->budget_category_id)
+                    && ! in_array($planItem->id, $usedUncategorizedItemIds, true);
+            });
+
+            if (! $uncategorizedItem) {
+                continue;
+            }
+
+            $uncategorizedItem->update([
+                'budget_category_id' => $item['budget_category_id'],
+                'notes' => filled($uncategorizedItem->notes)
+                    ? $uncategorizedItem->notes
+                    : $item['notes'],
+            ]);
+
+            $usedUncategorizedItemIds[] = $uncategorizedItem->id;
+            $updated++;
+        }
+
+        return $updated;
     }
 
     public function duplicate(BudgetPlan $budget)
