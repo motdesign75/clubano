@@ -4,6 +4,12 @@ apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 
+def uploadSigning = new Properties()
+def uploadSigningFile = new File(System.getProperty('user.home'), '.config/clubano/android-signing/signing.properties')
+if (uploadSigningFile.exists()) {
+    uploadSigningFile.withInputStream { uploadSigning.load(it) }
+}
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -91,10 +97,18 @@ android {
         applicationId 'de.clubano.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "0.1.0"
+        versionCode 8
+        versionName "1.0.2"
     }
     signingConfigs {
+        release {
+            if (uploadSigningFile.exists()) {
+                storeFile file(uploadSigning['storeFile'])
+                storePassword uploadSigning['storePassword']
+                keyAlias uploadSigning['keyAlias']
+                keyPassword uploadSigning['keyPassword']
+            }
+        }
         debug {
             storeFile file('debug.keystore')
             storePassword 'android'
@@ -107,9 +121,7 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
@@ -123,6 +135,13 @@ android {
     }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.project == project && it.name.toLowerCase().contains('release') }
+        && !uploadSigningFile.exists()) {
+        throw new GradleException('Missing Clubano upload signing configuration: ' + uploadSigningFile)
     }
 }
 
