@@ -154,11 +154,15 @@ class MobileAppSyncService
     {
         $url = route('mobile-app-invitations.show', $appUser->invitation_token);
         $name = trim($member->full_name) ?: 'Mitglied';
+        $storeUrl = config('services.mobile_app.ios_store_url');
 
         Mail::raw(
             "Hallo {$name},\n\n".
             "{$tenant->name} nutzt die App Mein Clubano. Über den folgenden Link kannst du deinen App-Zugang aktivieren:\n\n".
             "{$url}\n\n".
+            "Lade anschließend Mein Clubano auf dein iPhone oder iPad. Im Apple App Store heißt die App Clubano:\n\n".
+            "{$storeUrl}\n\n".
+            "Öffne danach die App und melde dich mit deinem App-Benutzernamen und dem bei der Aktivierung festgelegten Passwort an. Deinen Benutzernamen zeigen wir dir bei der Aktivierung an.\n\n".
             "Dieser Zugang gilt nur für die Mitglieder-App und nicht für die Clubano-Verwaltung.\n\n".
             "Viele Grüße\n{$tenant->name}",
             function ($message) use ($member, $tenant) {

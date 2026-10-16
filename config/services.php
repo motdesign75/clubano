@@ -49,6 +49,10 @@ return [
         'integration_token' => env('TRINKWERT_INTEGRATION_TOKEN'),
     ],
 
+    'mobile_app' => [
+        'ios_store_url' => 'https://apps.apple.com/de/app/clubano/id6816384961',
+    ],
+
     'apns' => [
         'key_id' => env('APNS_KEY_ID'),
         'team_id' => env('APNS_TEAM_ID'),
