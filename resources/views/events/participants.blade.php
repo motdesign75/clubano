@@ -24,6 +24,23 @@
         </div>
     </section>
 
+    <section class="border-y border-slate-200 py-5" aria-labelledby="waitlist-heading">
+        <h2 id="waitlist-heading" class="text-lg font-semibold">Warteliste ({{ $waitlistEntries->total() }})</h2>
+        <div class="mt-3 overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead><tr class="border-b"><th class="py-2">Mitglied</th><th>Eingetragen</th><th>Mitteilung über freie Plätze</th></tr></thead>
+                <tbody>
+                @forelse($waitlistEntries as $entry)
+                    <tr class="border-b border-slate-100"><td class="py-2">{{ $entry->member?->full_name ?: 'Mitglied nicht verfügbar' }}</td><td>{{ $entry->joined_at->format('d.m.Y H:i') }}</td><td>{{ $entry->notified_at?->format('d.m.Y H:i') ?? 'Noch nicht erstellt' }}</td></tr>
+                @empty
+                    <tr><td colspan="3" class="py-3 text-slate-500">Keine Wartelisteneinträge.</td></tr>
+                @endforelse
+                </tbody>
+            </table>
+        </div>
+        {{ $waitlistEntries->links() }}
+    </section>
+
     @if(session('success'))
         <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             {{ session('success') }}

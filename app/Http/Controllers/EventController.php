@@ -1063,6 +1063,8 @@ class EventController extends Controller
 
         return view('events.participants', [
             'event' => $event,
+            'waitlistEntries' => \App\Models\EventWaitlistEntry::where('tenant_id', $event->tenant_id)->where('event_id', $event->id)
+                ->where('status', 'waiting')->with('member')->orderBy('joined_at')->paginate(25, ['*'], 'waitlist_page')->withQueryString(),
             ...$this->participantViewData($event),
         ]);
     }

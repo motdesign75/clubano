@@ -39,6 +39,16 @@ export type ClubEvent = {
   category: string | null;
   response_required: boolean;
   booking_enabled: boolean;
+  booking_url: string | null;
+  booking_closed_reason: string | null;
+  registration_deadline: string | null;
+  remaining_spots: number | null;
+  min_participants: number | null;
+  waitlist?: { joined: boolean; can_join: boolean; notified_at: string | null };
+  registration: {
+    reference: string; status: string; label: string; participant_id: number;
+    can_cancel: boolean; cancellation_blocked_reason: string | null;
+  } | null;
   price_label: string;
   mobile_shifts_enabled: boolean;
   invitation: EventInvitation | null;

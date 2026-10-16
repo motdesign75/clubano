@@ -3,18 +3,20 @@
     "name": "Mein Clubano",
     "slug": "clubano",
     "scheme": "clubano",
-    "version": "0.1.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "de.clubano.app",
+      "buildNumber": "22",
       "entitlements": {
         "aps-environment": "development"
       }
     },
     "android": {
       "package": "de.clubano.app",
+      "versionCode": 9,
       "adaptiveIcon": {
         "backgroundColor": "#0f172a"
       }

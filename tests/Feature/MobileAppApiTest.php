@@ -480,12 +480,305 @@ test('disabled mobile accounts cannot reset their password', function () {
     expect(\Illuminate\Support\Facades\Hash::check('secret-password', $user->fresh()->password))->toBeTrue();
 });
 
+test('mobile booking events use the existing form and reject simple responses', function () {
+    [$user, , $tenant] = mobileUserFixture();
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id, 'title' => 'Buchbarer Termin',
+        'start' => now()->addWeek(), 'end' => now()->addWeek()->addHour(),
+        'booking_enabled' => true, 'response_required' => true,
+        'registration_deadline' => now()->addDays(3), 'max_participants_total' => 10,
+        'show_remaining_spots' => true,
+    ]);
+    $form = \App\Models\PublicForm::create([
+        'tenant_id' => $tenant->id, 'event_id' => $event->id, 'title' => 'Anmeldung',
+        'slug' => 'mobile-booking-test', 'form_type' => 'event', 'is_active' => true,
+    ]);
+    $this->actingAs($user, 'sanctum')->getJson('/api/mobile/events')
+        ->assertOk()->assertJsonPath('events.0.booking_url', route('forms.public.show', $form->slug))
+        ->assertJsonPath('events.0.remaining_spots', 10);
+    $this->postJson("/api/mobile/events/{$event->id}/response", ['status' => 'accepted'])->assertStatus(422);
+    expect(EventInvitation::where('event_id', $event->id)->count())->toBe(0);
+
+    $event->update(['registration_deadline' => now()->subMinute()]);
+    $this->getJson("/api/mobile/events/{$event->id}")->assertOk()
+        ->assertJsonPath('event.booking_url', null)
+        ->assertJsonPath('event.booking_closed_reason', 'Der Anmeldeschluss ist erreicht.');
+});
+
+test('mobile registration status only exposes the linked members active booking', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id, 'title' => 'Termin', 'booking_enabled' => true,
+        'start' => now()->addWeek(), 'end' => now()->addWeek()->addHour(),
+    ]);
+    $booking = \App\Models\EventBooking::create([
+        'tenant_id' => $tenant->id, 'event_id' => $event->id,
+        'booking_reference' => 'TEST-APP-123', 'booker_name' => 'Mara',
+        'booker_email' => $member->email, 'participant_count' => 1,
+        'price_per_person' => 0, 'total_amount' => 0, 'booking_status' => 'pending',
+        'payment_status' => 'not_required', 'currency' => 'EUR',
+    ]);
+    $participant = $booking->participants()->create([
+        'member_id' => $member->id, 'participant_type' => 'member', 'position' => 1,
+        'first_name' => 'Mara', 'last_name' => 'Mobil', 'price_amount' => 0,
+        'payment_status' => 'not_required',
+    ]);
+    $this->actingAs($user, 'sanctum')->getJson('/api/mobile/events')
+        ->assertOk()->assertJsonPath('events.0.registration.reference', 'TEST-APP-123')
+        ->assertJsonPath('events.0.registration.label', 'Anmeldung eingegangen')
+        ->assertJsonPath('events.0.booking_url', null);
+    $participant->update(['member_id' => null]);
+    $this->getJson('/api/mobile/events')->assertJsonPath('events.0.registration', null);
+    $participant->update(['member_id' => $member->id, 'payment_status' => 'cancelled']);
+    $this->getJson('/api/mobile/events')->assertJsonPath('events.0.registration', null);
+});
+
+test('mobile cancellation releases only own free place and is idempotent', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    [$event, $booking, $participant] = mobileCancellationFixture($member, $tenant);
+    $guest = $booking->participants()->create([
+        'first_name' => 'Gast', 'last_name' => 'Bleibt', 'position' => 2,
+        'participant_type' => 'free', 'payment_required' => false,
+        'price_amount' => 0, 'payment_status' => 'not_required',
+    ]);
+    $booking->recalculateTotalsFromParticipants();
+    $url = "/api/mobile/events/{$event->id}/registrations/{$participant->id}/cancel";
+    $this->actingAs($user, 'sanctum')->getJson("/api/mobile/events/{$event->id}")
+        ->assertJsonPath('event.registration.can_cancel', true);
+    $this->postJson($url)->assertOk();
+    $this->postJson($url)->assertOk();
+    expect($participant->fresh()->payment_status)->toBe('cancelled')
+        ->and($guest->fresh()->payment_status)->toBe('not_required')
+        ->and($booking->fresh()->participant_count)->toBe(1)
+        ->and($booking->fresh()->booking_status)->toBe('confirmed')
+        ->and($event->fresh()->remaining_spots)->toBe(9)
+        ->and(\App\Models\EventChangeLog::where('event_id', $event->id)->count())->toBe(1);
+});
+
+test('mobile cancellation closes empty booking and preserves its record', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    [$event, $booking, $participant] = mobileCancellationFixture($member, $tenant);
+    $this->actingAs($user, 'sanctum')->postJson("/api/mobile/events/{$event->id}/registrations/{$participant->id}/cancel")->assertOk();
+    expect($booking->fresh()->booking_status)->toBe('cancelled')
+        ->and($booking->fresh()->participant_count)->toBe(0)
+        ->and($event->fresh()->remaining_spots)->toBe(10);
+});
+
+test('mobile cancellation rejects paid bookings and past events', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    [$event, $booking, $participant] = mobileCancellationFixture($member, $tenant);
+    $booking->update(['total_amount' => 25, 'gross_amount' => 25, 'payment_status' => 'paid']);
+    $url = "/api/mobile/events/{$event->id}/registrations/{$participant->id}/cancel";
+    $this->actingAs($user, 'sanctum')->getJson("/api/mobile/events/{$event->id}")
+        ->assertJsonPath('event.registration.can_cancel', false);
+    $this->postJson($url)->assertStatus(422);
+    expect($participant->fresh()->payment_status)->toBe('not_required')
+        ->and((float) $booking->fresh()->total_amount)->toBe(25.0);
+    $booking->update(['total_amount' => 0, 'gross_amount' => 0, 'payment_status' => 'not_required']);
+    $event->update(['start' => now()->subHour()]);
+    $this->postJson($url)->assertStatus(422);
+    expect($participant->fresh()->payment_status)->toBe('not_required');
+});
+
+test('mobile cancellation leaves linked invoices untouched even with zero booking total', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    [$event, $booking, $participant] = mobileCancellationFixture($member, $tenant);
+    $invoice = \App\Models\Invoice::create([
+        'tenant_id' => $tenant->id, 'invoice_number' => 'APP-CANCEL-TEST',
+        'invoice_date' => now()->toDateString(), 'recipient_type' => 'free',
+        'recipient_name' => $member->full_name, 'status' => 'open',
+    ]);
+    $booking->update(['invoice_id' => $invoice->id]);
+    $this->actingAs($user, 'sanctum')
+        ->postJson("/api/mobile/events/{$event->id}/registrations/{$participant->id}/cancel")->assertStatus(422);
+    expect($invoice->fresh()->status)->toBe('open')
+        ->and($booking->fresh()->invoice_id)->toBe($invoice->id)
+        ->and($participant->fresh()->payment_status)->toBe('not_required');
+});
+
+test('mobile cancellation cannot change another members or tenants registration', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    [$event, $booking, $participant] = mobileCancellationFixture($member, $tenant);
+    $guest = $booking->participants()->create([
+        'first_name' => 'Gast', 'last_name' => 'Fremd', 'position' => 2, 'participant_type' => 'free',
+        'price_amount' => 0, 'payment_status' => 'not_required',
+    ]);
+    $this->actingAs($user, 'sanctum')->postJson("/api/mobile/events/{$event->id}/registrations/{$guest->id}/cancel")->assertNotFound();
+    [, $otherMember, $otherTenant] = mobileUserFixture();
+    [$otherEvent, , $otherParticipant] = mobileCancellationFixture($otherMember, $otherTenant);
+    $this->postJson("/api/mobile/events/{$otherEvent->id}/registrations/{$otherParticipant->id}/cancel")->assertNotFound();
+    expect($guest->fresh()->payment_status)->toBe('not_required')
+        ->and($otherParticipant->fresh()->payment_status)->toBe('not_required');
+});
+
+test('native mobile booking uses authenticated member and shared pricing with additional guests', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    [$user, $member, $tenant] = mobileUserFixture();
+    $event = mobileNativeBookingFixture($tenant);
+    $event->update(['price_per_person' => 20, 'member_pricing_enabled' => true, 'member_price_per_person' => 5]);
+    $this->actingAs($user, 'sanctum')->getJson("/api/mobile/events/{$event->id}/booking")
+        ->assertOk()->assertJsonPath('member_price_cents', 500)->assertJsonPath('guest_price_cents', 2000);
+    $payload = [
+        'fields' => ['first_name' => 'Gefälscht', 'last_name' => 'Fremd', 'email' => $member->email, 'street' => 'Test 1', 'zip' => '31157', 'city' => 'Sarstedt', 'consent' => true],
+        'participant_count' => 2, 'expected_total_cents' => 2500,
+        'participants' => [['first_name' => 'Gast', 'last_name' => 'Test', 'participant_type' => 'member', 'member_id' => $member->id, 'price_amount' => 0]],
+    ];
+    $this->postJson("/api/mobile/events/{$event->id}/booking", $payload)->assertCreated()->assertJsonStructure(['reference']);
+    $booking = \App\Models\EventBooking::where('event_id', $event->id)->with('participants')->firstOrFail();
+    expect((float) $booking->total_amount)->toBe(25.0)
+        ->and($booking->participants[0]->member_id)->toBe($member->id)
+        ->and($booking->participants[0]->first_name)->toBe($member->first_name)
+        ->and($booking->participants[1]->member_id)->toBeNull()
+        ->and((float) $booking->participants[1]->price_amount)->toBe(20.0)
+        ->and($booking->invoice_id)->not->toBeNull();
+    $this->postJson("/api/mobile/events/{$event->id}/booking", $payload)->assertStatus(422);
+    expect(\App\Models\EventBooking::where('event_id', $event->id)->count())->toBe(1);
+});
+
+test('native mobile booking checks required fields capacity and changed prices without creating bookings', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    [$user, $member, $tenant] = mobileUserFixture();
+    $event = mobileNativeBookingFixture($tenant);
+    $payload = ['fields' => ['email' => $member->email], 'participant_count' => 1, 'expected_total_cents' => 0];
+    $this->actingAs($user, 'sanctum')->postJson("/api/mobile/events/{$event->id}/booking", $payload)
+        ->assertStatus(422)->assertJsonValidationErrors('fields.consent');
+    $payload['fields']['consent'] = true;
+    $payload['participant_count'] = 6;
+    $this->postJson("/api/mobile/events/{$event->id}/booking", $payload)->assertStatus(422);
+    $payload['participant_count'] = 1;
+    $event->update(['price_per_person' => 10, 'member_pricing_enabled' => false]);
+    $payload['fields'] += ['street' => 'Test 1', 'zip' => '31157', 'city' => 'Sarstedt'];
+    $this->postJson("/api/mobile/events/{$event->id}/booking", $payload)
+        ->assertStatus(422)->assertJsonValidationErrors('price');
+    expect(\App\Models\EventBooking::where('event_id', $event->id)->count())->toBe(0)
+        ->and(\App\Models\PublicFormSubmission::where('event_id', $event->id)->count())->toBe(0);
+    $event->update(['registration_deadline' => now()->subMinute()]);
+    $this->getJson("/api/mobile/events/{$event->id}/booking")->assertStatus(422);
+});
+
+test('native mobile booking cannot access another tenants form', function () {
+    [$user] = mobileUserFixture();
+    [, , $tenant] = mobileUserFixture();
+    $event = mobileNativeBookingFixture($tenant);
+    $this->actingAs($user, 'sanctum')->getJson("/api/mobile/events/{$event->id}/booking")->assertNotFound();
+    $this->postJson("/api/mobile/events/{$event->id}/booking", [])->assertNotFound();
+});
+
+test('mobile waitlist is scoped idempotent and notifies without reserving a place', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    [$user, $member, $tenant] = mobileUserFixture();
+    $event = mobileNativeBookingFixture($tenant);
+    $url = "/api/mobile/events/{$event->id}/waitlist";
+    $this->actingAs($user, 'sanctum')->postJson($url, ['join' => true])->assertStatus(422);
+    [, $booking, $participant] = mobileCancellationFixture($member, $tenant);
+    $booking->update(['event_id' => $event->id]);
+    $participant->update(['member_id' => null]);
+    $event->update(['max_participants_total' => 1]);
+    $this->postJson($url, ['join' => true])->assertOk();
+    $this->postJson($url, ['join' => true])->assertOk();
+    expect(\App\Models\EventWaitlistEntry::count())->toBe(1);
+    $service = app(\App\Services\EventWaitlistService::class);
+    expect($service->notifyAvailable($event))->toBe(0);
+    $participant->update(['payment_status' => 'cancelled']);
+    expect($service->notifyAvailable($event))->toBe(1)
+        ->and($service->notifyAvailable($event))->toBe(0)
+        ->and(\App\Models\AppNotification::where('type', 'event_waitlist')->count())->toBe(1)
+        ->and($booking->fresh()->invoice_id)->toBeNull();
+    $this->postJson("/api/mobile/events/{$event->id}/booking", [
+        'fields' => ['email' => $member->email, 'consent' => true],
+        'participant_count' => 1, 'expected_total_cents' => 0,
+    ])->assertCreated();
+    expect(\App\Models\EventWaitlistEntry::first()->status)->toBe('booked');
+    $this->postJson($url, ['join' => true])->assertStatus(422);
+});
+
+test('mobile waitlist allows leaving but rejects foreign tenants and closed deadlines', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    $event = mobileNativeBookingFixture($tenant);
+    [, $booking, $participant] = mobileCancellationFixture($member, $tenant);
+    $booking->update(['event_id' => $event->id]);
+    $participant->update(['member_id' => null]);
+    $event->update(['max_participants_total' => 1]);
+    $url = "/api/mobile/events/{$event->id}/waitlist";
+    $this->actingAs($user, 'sanctum')->postJson($url, ['join' => true])->assertOk();
+    $event->update(['registration_deadline' => now()->subMinute()]);
+    $participant->update(['payment_status' => 'cancelled']);
+    expect(app(\App\Services\EventWaitlistService::class)->notifyAvailable($event))->toBe(0);
+    $this->postJson($url, ['join' => true])->assertStatus(422);
+    $this->postJson($url, ['join' => false])->assertOk();
+    $this->postJson($url, ['join' => false])->assertOk();
+    expect(\App\Models\EventWaitlistEntry::first()->status)->toBe('removed');
+    [$otherUser] = mobileUserFixture();
+    $this->actingAs($otherUser, 'sanctum')->postJson($url, ['join' => true])->assertNotFound();
+});
+
+test('waitlist scheduler skips inactive users and sends once after reactivation', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    $event = mobileNativeBookingFixture($tenant);
+    $entry = \App\Models\EventWaitlistEntry::create([
+        'tenant_id' => $tenant->id, 'event_id' => $event->id, 'member_id' => $member->id,
+        'status' => 'waiting', 'joined_at' => now(),
+    ]);
+    $user->update(['is_active' => false]);
+    $this->artisan('clubano:notify-event-waitlists')->assertSuccessful();
+    expect($entry->fresh()->notified_at)->toBeNull();
+    $user->update(['is_active' => true]);
+    $this->artisan('clubano:notify-event-waitlists')->assertSuccessful();
+    $this->artisan('clubano:notify-event-waitlists')->assertSuccessful();
+    expect(\App\Models\AppNotification::where('type', 'event_waitlist')->count())->toBe(1)
+        ->and($entry->fresh()->notified_at)->not->toBeNull()
+        ->and(\App\Models\EventBooking::where('event_id', $event->id)->count())->toBe(0);
+});
+
+function mobileNativeBookingFixture(Tenant $tenant): Event
+{
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id, 'title' => 'App Anmeldung', 'booking_enabled' => true,
+        'start' => now()->addWeek(), 'end' => now()->addWeek()->addHour(),
+        'max_participants_total' => 5, 'max_participants_per_booking' => 5, 'price_per_person' => 0,
+    ]);
+    $form = \App\Models\PublicForm::create([
+        'tenant_id' => $tenant->id, 'event_id' => $event->id, 'title' => 'App Anmeldung',
+        'slug' => 'app-' . bin2hex(random_bytes(5)), 'form_type' => 'event', 'is_active' => true,
+    ]);
+    foreach (['first_name', 'last_name', 'email', 'consent'] as $index => $slug) {
+        $form->fields()->create([
+            'label' => $slug, 'slug' => $slug, 'field_type' => $slug === 'consent' ? 'checkbox' : 'text',
+            'is_required' => true, 'sort_order' => $index,
+        ]);
+    }
+
+    return $event;
+}
+
+function mobileCancellationFixture(Member $member, Tenant $tenant): array
+{
+    $event = Event::withoutGlobalScopes()->create([
+        'tenant_id' => $tenant->id, 'title' => 'Kostenloser Termin', 'booking_enabled' => true,
+        'start' => now()->addWeek(), 'end' => now()->addWeek()->addHour(), 'max_participants_total' => 10,
+    ]);
+    $booking = \App\Models\EventBooking::create([
+        'tenant_id' => $tenant->id, 'event_id' => $event->id, 'booking_reference' => 'APP-' . bin2hex(random_bytes(5)),
+        'booker_name' => $member->full_name, 'booker_email' => $member->email,
+        'participant_count' => 1, 'price_per_person' => 0, 'gross_amount' => 0,
+        'voucher_discount_amount' => 0, 'total_amount' => 0, 'currency' => 'EUR',
+        'payment_status' => 'not_required', 'booking_status' => 'confirmed',
+    ]);
+    $participant = $booking->participants()->create([
+        'member_id' => $member->id, 'first_name' => $member->first_name, 'last_name' => $member->last_name,
+        'participant_type' => 'member', 'position' => 1, 'payment_required' => false,
+        'price_amount' => 0, 'payment_status' => 'not_required',
+    ]);
+
+    return [$event, $booking, $participant];
+}
+
 function mobileUserFixture(): array
 {
     $tenant = Tenant::create([
         'name' => 'App Verein',
         'slug' => 'app-verein-' . bin2hex(random_bytes(3)),
-        'email' => 'verein@example.test',
+        'email' => 'verein-' . bin2hex(random_bytes(4)) . '@example.test',
         'license_mode' => 'gifted',
     ]);
 

@@ -26,7 +26,13 @@ Route::prefix('mobile')->name('api.mobile.')->group(function () {
         Route::get('/member-card', [MobileAppController::class, 'memberCard'])->name('member-card');
         Route::get('/events', [MobileAppController::class, 'events'])->name('events.index');
         Route::get('/events/{event}', [MobileAppController::class, 'event'])->name('events.show');
+        Route::post('/events/{event}/waitlist', [MobileAppController::class, 'updateWaitlist'])->middleware('throttle:20,1')->name('events.waitlist');
+        Route::get('/events/{event}/booking', [\App\Http\Controllers\PublicFormController::class, 'mobileBookingForm'])->name('events.booking.show');
+        Route::post('/events/{event}/booking', [\App\Http\Controllers\PublicFormController::class, 'mobileBookingSubmit'])
+            ->middleware('throttle:10,1')->name('events.booking.store');
         Route::post('/events/{event}/response', [MobileAppController::class, 'respondToEvent'])->name('events.response');
+        Route::post('/events/{event}/registrations/{participant}/cancel', [MobileAppController::class, 'cancelRegistration'])
+            ->whereNumber('participant')->middleware('throttle:20,1')->name('events.registrations.cancel');
         Route::get('/shifts', [MobileAppController::class, 'shifts'])->name('shifts.index');
         Route::get('/documents', [MobileAppController::class, 'documents'])->name('documents.index');
         Route::get('/news', [MobileAppController::class, 'news'])->name('news.index');

@@ -38,12 +38,17 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const payload: unknown = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    const validationMessages = response.status === 422 && payload && typeof payload === "object" && "errors" in payload
+      && payload.errors && typeof payload.errors === "object"
+      ? Object.values(payload.errors).flat().filter((value): value is string => typeof value === "string").join("\n") : "";
     const message = response.status >= 500
       ? "Clubano ist vorübergehend nicht erreichbar. Bitte versuche es später erneut."
       : response.status === 429
       ? "Zu viele Versuche. Bitte warte einen Moment und versuche es erneut."
       : response.status === 401
       ? "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an."
+      : validationMessages
+      ? validationMessages
       : payload && typeof payload === "object" && "message" in payload && typeof payload.message === "string"
       ? payload.message
       : "Die Anfrage konnte nicht verarbeitet werden.";

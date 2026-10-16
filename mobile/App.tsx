@@ -4,6 +4,7 @@ import * as Notifications from "expo-notifications";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   FlatList,
   Image,
@@ -18,6 +19,7 @@ import {
   View
 } from "react-native";
 import { ApiError, apiFetch, clearToken, readToken, saveToken } from "./src/api";
+import { EventBookingForm } from "./src/EventBookingForm";
 import type { AppNotification, ClubEvent, DocumentItem, Member, MemberCard, NewsItem, Shift, Tenant } from "./src/types";
 
 type Screen = "home" | "notifications" | "card" | "profile" | "events" | "shifts" | "documents" | "news" | "contact" | "legal";
@@ -533,55 +535,153 @@ function Profile({ member, refresh }: { member: Member; refresh: () => void }) {
 }
 
 function Events() {
+  const [bookingEvent, setBookingEvent] = useState<ClubEvent | null>(null);
   const [events, setEvents] = useState<ClubEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [responding, setResponding] = useState(false);
   useEffect(() => {
     let active = true;
-    apiFetch<{ events?: ClubEvent[] }>("/api/mobile/events")
+    const refresh = () => {
+      if (active) setLoading(true);
+      return apiFetch<{ events?: ClubEvent[] }>("/api/mobile/events")
       .then((data) => {
-        if (active) setEvents(arrayOrEmpty(data.events));
+        if (active) { setEvents(arrayOrEmpty(data.events)); setError(null); }
       })
-      .catch(() => {
-        if (active) setEvents([]);
-      });
+      .catch((failure) => {
+        if (active) setError(failure instanceof Error ? failure.message : "Termine konnten nicht geladen werden.");
+      }).finally(() => { if (active) setLoading(false); });
+    };
+    refresh();
+    const subscription = AppState.addEventListener("change", (state) => { if (state === "active") refresh(); });
     return () => {
       active = false;
+      subscription.remove();
     };
   }, []);
 
   async function respond(event: ClubEvent, status: string) {
+    if (responding) return;
+    setResponding(true);
     try {
       await apiFetch(`/api/mobile/events/${event.id}/response`, { method: "POST", body: JSON.stringify({ status }) });
       const data = await apiFetch<{ events?: ClubEvent[] }>("/api/mobile/events");
       setEvents(arrayOrEmpty(data.events));
     } catch (error) {
       Alert.alert("Antwort nicht gespeichert", error instanceof Error ? error.message : "Bitte versuche es erneut.");
+    } finally {
+      setResponding(false);
     }
   }
+
+  function confirmWaitlist(event: ClubEvent) {
+    if (responding) return;
+    const join = !event.waitlist?.joined;
+    Alert.alert(join ? "Auf die Warteliste?" : "Warteliste verlassen?", join
+      ? "Du erhältst eine Mitteilung in der App, wenn wieder Plätze frei sind. Es wird kein Platz reserviert und keine Buchung ausgelöst."
+      : "Du erhältst für diesen Termin keine weiteren Wartelisten-Mitteilungen.", [
+      { text: "Zurück", style: "cancel" },
+      { text: join ? "Vormerken" : "Verlassen", onPress: async () => {
+        setResponding(true);
+        try {
+          await apiFetch(`/api/mobile/events/${event.id}/waitlist`, { method: "POST", body: JSON.stringify({ join }) });
+          setEvents((current) => current.map((item) => item.id === event.id
+            ? { ...item, waitlist: { joined: join, can_join: item.waitlist?.can_join ?? false, notified_at: null } } : item));
+          try {
+            const data = await apiFetch<{ events?: ClubEvent[] }>("/api/mobile/events");
+            setEvents(arrayOrEmpty(data.events)); setError(null);
+          } catch { setError("Warteliste gespeichert. Bitte aktualisiere die Terminliste."); }
+        } catch (failure) {
+          Alert.alert("Warteliste nicht geändert", failure instanceof Error ? failure.message : "Bitte versuche es erneut.");
+        } finally { setResponding(false); }
+      } }
+    ]);
+  }
+
+  function confirmCancellation(event: ClubEvent) {
+    const registration = event.registration;
+    if (!registration?.can_cancel || responding) return;
+    Alert.alert("Eigene Teilnahme abmelden?", `Deine Teilnahme an „${event.title}“ wird abgemeldet. Andere Personen dieser Buchung bleiben angemeldet.`, [
+      { text: "Zurück", style: "cancel" },
+      { text: "Teilnahme abmelden", style: "destructive", onPress: async () => {
+        setResponding(true);
+        try {
+          await apiFetch(`/api/mobile/events/${event.id}/registrations/${registration.participant_id}/cancel`, { method: "POST" });
+          // Reflect the successful mutation even when the following refresh fails.
+          setEvents((current) => current.map((item) => item.id === event.id ? { ...item, registration: null, booking_url: null } : item));
+          Alert.alert("Abgemeldet", "Deine Teilnahme wurde abgemeldet.");
+          try {
+            const data = await apiFetch<{ events?: ClubEvent[] }>("/api/mobile/events");
+            setEvents(arrayOrEmpty(data.events)); setError(null);
+          } catch {
+            setError("Abmeldung gespeichert. Die Terminliste konnte noch nicht aktualisiert werden.");
+          }
+        } catch (failure) {
+          Alert.alert("Abmeldung nicht gespeichert", failure instanceof Error ? failure.message : "Bitte versuche es erneut.");
+        } finally { setResponding(false); }
+      } }
+    ]);
+  }
+
+  if (bookingEvent) return <EventBookingForm event={bookingEvent} onClose={() => setBookingEvent(null)} onBooked={() => {
+    setBookingEvent(null);
+    setLoading(true);
+    apiFetch<{ events?: ClubEvent[] }>("/api/mobile/events").then((data) => { setEvents(arrayOrEmpty(data.events)); setError(null); })
+      .catch(() => setError("Anmeldung gespeichert. Bitte aktualisiere die Terminliste."))
+      .finally(() => setLoading(false));
+  }} />;
 
   return (
     <FlatList
       contentContainerStyle={styles.content}
       data={events}
+      refreshing={loading}
+      onRefresh={async () => {
+        setLoading(true);
+        try {
+          const data = await apiFetch<{ events?: ClubEvent[] }>("/api/mobile/events");
+          setEvents(arrayOrEmpty(data.events)); setError(null);
+        } catch (failure) {
+          setError(failure instanceof Error ? failure.message : "Termine konnten nicht geladen werden.");
+        } finally { setLoading(false); }
+      }}
       keyExtractor={(item) => String(item.id)}
-      ListHeaderComponent={<SectionHeader icon="calendar-outline" title="Termine" text="Alles, was für deinen Verein ansteht." />}
-      ListEmptyComponent={<EmptyState icon="calendar-clear-outline" title="Keine Termine" text="Aktuell sind keine kommenden Veranstaltungen für die App freigegeben." />}
+      ListHeaderComponent={<View><SectionHeader icon="calendar-outline" title="Termine" text="" />{!!error && <Text accessibilityRole="alert" style={styles.muted}>{error}</Text>}</View>}
+      ListEmptyComponent={!loading && !error ? <EmptyState icon="calendar-clear-outline" title="Keine Termine" text="Aktuell sind keine kommenden Veranstaltungen für die App freigegeben." /> : null}
       renderItem={({ item }) => (
       <View style={styles.surfaceCard}>
         <View style={styles.cardTopline}>
           <View style={styles.smallIcon}>
             <Ionicons name="calendar-clear-outline" size={18} color="#1D4ED8" />
           </View>
-          <Text style={styles.statusBadge}>{item.invitation?.label ?? "Keine Rückmeldung"}</Text>
+          <Text style={styles.statusBadge}>{item.booking_enabled ? (item.registration?.label ?? "Anmeldung erforderlich") : (item.invitation?.label ?? (item.response_required ? "Keine Rückmeldung" : "Termin"))}</Text>
         </View>
         <Text style={styles.cardTitle}>{item.title}</Text>
         <InfoRow icon="time-outline" text={formatDate(item.starts_at)} />
         <InfoRow icon="location-outline" text={item.location ?? "Ort offen"} />
         {!!item.price_label && <InfoRow icon="pricetag-outline" text={item.price_label} />}
-        <View style={styles.responseGrid}>
+        {item.booking_enabled && <View style={{ gap: 10 }}>
+          {!!item.registration_deadline && <InfoRow icon="alarm-outline" text={`Anmeldeschluss: ${formatDate(item.registration_deadline)}`} />}
+          {item.remaining_spots != null && <InfoRow icon="people-outline" text={`${item.remaining_spots} Plätze frei`} />}
+          {!!item.min_participants && <InfoRow icon="people-outline" text={`Mindestens ${item.min_participants} Teilnehmende`} />}
+          {!item.registration && item.waitlist?.joined && <Text style={styles.muted}>Auf der Warteliste · Kein Platz reserviert</Text>}
+          {!item.registration && (item.waitlist?.joined || item.waitlist?.can_join) && <PrimaryButton
+            label={item.waitlist.joined ? "Warteliste verlassen" : "Auf die Warteliste"}
+            icon="list-outline" disabled={responding} onPress={() => confirmWaitlist(item)} />}
+          {item.registration ? <View style={{ gap: 10 }}>
+              <Text style={styles.muted}>Du bist bereits angemeldet. Buchungsnummer: {item.registration.reference}</Text>
+              {item.registration.can_cancel
+                ? <PrimaryButton label="Eigene Teilnahme abmelden" icon="close-circle-outline" disabled={responding} onPress={() => confirmCancellation(item)} />
+                : <Text style={styles.muted}>{item.registration.cancellation_blocked_reason}</Text>}
+            </View>
+            : item.booking_url ? <PrimaryButton label="Verbindlich anmelden" icon="person-add-outline" onPress={() => setBookingEvent(item)} />
+            : <Text style={styles.muted}>{item.booking_closed_reason ?? "Die Anmeldung ist noch nicht verfügbar."}</Text>}
+        </View>}
+        {!item.booking_enabled && item.response_required && <View style={styles.responseGrid} pointerEvents={responding ? "none" : "auto"}>
           <ActionChip label="Zusage" icon="checkmark" tone="positive" onPress={() => respond(item, "accepted")} />
           <ActionChip label="Vielleicht" icon="help" tone="neutral" onPress={() => respond(item, "maybe")} />
           <ActionChip label="Absage" icon="close" tone="danger" onPress={() => respond(item, "declined")} />
-        </View>
+        </View>}
       </View>
     )} />
   );

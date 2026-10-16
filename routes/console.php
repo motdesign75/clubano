@@ -22,6 +22,20 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schedule;
+
+Artisan::command('clubano:notify-event-waitlists', function (\App\Services\EventWaitlistService $waitlist) {
+    $count = 0;
+    Event::withoutGlobalScopes()->where('start', '>', now())->whereIn('id',
+        \App\Models\EventWaitlistEntry::withoutGlobalScopes()->select('event_id')->where('status', 'waiting')
+    )->chunkById(100, function ($events) use ($waitlist, &$count) {
+        foreach ($events as $event) {
+            $count += $waitlist->notifyAvailable($event);
+        }
+    });
+    $this->info($count . ' Wartelisten-Mitteilungen erstellt.');
+});
+
+Schedule::command('clubano:notify-event-waitlists')->everyFiveMinutes()->withoutOverlapping();
 use Illuminate\Support\Str;
 
 Artisan::command('inspire', function () {

@@ -7,6 +7,7 @@ use App\Models\Event;
 use App\Models\EventBooking;
 use App\Models\EventBookingParticipant;
 use App\Models\Member;
+use App\Models\MobileAppUser;
 use App\Models\PublicForm;
 use App\Models\PublicFormField;
 use App\Models\PublicFormSubmission;
@@ -556,7 +557,72 @@ class PublicFormController extends Controller
         return $this->handlePublicSubmit($request, $slug, true);
     }
 
-    private function handlePublicSubmit(Request $request, string $slug, bool $embedded)
+    private function mobileBookingContext(Request $request, Event $event): array
+    {
+        $user = $request->user();
+        abort_unless($user instanceof MobileAppUser && $user->is_active, 403);
+        abort_unless((int) $event->tenant_id === (int) $user->tenant_id, 404);
+        $member = Member::where('tenant_id', $user->tenant_id)->notArchived()->findOrFail($user->member_id);
+        $form = $event->activeBookingForm;
+        abort_unless($form && (int) $form->tenant_id === (int) $user->tenant_id, 404);
+        $this->ensureEventBookingCanAccept($event, 1);
+        abort_if(! $event->start || $event->start->lte(now()), 422, 'Der Termin hat bereits begonnen.');
+        $form = $this->resolvePublicForm($form->slug);
+        $this->ensureEventOrganizationField($form);
+        $this->ensureEventBillingFields($form);
+
+        return [$form, $member];
+    }
+
+    public function mobileBookingForm(Request $request, Event $event)
+    {
+        [$form, $member] = $this->mobileBookingContext($request, $event);
+        $slugs = $form->fields->pluck('slug');
+
+        return response()->json([
+            'title' => $event->title,
+            'description' => html_entity_decode(strip_tags($form->description ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+            'native_supported' => ! str_contains(strtolower($form->description ?? ''), '<a')
+                && blank($member->organization) && filled($member->first_name) && filled($member->last_name) && $form->fields->every(fn ($field) =>
+                in_array($field->field_type, ['text', 'email', 'tel', 'textarea', 'number', 'date', 'checkbox', 'select', 'radio', 'checkbox_group', 'heading', 'content', 'divider'], true)
+                && ! str_contains(strtolower($field->help_text ?? ''), '<a')),
+            'max_participants' => $event->effective_max_participants_per_booking,
+            'member_price_cents' => (int) round($event->priceForPublicBookingParticipant(['participant_type' => 'member'], 'person') * 100),
+            'guest_price_cents' => (int) round((float) $event->price_per_person * 100),
+            'currency' => strtoupper($event->currency ?: 'EUR'),
+            'fields' => $form->fields->reject(fn ($field) => in_array($field->slug, ['participant_count', 'participant_notes'], true)
+                || $field->isLegacyEventBookingAddressDuplicate($slugs))->map(fn ($field) => [
+                    'slug' => $field->slug, 'label' => $field->label, 'type' => $field->field_type,
+                    'required' => $field->is_required, 'help' => trim(strip_tags($field->help_text ?? '')),
+                    'options' => $this->parseOptions($field->options),
+                ])->values(),
+            'defaults' => collect(['first_name', 'last_name', 'email', 'organization', 'street', 'zip', 'city', 'country', 'mobile'])
+                ->mapWithKeys(fn ($key) => [$key => (string) ($member->{$key} ?? '')])->all() + ['phone' => (string) ($member->mobile ?? '')],
+        ]);
+    }
+
+    public function mobileBookingSubmit(Request $request, Event $event)
+    {
+        [$form, $member] = $this->mobileBookingContext($request, $event);
+        $request->validate([
+            'fields' => ['required', 'array'],
+            'expected_total_cents' => ['required', 'integer', 'min:0'],
+            'participants' => ['array'],
+            'participants.*.first_name' => ['required', 'string', 'max:255'],
+            'participants.*.last_name' => ['required', 'string', 'max:255'],
+        ]);
+        $fields = (array) $request->input('fields', []);
+        $fields['first_name'] = $member->first_name;
+        $fields['last_name'] = $member->last_name;
+        $request->merge([
+            'fields' => $fields, 'booking_mode' => 'person', 'booking_claims_membership' => true,
+            'use_booker_as_participant' => true, 'voucher_code' => null,
+        ]);
+
+        return $this->handlePublicSubmit($request, $form->slug, false, $member);
+    }
+
+    private function handlePublicSubmit(Request $request, string $slug, bool $embedded, ?Member $appMember = null)
     {
         $form = $this->resolvePublicForm($slug);
         $this->ensureEventOrganizationField($form);
@@ -689,7 +755,7 @@ class PublicFormController extends Controller
                 ]);
             }
 
-            $bookerMember = $this->findMemberForPublicBookingClaim((int) $form->tenant_id, $bookingMode, $answers);
+            $bookerMember = $appMember ?? $this->findMemberForPublicBookingClaim((int) $form->tenant_id, $bookingMode, $answers);
 
             if (! $bookerMember) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
@@ -698,11 +764,14 @@ class PublicFormController extends Controller
             }
         }
 
-        $submission = DB::transaction(function () use ($form, $answers, $validated, $isEventBooking, $bookerMember) {
+        $submission = DB::transaction(function () use ($form, $answers, $validated, $isEventBooking, $bookerMember, $appMember, $request) {
             if ($isEventBooking && $form->event_id) {
                 $event = Event::query()->whereKey($form->event_id)->lockForUpdate()->firstOrFail();
                 $form->setRelation('event', $event);
                 $this->ensureEventBookingCanAccept($event, (int) ($answers['participant_count'] ?? 1));
+                if ($appMember) {
+                    abort_if(! $event->start || $event->start->lte(now()), 422, 'Der Termin hat bereits begonnen.');
+                }
                 $this->ensureNoDuplicatePublicEventRegistration($event, $answers, $validated, $bookerMember);
             }
 
@@ -790,6 +859,11 @@ class PublicFormController extends Controller
                     });
                 $pricePerPerson = $participantCount > 0 ? round($participantRows->sum('price_amount') / $participantCount, 2) : 0;
                 $grossAmount = round($participantRows->sum('price_amount'), 2);
+                if ($appMember && (int) round($grossAmount * 100) !== (int) $request->input('expected_total_cents')) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'price' => 'Der Preis hat sich geändert. Bitte öffne die Anmeldung erneut und prüfe den aktuellen Betrag.',
+                    ]);
+                }
                 $voucher = null;
                 $voucherDiscountAmount = 0.0;
 
@@ -871,6 +945,11 @@ class PublicFormController extends Controller
                     ]);
                 }
 
+                \App\Models\EventWaitlistEntry::where('tenant_id', $form->tenant_id)
+                    ->where('event_id', $booking->event_id)->where('status', 'waiting')
+                    ->whereIn('member_id', $booking->participants()->whereNotNull('member_id')->pluck('member_id'))
+                    ->update(['status' => 'booked']);
+
                 if ($voucher && $voucherDiscountAmount > 0) {
                     VoucherRedemption::create([
                         'tenant_id' => $form->tenant_id,
@@ -927,6 +1006,13 @@ class PublicFormController extends Controller
         }
 
         $this->sendConfirmationMail($form, $submission, $answers);
+
+        if ($appMember) {
+            return response()->json([
+                'message' => 'Deine Anmeldung ist eingegangen.',
+                'reference' => $submission->eventBooking->booking_reference,
+            ], 201);
+        }
 
         return redirect()
             ->route($embedded ? 'forms.public.embed' : 'forms.public.show', $form->slug)

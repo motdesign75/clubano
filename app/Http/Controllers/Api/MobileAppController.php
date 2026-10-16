@@ -8,10 +8,14 @@ use App\Models\AppNotification;
 use App\Models\DataUpdateRequest;
 use App\Models\Document;
 use App\Models\Event;
+use App\Models\EventBookingParticipant;
 use App\Models\EventInvitation;
 use App\Models\EventShiftAssignment;
 use App\Models\Member;
 use App\Models\MobileAppUser;
+use App\Models\EventWaitlistEntry;
+use App\Services\EventWaitlistService;
+use App\Services\MobileEventCancellationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -264,11 +268,11 @@ class MobileAppController extends Controller
         $events = Event::query()
             ->where('tenant_id', $user->tenant_id)
             ->where('end', '>=', now()->subDay())
-            ->with(['category', 'invitations' => fn ($query) => $query->where('member_id', $member->id)])
+            ->with(['category', 'activeBookingForm', 'invitations' => fn ($query) => $query->where('member_id', $member->id)])
             ->orderBy('start')
             ->limit(100)
             ->get()
-            ->map(fn (Event $event) => $this->eventPayload($event));
+            ->map(fn (Event $event) => $this->eventPayload($event, $member));
 
         return response()->json(['events' => $events]);
     }
@@ -282,11 +286,12 @@ class MobileAppController extends Controller
 
         $event->load([
             'category',
+            'activeBookingForm',
             'invitations' => fn ($query) => $query->where('member_id', $member->id),
             'shifts.assignments.member',
         ]);
 
-        $payload = $this->eventPayload($event);
+        $payload = $this->eventPayload($event, $member);
         $payload['shifts'] = $event->mobile_shifts_enabled
             ? $event->shifts->map(fn ($shift) => $this->shiftPayload($shift, $member->id))->values()
             : [];
@@ -297,6 +302,8 @@ class MobileAppController extends Controller
     public function respondToEvent(Request $request, Event $event)
     {
         $this->ensureTenant($request, $event);
+        abort_if($event->booking_enabled, 422, 'Für diesen Termin ist eine verbindliche Anmeldung über das Anmeldeformular erforderlich.');
+        abort_unless($event->response_required, 422, 'Für diesen Termin ist keine Rückmeldung vorgesehen.');
         $member = $this->memberFor($request->user());
 
         abort_if(! $member, 403, 'Für diesen Zugang ist kein Mitglied verknüpft.');
@@ -329,6 +336,27 @@ class MobileAppController extends Controller
             'message' => 'Rückmeldung gespeichert.',
             'invitation' => $this->invitationPayload($invitation),
         ]);
+    }
+
+    public function cancelRegistration(Request $request, Event $event, int $participant, MobileEventCancellationService $cancellation)
+    {
+        $this->ensureTenant($request, $event);
+        $member = $this->memberFor($request->user());
+        abort_if(! $member, 403, 'Für diesen Zugang ist kein Mitglied verknüpft.');
+        $cancellation->cancel($event, $member, $participant, $request->user()->id);
+
+        return response()->json(['message' => 'Deine Teilnahme wurde abgemeldet.']);
+    }
+
+    public function updateWaitlist(Request $request, Event $event, EventWaitlistService $waitlist)
+    {
+        $this->ensureTenant($request, $event);
+        $member = $this->memberFor($request->user());
+        abort_if(! $member, 403);
+        $data = $request->validate(['join' => ['required', 'boolean']]);
+        $waitlist->update($event, $member, (bool) $data['join']);
+
+        return response()->json(['message' => $data['join'] ? 'Du stehst auf der Warteliste.' : 'Du wurdest von der Warteliste entfernt.']);
     }
 
     public function shifts(Request $request)
@@ -470,9 +498,26 @@ class MobileAppController extends Controller
         ];
     }
 
-    private function eventPayload(Event $event): array
+    private function eventPayload(Event $event, Member $member): array
     {
         $invitation = $event->invitations->first();
+        $registration = EventBookingParticipant::query()
+            ->where('member_id', $member->id)
+            ->active()
+            ->whereHas('booking', fn ($query) => $query
+                ->where('tenant_id', $member->tenant_id)
+                ->where('event_id', $event->id)
+                ->where(fn ($status) => $status->whereNull('booking_status')->orWhere('booking_status', '!=', 'cancelled')))
+            ->with('booking')
+            ->first();
+        $closedReason = $event->booking_closed_reason;
+        if ($event->end?->isPast()) {
+            $closedReason = 'Dieser Termin ist beendet.';
+        }
+        $form = $event->activeBookingForm;
+        $waitlistEntry = EventWaitlistEntry::where('event_id', $event->id)->where('member_id', $member->id)->where('status', 'waiting')->first();
+        $cancellationReason = $registration
+            ? app(MobileEventCancellationService::class)->blockedReason($event, $registration->booking) : null;
 
         return [
             'id' => $event->id,
@@ -485,6 +530,21 @@ class MobileAppController extends Controller
             'is_public' => (bool) $event->is_public,
             'response_required' => (bool) $event->response_required,
             'booking_enabled' => (bool) $event->booking_enabled,
+            'waitlist' => [
+                'joined' => ! $registration && $waitlistEntry !== null,
+                'can_join' => ! $registration && app(EventWaitlistService::class)->isOpen($event) && $event->is_fully_booked,
+                'notified_at' => $waitlistEntry?->notified_at?->toIso8601String(),
+            ],
+            'booking_url' => $event->booking_enabled && ! $closedReason && ! $registration && $form && $form->tenant_id === $event->tenant_id
+                ? route('forms.public.show', $form->slug) : null,
+            'registration' => $registration ? [
+                'participant_id' => $registration->id,
+                'can_cancel' => $cancellationReason === null,
+                'cancellation_blocked_reason' => $cancellationReason,
+                'reference' => $registration->booking->booking_reference,
+                'status' => $registration->booking->booking_status,
+                'label' => $registration->booking->booking_status === 'pending' ? 'Anmeldung eingegangen' : 'Angemeldet',
+            ] : null,
             'price_label' => $event->price_label,
             'max_participants_total' => $event->max_participants_total,
             'min_participants' => $event->min_participants,
@@ -492,7 +552,7 @@ class MobileAppController extends Controller
             'show_remaining_spots' => (bool) $event->show_remaining_spots,
             'booked_participants_count' => $event->booked_participants_count,
             'remaining_spots' => $event->show_remaining_spots ? $event->remaining_spots : null,
-            'booking_closed_reason' => $event->booking_closed_reason,
+            'booking_closed_reason' => $closedReason,
             'mobile_shifts_enabled' => (bool) $event->mobile_shifts_enabled,
             'invitation' => $invitation ? $this->invitationPayload($invitation) : null,
         ];
