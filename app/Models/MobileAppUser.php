@@ -57,6 +57,20 @@ class MobileAppUser extends Authenticatable
         return $this->belongsTo(Tenant::class);
     }
 
+    public function getEmailForPasswordReset(): string
+    {
+        return 'mobile:' . $this->id;
+    }
+
+    public function sendPasswordResetNotification($token): void
+    {
+        $url = route('mobile-password.reset', ['token' => $token, 'username' => $this->username]);
+        \Illuminate\Support\Facades\Mail::raw(
+            "Über diesen Link kannst du dein Passwort für Mein Clubano ändern:\n\n{$url}\n\nDer Link ist 60 Minuten gültig. Falls du keine Änderung angefordert hast, ignoriere diese E-Mail.",
+            fn ($message) => $message->to($this->member->email)->subject('Mein Clubano: Passwort zurücksetzen'),
+        );
+    }
+
     public function member(): BelongsTo
     {
         return $this->belongsTo(Member::class);

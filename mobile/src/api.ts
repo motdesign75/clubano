@@ -3,6 +3,12 @@ import { API_BASE_URL } from "./config";
 
 const TOKEN_KEY = "clubano_mobile_token";
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+  }
+}
+
 export async function saveToken(token: string) {
   await SecureStore.setItemAsync(TOKEN_KEY, token);
 }
@@ -25,15 +31,23 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {})
     }
+  }).catch(() => {
+    throw new ApiError("Keine Verbindung zu Clubano. Bitte prüfe deine Internetverbindung und versuche es erneut.", 0);
   });
 
   const payload: unknown = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const message = payload && typeof payload === "object" && "message" in payload && typeof payload.message === "string"
+    const message = response.status >= 500
+      ? "Clubano ist vorübergehend nicht erreichbar. Bitte versuche es später erneut."
+      : response.status === 429
+      ? "Zu viele Versuche. Bitte warte einen Moment und versuche es erneut."
+      : response.status === 401
+      ? "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an."
+      : payload && typeof payload === "object" && "message" in payload && typeof payload.message === "string"
       ? payload.message
       : "Die Anfrage konnte nicht verarbeitet werden.";
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
 
   return payload as T;

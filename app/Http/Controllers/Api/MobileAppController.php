@@ -175,7 +175,14 @@ class MobileAppController extends Controller
             ],
         );
 
-        return response()->json(['message' => 'Push-Benachrichtigungen sind vorbereitet.']);
+        return response()->json([
+            'message' => 'Push-Benachrichtigungen sind vorbereitet.',
+            'delivery_configured' => match ($provider) {
+                'apns' => app(\App\Services\ApnsPushService::class)->configured(),
+                'expo' => true,
+                default => false,
+            },
+        ]);
     }
 
     public function notifications(Request $request)

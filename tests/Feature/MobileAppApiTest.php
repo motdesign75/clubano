@@ -448,6 +448,38 @@ test('published app news creates mobile notifications and sends expo push', func
     Http::assertSent(fn ($request) => $request->url() === 'https://exp.host/--/api/v2/push/send');
 });
 
+test('mobile password reset revokes sessions and cannot be reused or change the web password', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    $webUser = User::factory()->create(['tenant_id' => $tenant->id, 'email' => $member->email, 'password' => 'web-password']);
+    $user->createToken('phone');
+    $token = \Illuminate\Support\Facades\Password::broker('mobile')->createToken($user);
+    $payload = ['username' => $user->username, 'token' => $token, 'password' => 'new-app-password', 'password_confirmation' => 'new-app-password'];
+
+    $this->get(route('mobile-password.reset', ['token' => $token, 'username' => $user->username]))->assertOk();
+    $this->post(route('mobile-password.update'), $payload)->assertSessionHasNoErrors()->assertSessionHas('status');
+
+    expect(\Illuminate\Support\Facades\Hash::check('new-app-password', $user->fresh()->password))->toBeTrue()
+        ->and($user->tokens()->count())->toBe(0)
+        ->and(\Illuminate\Support\Facades\Hash::check('web-password', $webUser->fresh()->password))->toBeTrue();
+    $this->post(route('mobile-password.update'), $payload)->assertSessionHasErrors('password');
+});
+
+test('unknown mobile password requests do not reveal account existence', function () {
+    $this->postJson('/api/mobile/forgot-password', ['username' => 'unknown'])
+        ->assertOk()->assertJsonStructure(['message']);
+});
+
+test('disabled mobile accounts cannot reset their password', function () {
+    [$user] = mobileUserFixture();
+    $token = \Illuminate\Support\Facades\Password::broker('mobile')->createToken($user);
+    $user->update(['is_active' => false]);
+    $this->post(route('mobile-password.update'), [
+        'username' => $user->username, 'token' => $token,
+        'password' => 'new-app-password', 'password_confirmation' => 'new-app-password',
+    ])->assertSessionHasErrors('password');
+    expect(\Illuminate\Support\Facades\Hash::check('secret-password', $user->fresh()->password))->toBeTrue();
+});
+
 function mobileUserFixture(): array
 {
     $tenant = Tenant::create([

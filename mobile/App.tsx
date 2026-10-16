@@ -17,7 +17,7 @@ import {
   TextInput,
   View
 } from "react-native";
-import { apiFetch, clearToken, readToken, saveToken } from "./src/api";
+import { ApiError, apiFetch, clearToken, readToken, saveToken } from "./src/api";
 import type { AppNotification, ClubEvent, DocumentItem, Member, MemberCard, NewsItem, Shift, Tenant } from "./src/types";
 
 type Screen = "home" | "notifications" | "card" | "profile" | "events" | "shifts" | "documents" | "news" | "contact" | "legal";
@@ -111,8 +111,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
   const [pushStatus, setPushStatus] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
 
   async function loadSession() {
+    setSessionError(null);
+    setLoading(true);
     try {
       const token = await readToken();
       if (!token) {
@@ -121,9 +124,13 @@ export default function App() {
       }
       const data = await apiFetch<unknown>("/api/mobile/me");
       setSession(requireSession(data));
-    } catch {
-      await clearToken();
-      setSession(null);
+    } catch (error) {
+      if (error instanceof ApiError && [401, 403].includes(error.status)) {
+        await clearToken();
+        setSession(null);
+      } else {
+        setSessionError(error instanceof Error ? error.message : "Die Sitzung konnte nicht geladen werden.");
+      }
     } finally {
       setLoading(false);
     }
@@ -149,8 +156,10 @@ export default function App() {
       try {
         const token = await Notifications.getDevicePushTokenAsync();
         const nativeToken = typeof token.data === "string" ? token.data : String(token.data);
-        await registerToken(nativeToken, Platform.OS === "ios" ? "apns" : "fcm");
-        setPushStatus("Push ist aktiviert. Wichtige Mitteilungen kommen direkt auf dein Gerät.");
+        const result = await registerToken(nativeToken, Platform.OS === "ios" ? "apns" : "fcm");
+        setPushStatus(result.delivery_configured
+          ? "Dein Gerät ist für Push registriert."
+          : "Push ist noch nicht verfügbar. Neue Mitteilungen findest du in der App.");
       } catch (error) {
         console.warn("Native push token registration failed", error);
         setPushStatus("Push konnte noch nicht aktiviert werden. Die App funktioniert trotzdem normal.");
@@ -162,7 +171,7 @@ export default function App() {
   }
 
   async function registerToken(token: string, provider: "expo" | "apns" | "fcm") {
-    await apiFetch("/api/mobile/push-token", {
+    return apiFetch<{ delivery_configured?: boolean }>("/api/mobile/push-token", {
       method: "POST",
       body: JSON.stringify({
         token,
@@ -188,6 +197,12 @@ export default function App() {
   }
 
   if (!session) {
+    if (sessionError) {
+      return <Centered>
+        <Text style={styles.muted}>{sessionError}</Text>
+        <PrimaryButton label="Erneut versuchen" icon="refresh-outline" onPress={loadSession} />
+      </Centered>;
+    }
     return <LoginScreen onLogin={async (nextSession) => {
       setSession(nextSession);
       setScreen("home");
@@ -244,12 +259,30 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
+  async function resetPassword() {
+    if (!username.trim()) {
+      Alert.alert("Passwort zurücksetzen", "Bitte gib zuerst deinen App-Benutzernamen ein.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await apiFetch<{ message: string }>("/api/mobile/forgot-password", {
+        method: "POST", body: JSON.stringify({ username: username.trim() })
+      });
+      Alert.alert("Passwort zurücksetzen", result.message);
+    } catch (error) {
+      Alert.alert("Bitte erneut versuchen", error instanceof Error ? error.message : "Die Anfrage ist fehlgeschlagen.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function login() {
     try {
       setBusy(true);
       const data = await apiFetch<unknown>("/api/mobile/login", {
         method: "POST",
-        body: JSON.stringify({ username, password, device_name: "Mein Clubano App" })
+        body: JSON.stringify({ username: username.trim(), password, device_name: "Mein Clubano App" })
       });
       if (!isRecord(data) || typeof data.token !== "string") {
         throw new Error("Die Anmeldung wurde vom Server unvollständig beantwortet.");
@@ -280,6 +313,9 @@ function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
           <TextInput style={styles.input} autoCapitalize="none" autoCorrect={false} placeholder="Benutzername" placeholderTextColor="#94A3B8" value={username} onChangeText={setUsername} />
           <TextInput style={styles.input} secureTextEntry placeholder="Passwort" placeholderTextColor="#94A3B8" value={password} onChangeText={setPassword} />
           <PrimaryButton label={busy ? "Bitte warten..." : "Anmelden"} icon="arrow-forward" onPress={login} disabled={busy || !username || !password} />
+          <Pressable onPress={resetPassword} disabled={busy} accessibilityRole="button">
+            <Text style={styles.muted}>Passwort vergessen?</Text>
+          </Pressable>
         </View>
       </View>
     </SafeAreaView>

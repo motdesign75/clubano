@@ -12,7 +12,8 @@ Route::prefix('integrations/trinkwert')->name('api.integrations.trinkwert.')->gr
 });
 
 Route::prefix('mobile')->name('api.mobile.')->group(function () {
-    Route::post('/login', [MobileAppController::class, 'login'])->name('login');
+    Route::post('/forgot-password', [\App\Http\Controllers\MobilePasswordController::class, 'send'])->middleware('throttle:5,1')->name('password.email');
+    Route::post('/login', [MobileAppController::class, 'login'])->middleware('throttle:10,1')->name('login');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [MobileAppController::class, 'logout'])->name('logout');

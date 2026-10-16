@@ -93,6 +93,8 @@ Route::post('/stammdaten-pruefen/{token}', [DataUpdateRequestController::class, 
 Route::get('/app-einladung/{token}', [MobileAppInvitationController::class, 'show'])
     ->middleware(['throttle:30,1'])
     ->name('mobile-app-invitations.show');
+Route::get('/app-passwort/{token}', [\App\Http\Controllers\MobilePasswordController::class, 'show'])->middleware('throttle:30,1')->name('mobile-password.reset');
+Route::post('/app-passwort', [\App\Http\Controllers\MobilePasswordController::class, 'reset'])->middleware('throttle:10,1')->name('mobile-password.update');
 Route::post('/app-einladung/{token}', [MobileAppInvitationController::class, 'store'])
     ->middleware(['throttle:10,1'])
     ->name('mobile-app-invitations.store');
