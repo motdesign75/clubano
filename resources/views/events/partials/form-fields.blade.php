@@ -414,7 +414,7 @@
                     <div x-show="enabled" x-cloak class="mt-3">
                         <label for="child_max_age" class="{{ $labelClass }}">Bis einschließlich Alter am Veranstaltungstag</label>
                         <input id="child_max_age" name="child_max_age" type="number" min="0" max="17" step="1" :required="enabled" :disabled="!enabled"
-                               value="{{ old('child_max_age', $event->child_max_age ?? 12) }}" class="{{ $inputClass }}">
+                               value="{{ old('child_max_age', $event->child_max_age ?? 14) }}" class="{{ $inputClass }}">
                         <p class="mt-1 text-xs text-slate-500">Jedes Kind belegt einen Platz. Die Befreiung gilt auch für Kinder mit Mitgliedschaft.</p>
                     </div>
                 </div>
