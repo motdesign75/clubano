@@ -632,6 +632,7 @@ class EventController extends Controller
             'member_pricing_enabled' => 'nullable|boolean',
             'organization_bookings_free' => 'nullable|boolean',
             'children_free' => 'nullable|boolean',
+            'pricing_mode' => 'nullable|in:person,meter',
             'child_max_age' => 'nullable|required_if:children_free,1|integer|min:0|max:17',
             'attendance_enabled' => 'nullable|boolean',
             'response_required' => 'nullable|boolean',
@@ -666,6 +667,7 @@ class EventController extends Controller
             'booking_enabled' => $request->boolean('booking_enabled'),
             'organization_bookings_free' => $request->boolean('booking_enabled') && $request->boolean('organization_bookings_free'),
             'children_free' => $request->boolean('booking_enabled') && $request->boolean('children_free'),
+            'pricing_mode' => $validated['pricing_mode'] ?? 'person',
             'child_max_age' => $request->boolean('children_free') ? ($validated['child_max_age'] ?? null) : null,
             'attendance_enabled' => $request->boolean('attendance_enabled'),
             'response_required' => $request->boolean('response_required'),
@@ -1959,6 +1961,7 @@ class EventController extends Controller
 
         $validated = $request->validate([
             'participant_type' => ['required', Rule::in(['member', 'contact', 'guest'])],
+            'stand_length_meters' => [Rule::requiredIf($event->isStandBooking()), 'nullable', 'numeric', 'min:0.5', 'max:1000', 'multiple_of:0.5'],
             'member_id' => ['nullable', Rule::exists('members', 'id')->where('tenant_id', $tenantId)],
             'member_ids' => ['required_if:participant_type,member', 'nullable', 'array', 'min:1'],
             'member_ids.*' => ['integer', Rule::exists('members', 'id')->where('tenant_id', $tenantId)],
@@ -2030,6 +2033,9 @@ class EventController extends Controller
             ? $request->boolean('payment_required')
             : (($validated['payment_status'] ?? null) !== 'not_required' && $defaultPriceAmount > 0);
         $priceAmount = $paymentRequired ? round((float) ($validated['price_amount'] ?? $defaultPriceAmount), 2) : 0;
+        if ($event->isStandBooking()) {
+            $priceAmount = $paymentRequired ? round($defaultPriceAmount * (float) $validated['stand_length_meters'], 2) : 0;
+        }
         $paymentStatus = $paymentRequired ? $validated['payment_status'] : 'not_required';
 
         if ($priceAmount <= 0 && $paymentStatus === 'open') {
@@ -2058,7 +2064,7 @@ class EventController extends Controller
             'notes' => trim('Manuell nachgetragen' . (filled($validated['note'] ?? null) ? ': ' . $validated['note'] : '')),
         ]);
 
-        $participants->each(function (array $participant, int $index) use ($booking, $validated, $paymentRequired, $priceAmount, $paymentStatus) {
+        $participants->each(function (array $participant, int $index) use ($booking, $validated, $paymentRequired, $priceAmount, $paymentStatus, $event, $defaultPriceAmount) {
             $booking->participants()->create(array_merge($participant['data'], [
                 'position' => $index + 1,
                 'participant_type' => $validated['participant_type'],
@@ -2069,8 +2075,10 @@ class EventController extends Controller
                 'source' => $validated['source'],
                 'note' => $validated['note'] ?? null,
                 'answers' => array_filter([
+                    'stand_length_meters' => $event->isStandBooking() ? (float) $validated['stand_length_meters'] : null,
+                    'stand_unit_price' => $event->isStandBooking() ? ($paymentRequired ? $defaultPriceAmount : 0) : null,
                     'organization_booking_type' => $validated['organization_booking_type'] ?? null,
-                ]),
+                ], fn ($value) => $value !== null && $value !== ''),
             ]));
         });
 
@@ -3170,6 +3178,13 @@ class EventController extends Controller
         $invoiceHint = $formal
             ? ' Nach der Buchung erhalten Sie automatisch eine Rechnung per E-Mail, wenn eine Zahlung fällig ist.'
             : ' Nach der Buchung erhältst du automatisch eine Rechnung per E-Mail, wenn eine Zahlung fällig ist.';
+
+        if ($event->isStandBooking()) {
+            return 'Standplatzbuchung. Normalpreis: ' . $this->formatEventPriceForText($externalPrice, $event) . ' pro laufendem Meter.'
+                . ($event->hasSeparateMemberPrice() ? ' Mitgliederpreis: ' . $this->formatEventPriceForText($memberPrice, $event) . ' pro laufendem Meter.' : '')
+                . ($event->organization_bookings_free ? ' Anmeldungen als Verein sind kostenlos.' : '')
+                . $invoiceHint;
+        }
 
         if ($event->member_pricing_enabled && $externalPrice > 0 && $memberPrice < $externalPrice) {
             $memberText = $memberPrice > 0

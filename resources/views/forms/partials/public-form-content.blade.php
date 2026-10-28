@@ -87,7 +87,7 @@
                         @if($event->is_paid)
                             @if($hasMemberRate)
                                 <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
-                                    Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.$currency : 'kostenfrei' }}
+                                    Mitglieder {{ $memberPrice > 0 ? number_format($memberPrice, 2, ',', '.').' '.$currency : 'kostenfrei' }}{{ $event->isStandBooking() && $memberPrice > 0 ? ' / lfm' : '' }}
                                 </span>
                                 @if($clubBookingsFree)
                                     <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
@@ -95,18 +95,18 @@
                                     </span>
                                 @endif
                                 <span class="rounded-full bg-white px-3 py-1 font-semibold text-slate-800">
-                                    Normalpreis {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                    Normalpreis {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}{{ $event->isStandBooking() ? ' / lfm' : '' }}
                                 </span>
                             @elseif($clubBookingsFree)
                                 <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
                                     Vereine kostenfrei
                                 </span>
                                 <span class="rounded-full bg-white px-3 py-1 font-semibold text-slate-800">
-                                    Normalpreis {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}
+                                    Normalpreis {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }}{{ $event->isStandBooking() ? ' / lfm' : '' }}
                                 </span>
                             @else
                                 <span class="rounded-full bg-emerald-100 px-3 py-1 font-semibold text-emerald-800">
-                                    {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }} pro Person
+                                    {{ number_format($externalPrice, 2, ',', '.') }} {{ $currency }} {{ $event->isStandBooking() ? 'pro laufendem Meter' : 'pro Person' }}
                                 </span>
                             @endif
                         @else
@@ -172,7 +172,9 @@
               x-data="{
                   externalPricePerPerson: {{ json_encode($externalPrice) }},
                   memberPricePerPerson: {{ json_encode($memberPrice) }},
-                  childrenFree: @js((bool) ($event?->children_free ?? false)),
+                  standBooking: @js((bool) $event?->isStandBooking()),
+                  standLength: @js(old('stand_length_meters', 1)),
+                  childrenFree: @js((bool) ($event?->children_free && ! $event?->isStandBooking())),
                   childMaxAge: @js($event?->child_max_age),
                   bookerAge: @js(old('booker_age_at_event', '')),
                   childFree(age) {
@@ -198,13 +200,13 @@
                       phone: {{ json_encode(old('fields.mobile', old('fields.phone', ''))) }},
                   },
                   additionalParticipantCount() {
-                      if (this.bookingMode === 'organization') {
+                      if (this.standBooking || this.bookingMode === 'organization') {
                           return 0;
                       }
                       return Math.max(0, this.participantCount - (this.useBookerAsParticipant ? 1 : 0));
                   },
                   syncParticipants() {
-                      if (this.bookingMode === 'organization') {
+                      if (this.standBooking || this.bookingMode === 'organization') {
                           this.participantCount = 1;
                           this.useBookerAsParticipant = true;
                           this.participants = [];
@@ -248,6 +250,11 @@
                   totalAmount() {
                       if (this.bookingMode === 'organization' && this.clubBookingsFree && this.organizationBookingType === 'club') {
                           return '0,00';
+                      }
+
+                      if (this.standBooking) {
+                          const unitCents = Math.round((this.memberRateApplies() ? this.memberPricePerPerson : this.externalPricePerPerson) * 100);
+                          return (Math.round(unitCents * (Number(this.standLength) || 0)) / 100).toFixed(2).replace('.', ',');
                       }
 
                       if (this.bookingMode === 'organization') {
@@ -322,7 +329,7 @@
                                 :class="bookingMode === 'person' ? 'border-indigo-600 bg-indigo-50 text-indigo-950' : (organizationRequired ? 'border-slate-200 bg-slate-50 text-slate-400' : 'border-slate-200 bg-white text-slate-700')"
                                 class="min-h-16 rounded-2xl border px-4 py-3 text-left shadow-sm">
                             <span class="block text-sm font-semibold">Person anmelden</span>
-                            <span class="mt-1 block text-xs leading-5 opacity-75">Für einzelne Teilnehmer oder Gruppen mit Personenliste.</span>
+                            <span class="mt-1 block text-xs leading-5 opacity-75">{{ $event->isStandBooking() ? 'Standplatz als Privatperson buchen.' : 'Für einzelne Teilnehmer oder Gruppen mit Personenliste.' }}</span>
                         </button>
 
                         <button type="button"
@@ -487,10 +494,18 @@
             </section>
 
             <section class="space-y-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <input type="hidden" name="participant_count" value="1" :disabled="bookingMode !== 'organization'">
+                <input type="hidden" name="participant_count" value="1" :disabled="!standBooking && bookingMode !== 'organization'">
 
                 <div class="grid gap-6 lg:grid-cols-[1fr_280px]">
                     <div>
+                        @if($event->isStandBooking())
+                            <label for="stand_length_meters" class="block text-sm font-semibold text-slate-700">Standlänge in Metern *</label>
+                            <input id="stand_length_meters" name="stand_length_meters" type="number" min="0.5" max="1000" step="0.5" required
+                                   x-model="standLength" value="{{ old('stand_length_meters', 1) }}" class="mt-2 w-full rounded-lg border-slate-300">
+                            <p class="mt-2 text-sm text-slate-600">Ein Stand pro Anmeldung. Halbe Meter sind möglich. Die Kinderbefreiung gilt nicht für Standplätze.</p>
+                            @error('stand_length_meters')<p class="mt-2 text-sm text-rose-700">{{ $message }}</p>@enderror
+                        @endif
+                        <div x-show="!standBooking">
                         <label for="participant_count" class="block text-sm font-semibold text-slate-700" x-show="bookingMode === 'person'">
                             Teilnehmerzahl <span class="text-red-500">*</span>
                         </label>
@@ -501,7 +516,7 @@
                                max="{{ $effectiveMaxParticipantsPerBooking }}"
                                x-model.number="participantCount"
                                @input="syncParticipants()"
-                               :disabled="bookingMode !== 'person'"
+                               :disabled="standBooking || bookingMode !== 'person'"
                                x-show="bookingMode === 'person'"
                                class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
                         <p class="mt-1 text-sm text-gray-500" x-show="bookingMode === 'person'">
@@ -510,13 +525,14 @@
                         <div x-show="bookingMode === 'organization'" x-cloak class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950">
                             Die Organisation oder der Verein wird als eine Anmeldung geführt. Eine zusätzliche Teilnehmerzahl ist dafür nicht nötig.
                         </div>
+                        </div>
                     </div>
 
                     <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
                         <div class="text-sm font-medium text-emerald-900">Zusammenfassung</div>
                         <div class="mt-3 space-y-2 text-sm text-emerald-950">
                             <div class="flex items-center justify-between gap-4">
-                                <span>Preis</span>
+                                <span class="shrink-0">{{ $event->isStandBooking() ? 'Preis / lfm' : 'Preis' }}</span>
                                 <span class="font-semibold">
                                     @if($event->is_paid)
                                         @if($hasMemberRate)
@@ -532,14 +548,14 @@
                                     @else
                                         Kostenfrei
                                     @endif
-                                    @if($event->children_free)
+                                    @if($event->children_free && ! $event->isStandBooking())
                                         <span class="block">Kinder bis einschließlich {{ $event->child_max_age }} Jahre kostenlos</span>
                                     @endif
                                 </span>
                             </div>
                             <div class="flex items-center justify-between gap-4">
-                                    <span>Teilnehmer</span>
-                                    <span class="font-semibold" x-text="participantCount"></span>
+                                    <span>{{ $event->isStandBooking() ? 'Standlänge (m)' : 'Teilnehmer' }}</span>
+                                    <span class="font-semibold" x-text="standBooking ? Number(standLength).toLocaleString('de-DE') : participantCount"></span>
                                 </div>
                                 @if($hasMemberRate)
                                     <div class="flex items-center justify-between gap-4" x-show="memberRateApplies()" x-cloak>
@@ -577,12 +593,12 @@
                     </div>
                 @endif
 
-                <div x-show="bookingMode === 'person'" x-cloak>
+                <div x-show="!standBooking && bookingMode === 'person'" x-cloak>
                     <h2 class="text-lg font-semibold text-slate-900">Teilnehmer</h2>
                     <p class="mt-1 text-sm text-slate-500">Bitte trage alle Personen ein, für die du diese Veranstaltung buchen möchtest.</p>
                 </div>
 
-                <div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4" x-show="bookingMode === 'person'" x-cloak>
+                <div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4" x-show="!standBooking && bookingMode === 'person'" x-cloak>
                     <input type="hidden" name="use_booker_as_participant" :value="useBookerAsParticipant ? 1 : 0">
                     <label class="flex items-start gap-3 text-sm text-indigo-950">
                         <input type="checkbox"
@@ -618,11 +634,11 @@
                     </div>
                 @endif
 
-                <div x-show="bookingMode === 'person' && useBookerAsParticipant" x-cloak class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                <div x-show="!standBooking && bookingMode === 'person' && useBookerAsParticipant" x-cloak class="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
                     <span class="font-semibold text-slate-900">Teilnehmer 1:</span>
                     <span x-text="`${booker.first_name || 'Vorname'} ${booker.last_name || 'Nachname'}`"></span>
                     <span class="text-slate-400">aus Ansprechpartner übernommen</span>
-                    @if($event?->children_free)
+                    @if($event?->children_free && ! $event->isStandBooking())
                         <label for="booker_age_at_event" class="mt-3 block font-semibold">Alter am Veranstaltungstag (nur für Kinder erforderlich)</label>
                         <input id="booker_age_at_event" name="booker_age_at_event" type="number" min="0" max="120" step="1" x-model="bookerAge"
                                :disabled="bookingMode !== 'person' || !useBookerAsParticipant" class="mt-1 w-full rounded-lg border-slate-300">
@@ -673,7 +689,7 @@
                                            x-model="participant.phone"
                                            class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
                                 </div>
-                                @if($event?->children_free)
+                                @if($event?->children_free && ! $event->isStandBooking())
                                     <div class="sm:col-span-2">
                                         <label class="block text-sm font-medium text-gray-700" :for="`participant-age-${index}`">Alter am Veranstaltungstag (nur für Kinder erforderlich)</label>
                                         <input :id="`participant-age-${index}`" :name="`participants[${index}][age_at_event]`" x-model="participant.age_at_event"
@@ -687,12 +703,12 @@
                 </div>
 
                 <div>
-                    <label for="participant_notes" class="block text-sm font-semibold text-slate-700">Hinweis zur Gruppe</label>
+                    <label for="participant_notes" class="block text-sm font-semibold text-slate-700">{{ $event->isStandBooking() ? 'Hinweise zum Stand' : 'Hinweis zur Gruppe' }}</label>
                     <textarea id="participant_notes"
                               name="participant_notes"
                               rows="4"
                               class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10"
-                              placeholder="z. B. gemeinsames Sitzen, Kindersitz oder wichtige Hinweise">{{ old('participant_notes') }}</textarea>
+                              placeholder="{{ $event->isStandBooking() ? 'z. B. Sortiment oder besondere Anforderungen' : 'z. B. gemeinsames Sitzen, Kindersitz oder wichtige Hinweise' }}">{{ old('participant_notes') }}</textarea>
                 </div>
             </section>
         @endif

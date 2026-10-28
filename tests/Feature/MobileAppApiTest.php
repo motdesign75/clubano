@@ -741,6 +741,17 @@ test('child pricing routes existing mobile clients to the complete public form',
     expect(\App\Models\EventBooking::where('event_id', $event->id)->count())->toBe(0);
 });
 
+test('meter pricing routes mobile clients to public booking and rejects native submission', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    $event = mobileNativeBookingFixture($tenant);
+    $event->update(['pricing_mode' => 'meter', 'price_per_person' => 10]);
+    $this->actingAs($user, 'sanctum')->getJson("/api/mobile/events/{$event->id}/booking")
+        ->assertOk()->assertJsonPath('native_supported', false);
+    $this->postJson("/api/mobile/events/{$event->id}/booking", ['fields' => ['email' => $member->email], 'expected_total_cents' => 1000])
+        ->assertUnprocessable();
+    expect(\App\Models\EventBooking::where('event_id', $event->id)->count())->toBe(0);
+});
+
 function mobileNativeBookingFixture(Tenant $tenant): Event
 {
     $event = Event::withoutGlobalScopes()->create([

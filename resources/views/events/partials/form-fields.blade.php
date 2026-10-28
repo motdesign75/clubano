@@ -360,7 +360,14 @@
                 </span>
             </label>
 
-            <div class="mt-5 grid gap-4">
+            <div class="mt-5 grid gap-4" x-data="{ pricingMode: @js(old('pricing_mode', $event->pricing_mode ?? 'person')) }">
+                <div>
+                    <label for="pricing_mode" class="{{ $labelClass }}">Abrechnung</label>
+                    <select id="pricing_mode" name="pricing_mode" x-model="pricingMode" class="{{ $selectClass }}">
+                        <option value="person">Eintritt pro Person</option>
+                        <option value="meter">Standplatz pro laufendem Meter</option>
+                    </select>
+                </div>
                 <div>
                     <label for="booking_address_tone" class="{{ $labelClass }}">Ansprache im Anmeldeformular</label>
                     <select name="booking_address_tone" id="booking_address_tone"
@@ -372,11 +379,11 @@
                 </div>
 
                 <div>
-                    <label for="price_per_person" class="{{ $labelClass }}">Normalpreis pro Person</label>
+                    <label for="price_per_person" class="{{ $labelClass }}" x-text="pricingMode === 'meter' ? 'Normalpreis pro laufendem Meter' : 'Normalpreis pro Person'">Normalpreis pro Person</label>
                     <input type="number" step="0.01" min="0" name="price_per_person" id="price_per_person"
                            value="{{ old('price_per_person', number_format((float) ($event->price_per_person ?? 0), 2, '.', '')) }}"
                            class="{{ $inputClass }}">
-                    <p class="mt-1 text-xs text-slate-500">0,00 = kostenlos. Abweichungen für Mitglieder, Kinder und Vereinsanmeldungen gelten nur, wenn unten aktiviert.</p>
+                    <p class="mt-1 text-xs text-slate-500">0,00 = kostenlos. Abweichende Preise gelten nur bei aktivierter Preisregel.</p>
                 </div>
 
                 @php
@@ -397,7 +404,7 @@
                     </label>
 
                     <div x-show="enabled" x-transition class="mt-4">
-                        <label for="member_price_per_person" class="{{ $labelClass }}">Preis für Mitglieder</label>
+                        <label for="member_price_per_person" class="{{ $labelClass }}" x-text="pricingMode === 'meter' ? 'Mitgliederpreis pro laufendem Meter' : 'Preis für Mitglieder'">Preis für Mitglieder</label>
                         <input type="number" step="0.01" min="0" name="member_price_per_person" id="member_price_per_person"
                                value="{{ old('member_price_per_person', number_format((float) ($event->member_price_per_person ?? 0), 2, '.', '')) }}"
                                class="{{ $inputClass }}">
@@ -405,15 +412,15 @@
                     </div>
                 </div>
 
-                <div x-data="{ enabled: @js((bool) old('children_free', $event->children_free ?? false)) }" class="border-t border-slate-200 py-4">
+                <div x-show="pricingMode === 'person'" x-data="{ enabled: @js((bool) old('children_free', $event->children_free ?? false)) }" class="border-t border-slate-200 py-4">
                     <input type="hidden" name="children_free" value="0">
                     <label class="flex items-center gap-3 text-sm font-semibold text-slate-950">
-                        <input type="checkbox" name="children_free" value="1" x-model="enabled" class="h-5 w-5 rounded border-slate-300">
+                        <input type="checkbox" name="children_free" value="1" x-model="enabled" :disabled="pricingMode !== 'person'" class="h-5 w-5 rounded border-slate-300">
                         Kinder kostenlos
                     </label>
                     <div x-show="enabled" x-cloak class="mt-3">
                         <label for="child_max_age" class="{{ $labelClass }}">Bis einschließlich Alter am Veranstaltungstag</label>
-                        <input id="child_max_age" name="child_max_age" type="number" min="0" max="17" step="1" :required="enabled" :disabled="!enabled"
+                        <input id="child_max_age" name="child_max_age" type="number" min="0" max="17" step="1" :required="enabled && pricingMode === 'person'" :disabled="!enabled || pricingMode !== 'person'"
                                value="{{ old('child_max_age', $event->child_max_age ?? 14) }}" class="{{ $inputClass }}">
                         <p class="mt-1 text-xs text-slate-500">Jedes Kind belegt einen Platz. Die Befreiung gilt auch für Kinder mit Mitgliedschaft.</p>
                     </div>
@@ -437,8 +444,9 @@
                     </div>
 
                     <div>
-                        <label for="max_participants_per_booking" class="{{ $labelClass }}">Personen pro Anmeldung</label>
+                        <label for="max_participants_per_booking" class="{{ $labelClass }}" x-text="pricingMode === 'meter' ? 'Standplätze pro Anmeldung: 1' : 'Personen pro Anmeldung'">Personen pro Anmeldung</label>
                         <input type="number" min="1" max="50" name="max_participants_per_booking" id="max_participants_per_booking"
+                               x-show="pricingMode === 'person'" :disabled="pricingMode === 'meter'"
                                value="{{ old('max_participants_per_booking', max(1, (int) ($event->max_participants_per_booking ?: 1))) }}"
                                class="{{ $inputClass }}">
                     </div>
@@ -452,7 +460,7 @@
 
                     <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
                         <div>
-                            <label for="max_participants_total" class="{{ $labelClass }}">Maximale Teilnehmer insgesamt</label>
+                            <label for="max_participants_total" class="{{ $labelClass }}" x-text="pricingMode === 'meter' ? 'Maximale Standplätze insgesamt' : 'Maximale Teilnehmer insgesamt'">Maximale Teilnehmer insgesamt</label>
                             <input type="number" min="1" max="100000" name="max_participants_total" id="max_participants_total"
                                    value="{{ old('max_participants_total', $event->max_participants_total) }}"
                                    class="{{ $inputClass }}"
@@ -461,7 +469,7 @@
                         </div>
 
                         <div>
-                            <label for="min_participants" class="{{ $labelClass }}">Mindestteilnehmer</label>
+                            <label for="min_participants" class="{{ $labelClass }}" x-text="pricingMode === 'meter' ? 'Mindestanzahl Standplätze' : 'Mindestteilnehmer'">Mindestteilnehmer</label>
                             <input type="number" min="1" max="100000" name="min_participants" id="min_participants"
                                    value="{{ old('min_participants', $event->min_participants) }}"
                                    class="{{ $inputClass }}"

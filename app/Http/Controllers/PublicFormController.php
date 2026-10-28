@@ -582,7 +582,7 @@ class PublicFormController extends Controller
         return response()->json([
             'title' => $event->title,
             'description' => html_entity_decode(strip_tags($form->description ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-            'native_supported' => ! $event->children_free && ! str_contains(strtolower($form->description ?? ''), '<a')
+            'native_supported' => ! $event->isStandBooking() && ! $event->children_free && ! str_contains(strtolower($form->description ?? ''), '<a')
                 && blank($member->organization) && filled($member->first_name) && filled($member->last_name) && $form->fields->every(fn ($field) =>
                 in_array($field->field_type, ['text', 'email', 'tel', 'textarea', 'number', 'date', 'checkbox', 'select', 'radio', 'checkbox_group', 'heading', 'content', 'divider'], true)
                 && ! str_contains(strtolower($field->help_text ?? ''), '<a')),
@@ -605,6 +605,7 @@ class PublicFormController extends Controller
     {
         [$form, $member] = $this->mobileBookingContext($request, $event);
         abort_if($event->children_free, 422, 'Bitte nutze für diesen Termin das vollständige Anmeldeformular mit Kinderpreisen.');
+        abort_if($event->isStandBooking(), 422, 'Bitte nutze für diesen Termin das vollständige Formular zur Standplatzbuchung.');
         $request->validate([
             'fields' => ['required', 'array'],
             'expected_total_cents' => ['required', 'integer', 'min:0'],
@@ -713,6 +714,11 @@ class PublicFormController extends Controller
             $rules['participants.*.phone'] = ['nullable', 'string', 'max:255'];
             $rules['booker_age_at_event'] = ['nullable', 'integer', 'min:0', 'max:120'];
             $rules['participants.*.age_at_event'] = ['nullable', 'integer', 'min:0', 'max:120'];
+            if ($form->event->isStandBooking()) {
+                $rules['stand_length_meters'] = ['required', 'numeric', 'min:0.5', 'max:1000', 'multiple_of:0.5'];
+                $rules['participant_count'] = ['nullable', 'integer', 'in:1'];
+                $rules['participants'] = ['nullable', 'array', 'max:0'];
+            }
         }
 
         $validated = $request->validate($rules);
@@ -745,6 +751,11 @@ class PublicFormController extends Controller
             $answers['use_booker_as_participant'] = $bookingMode === 'organization' ? true : (bool) ($validated['use_booker_as_participant'] ?? false);
             $answers['booking_claims_membership'] = (bool) ($validated['booking_claims_membership'] ?? false);
             $answers['organization_booking_type'] = $bookingMode === 'organization' ? ($validated['organization_booking_type'] ?? null) : null;
+            if ($form->event->isStandBooking()) {
+                $answers['stand_length_meters'] = (float) $validated['stand_length_meters'];
+                $answers['participant_count'] = 1;
+                $answers['use_booker_as_participant'] = true;
+            }
 
             $this->ensureEventBookingCanAccept($form->event, (int) $answers['participant_count']);
         }
@@ -772,6 +783,11 @@ class PublicFormController extends Controller
             if ($isEventBooking && $form->event_id) {
                 $event = Event::query()->whereKey($form->event_id)->lockForUpdate()->firstOrFail();
                 $form->setRelation('event', $event);
+                if ($event->isStandBooking() && ! isset($answers['stand_length_meters'])) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'stand_length_meters' => 'Die Buchungsart wurde geändert. Bitte lade das Formular neu.',
+                    ]);
+                }
                 $this->ensureEventBookingCanAccept($event, (int) ($answers['participant_count'] ?? 1));
                 if ($appMember) {
                     abort_if(! $event->start || $event->start->lte(now()), 422, 'Der Termin hat bereits begonnen.');
@@ -855,8 +871,13 @@ class PublicFormController extends Controller
 
                 $participantCount = max(1, $participantRows->count());
                 $participantRows = $participantRows
-                    ->map(function (array $participant) use ($form, $bookingMode) {
+                    ->map(function (array $participant) use ($form, $bookingMode, $answers) {
                         $priceAmount = $form->event->priceForPublicBookingParticipant($participant, $bookingMode);
+                        if ($form->event->isStandBooking()) {
+                            $participant['stand_length_meters'] = (float) $answers['stand_length_meters'];
+                            $participant['stand_unit_price'] = $priceAmount;
+                            $priceAmount = round($priceAmount * $participant['stand_length_meters'], 2);
+                        }
 
                         return $participant + [
                             'price_amount' => $priceAmount,
@@ -946,6 +967,8 @@ class PublicFormController extends Controller
                         'payment_status' => $participantPaymentStatus,
                         'source' => 'online',
                         'answers' => array_filter([
+                            'stand_length_meters' => $participant['stand_length_meters'] ?? null,
+                            'stand_unit_price' => $participant['stand_unit_price'] ?? null,
                             'age_at_event' => $participant['age_at_event'] ?? null,
                             'organization_booking_type' => $participant['organization_booking_type'] ?? null,
                         ], fn ($value) => $value !== null && $value !== ''),

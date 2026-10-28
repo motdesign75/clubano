@@ -28,6 +28,7 @@
         'message' => 'Nachricht',
         'participant_notes' => 'Hinweise zu Teilnehmern',
         'participant_count' => 'Teilnehmerzahl',
+        'stand_length_meters' => 'Standlänge (m)',
         'street' => 'Straße und Hausnummer',
         'address' => 'Adresse',
         'zip' => 'PLZ',
@@ -224,6 +225,9 @@
 
                     <div class="flex flex-wrap gap-1.5 text-xs">
                         @if($booking)
+                            @if(!empty($answers['stand_length_meters']))
+                                <span class="font-semibold text-slate-700">{{ number_format((float) $answers['stand_length_meters'], 1, ',', '.') }} m Standplatz</span>
+                            @endif
                             <span class="inline-flex rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">
                                 {{ $booking->booking_reference }}
                             </span>

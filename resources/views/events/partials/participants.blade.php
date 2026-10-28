@@ -67,6 +67,8 @@
     @if($canManageManualParticipants ?? false)
     <div id="teilnehmer-nachtragen" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5" x-data="{
         type: 'member',
+        standBooking: @js($event->isStandBooking()),
+        standLength: @js(old('stand_length_meters', 1)),
         listDisplay: 'person',
         guestMode: 'person',
         organizationBookingType: '',
@@ -84,7 +86,7 @@
                 return 0;
             }
 
-            return this.type === 'member' ? this.memberPrice : this.externalPrice;
+            return (this.type === 'member' ? this.memberPrice : this.externalPrice) * (this.standBooking ? Number(this.standLength) || 0 : 1);
         },
         syncPayment() {
             this.priceAmount = Number(this.defaultPrice()).toFixed(2);
@@ -256,6 +258,14 @@
                 </div>
             </div>
 
+            @if($event->isStandBooking())
+                <div>
+                    <label for="manual_stand_length" class="block text-sm font-semibold">Standlänge je Stand (m)</label>
+                    <input id="manual_stand_length" name="stand_length_meters" type="number" min="0.5" max="1000" step="0.5" required
+                           x-model="standLength" @input="syncPayment()" class="mt-2 w-full rounded-lg border-slate-300">
+                    <p class="mt-1 text-sm text-slate-600">Je ausgewähltem Mitglied oder Kontakt wird ein Stand mit dieser Länge erfasst.</p>
+                </div>
+            @endif
             <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem_14rem_14rem] lg:items-end">
                 <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
                     <input type="checkbox" name="payment_required" value="1" x-model="paymentRequired" @change="if (!paymentRequired) { paymentStatus = 'not_required' } else if (paymentStatus === 'not_required') { paymentStatus = 'open' }" class="mt-0.5 rounded border-slate-300 text-slate-950 focus:ring-slate-400">
@@ -266,7 +276,7 @@
                 </label>
                 <div>
                     <label class="mb-1 block text-sm font-medium text-slate-600">Preis</label>
-                    <input type="number" step="0.01" min="0" name="price_amount" x-model="priceAmount" @input="paymentRequired = Number(priceAmount) > 0; if (!paymentRequired) { paymentStatus = 'not_required' } else if (paymentStatus === 'not_required') { paymentStatus = 'open' }" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
+                    <input type="number" step="0.01" min="0" name="price_amount" x-model="priceAmount" :readonly="standBooking" @input="paymentRequired = Number(priceAmount) > 0; if (!paymentRequired) { paymentStatus = 'not_required' } else if (paymentStatus === 'not_required') { paymentStatus = 'open' }" class="w-full rounded-xl border-slate-300 text-sm shadow-sm focus:border-slate-500 focus:ring-slate-300">
                 </div>
                 <div>
                     <label class="mb-1 block text-sm font-medium text-slate-600">Zahlstatus</label>
@@ -469,6 +479,9 @@
                                 </div>
                                 <div class="mt-2 text-sm font-semibold text-slate-900">
                                     {{ number_format((float) $participant->price_amount, 2, ',', '.') }} {{ strtoupper($booking?->currency ?: $event->currency ?: 'EUR') }}
+                                    @if(!empty($participant->answers['stand_length_meters']))
+                                        <span class="block">{{ number_format((float) $participant->answers['stand_length_meters'], 1, ',', '.') }} m Standlänge</span>
+                                    @endif
                                 </div>
                                 @if($participant->payment_reason)
                                     <div class="mt-1 text-xs text-slate-500">{{ $participant->payment_reason }}</div>

@@ -49,8 +49,24 @@ class EventBookingBillingService
         ]);
 
         $participantGroups = $booking->participants
-            ->filter(fn ($participant) => (float) $participant->price_amount > 0)
+            ->filter(fn ($participant) => (float) $participant->price_amount > 0 && empty($participant->answers['stand_length_meters']))
             ->groupBy(fn ($participant) => $participant->participant_type . '|' . number_format((float) $participant->price_amount, 2, '.', ''));
+
+        $stands = $booking->participants->filter(fn ($participant) => (float) $participant->price_amount > 0
+            && ! empty($participant->answers['stand_length_meters']));
+        foreach ($stands as $stand) {
+            $quotedTotal = round((float) $stand->answers['stand_length_meters'] * (float) $stand->answers['stand_unit_price'], 2);
+            $hasAdjustedPrice = (int) round($quotedTotal * 100) !== (int) round((float) $stand->price_amount * 100);
+            InvoiceItem::create([
+                'invoice_id' => $invoice->id,
+                'description' => 'Standplatz - ' . $this->buildItemDescription($event),
+                'details' => 'Buchungsnummer: ' . $booking->booking_reference
+                    . ($hasAdjustedPrice ? ' - ' . number_format((float) $stand->answers['stand_length_meters'], 1, ',', '.') . ' m, angepasster Gesamtpreis' : ''),
+                'quantity' => $hasAdjustedPrice ? 1 : $stand->answers['stand_length_meters'],
+                'unit' => $hasAdjustedPrice ? 'Standplatz' : 'lfm',
+                'unit_price' => $hasAdjustedPrice ? $stand->price_amount : $stand->answers['stand_unit_price'],
+            ]);
+        }
 
         if ($participantGroups->isNotEmpty()) {
             foreach ($participantGroups as $key => $participants) {
@@ -65,7 +81,7 @@ class EventBookingBillingService
                     'unit_price' => (float) $price,
                 ]);
             }
-        } else {
+        } elseif ($stands->isEmpty()) {
             InvoiceItem::create([
                 'invoice_id' => $invoice->id,
                 'description' => $this->buildItemDescription($event),
@@ -255,7 +271,9 @@ class EventBookingBillingService
         $grossAmount = number_format((float) $booking->gross_amount, 2, ',', '.') . ' ' . $currency;
         $dateLine = trim(($event->start?->format('d.m.Y H:i') ?? '') . ' - ' . ($event->end?->format('H:i') ?? '') . ' Uhr');
         $participants = $booking->participants
-            ->map(fn ($participant) => $participant->display_name ?: $participant->full_name)
+            ->map(fn ($participant) => ($participant->display_name ?: $participant->full_name)
+                . (! empty($participant->answers['stand_length_meters'])
+                    ? ' - Standlänge: ' . number_format((float) $participant->answers['stand_length_meters'], 1, ',', '.') . ' m' : ''))
             ->filter()
             ->values();
 

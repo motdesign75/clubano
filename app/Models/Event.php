@@ -24,6 +24,7 @@ class Event extends Model
         'reminders_enabled',
         'mobile_shifts_enabled',
         'price_per_person',
+        'pricing_mode',
         'member_pricing_enabled',
         'member_price_per_person',
         'organization_bookings_free',
@@ -219,7 +220,8 @@ class Event extends Model
             return 'Teilweise kostenlos';
         }
 
-        return 'Ab ' . number_format($prices->min(), 2, ',', '.') . ' ' . strtoupper($this->currency ?: 'EUR');
+        return 'Ab ' . number_format($prices->min(), 2, ',', '.') . ' ' . strtoupper($this->currency ?: 'EUR')
+            . ($this->isStandBooking() ? ' / lfm' : '');
     }
 
     public function getBookedParticipantsCountAttribute(): int
@@ -305,10 +307,15 @@ class Event extends Model
         return round((float) ($participantType === 'member' ? $this->effective_member_price_per_person : $this->price_per_person), 2);
     }
 
+    public function isStandBooking(): bool
+    {
+        return $this->pricing_mode === 'meter';
+    }
+
     public function priceForPublicBookingParticipant(array $participant, string $bookingMode): float
     {
         $age = $participant['age_at_event'] ?? null;
-        if ($bookingMode === 'person' && $this->children_free && $this->child_max_age !== null
+        if (! $this->isStandBooking() && $bookingMode === 'person' && $this->children_free && $this->child_max_age !== null
             && $age !== null && $age !== '' && is_numeric($age)
             && (float) $age >= 0 && (float) $age <= $this->child_max_age) {
             return 0.0;
