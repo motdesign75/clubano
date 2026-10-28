@@ -582,7 +582,7 @@ class PublicFormController extends Controller
         return response()->json([
             'title' => $event->title,
             'description' => html_entity_decode(strip_tags($form->description ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-            'native_supported' => ! str_contains(strtolower($form->description ?? ''), '<a')
+            'native_supported' => ! $event->children_free && ! str_contains(strtolower($form->description ?? ''), '<a')
                 && blank($member->organization) && filled($member->first_name) && filled($member->last_name) && $form->fields->every(fn ($field) =>
                 in_array($field->field_type, ['text', 'email', 'tel', 'textarea', 'number', 'date', 'checkbox', 'select', 'radio', 'checkbox_group', 'heading', 'content', 'divider'], true)
                 && ! str_contains(strtolower($field->help_text ?? ''), '<a')),
@@ -604,6 +604,7 @@ class PublicFormController extends Controller
     public function mobileBookingSubmit(Request $request, Event $event)
     {
         [$form, $member] = $this->mobileBookingContext($request, $event);
+        abort_if($event->children_free, 422, 'Bitte nutze für diesen Termin das vollständige Anmeldeformular mit Kinderpreisen.');
         $request->validate([
             'fields' => ['required', 'array'],
             'expected_total_cents' => ['required', 'integer', 'min:0'],
@@ -710,6 +711,8 @@ class PublicFormController extends Controller
             $rules['participants.*.last_name'] = ['nullable', 'string', 'max:255'];
             $rules['participants.*.email'] = ['nullable', 'email'];
             $rules['participants.*.phone'] = ['nullable', 'string', 'max:255'];
+            $rules['booker_age_at_event'] = ['nullable', 'integer', 'min:0', 'max:120'];
+            $rules['participants.*.age_at_event'] = ['nullable', 'integer', 'min:0', 'max:120'];
         }
 
         $validated = $request->validate($rules);
@@ -737,6 +740,7 @@ class PublicFormController extends Controller
             $answers['booking_mode'] = $bookingMode;
             $answers['participant_count'] = $bookingMode === 'organization' ? 1 : (int) ($validated['participant_count'] ?? 1);
             $answers['participant_notes'] = $validated['participant_notes'] ?? null;
+            $answers['booker_age_at_event'] = $validated['booker_age_at_event'] ?? null;
             $answers['voucher_code'] = filled($validated['voucher_code'] ?? null) ? Voucher::normalizeCode($validated['voucher_code']) : null;
             $answers['use_booker_as_participant'] = $bookingMode === 'organization' ? true : (bool) ($validated['use_booker_as_participant'] ?? false);
             $answers['booking_claims_membership'] = (bool) ($validated['booking_claims_membership'] ?? false);
@@ -813,6 +817,7 @@ class PublicFormController extends Controller
                     ]]);
                 } elseif ($useBookerAsParticipant) {
                     $participantRows = collect([[
+                        'age_at_event' => $answers['booker_age_at_event'] ?? null,
                         'first_name' => trim((string) ($answers['first_name'] ?? '')),
                         'last_name' => trim((string) ($answers['last_name'] ?? '')),
                         'organization_name' => null,
@@ -826,6 +831,7 @@ class PublicFormController extends Controller
                 $participantRows = $participantRows
                     ->map(function ($participant) {
                         return [
+                            'age_at_event' => $participant['age_at_event'] ?? null,
                             'first_name' => trim((string) ($participant['first_name'] ?? '')),
                             'last_name' => trim((string) ($participant['last_name'] ?? '')),
                             'organization_name' => trim((string) ($participant['organization_name'] ?? '')),
@@ -940,8 +946,9 @@ class PublicFormController extends Controller
                         'payment_status' => $participantPaymentStatus,
                         'source' => 'online',
                         'answers' => array_filter([
+                            'age_at_event' => $participant['age_at_event'] ?? null,
                             'organization_booking_type' => $participant['organization_booking_type'] ?? null,
-                        ]),
+                        ], fn ($value) => $value !== null && $value !== ''),
                     ]);
                 }
 

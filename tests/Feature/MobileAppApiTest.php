@@ -730,6 +730,17 @@ test('waitlist scheduler skips inactive users and sends once after reactivation'
         ->and(\App\Models\EventBooking::where('event_id', $event->id)->count())->toBe(0);
 });
 
+test('child pricing routes existing mobile clients to the complete public form', function () {
+    [$user, $member, $tenant] = mobileUserFixture();
+    $event = mobileNativeBookingFixture($tenant);
+    $event->update(['children_free' => true, 'child_max_age' => 12]);
+    $this->actingAs($user, 'sanctum')->getJson("/api/mobile/events/{$event->id}/booking")
+        ->assertOk()->assertJsonPath('native_supported', false);
+    $this->postJson("/api/mobile/events/{$event->id}/booking", ['fields' => ['email' => $member->email], 'expected_total_cents' => 0])
+        ->assertUnprocessable();
+    expect(\App\Models\EventBooking::where('event_id', $event->id)->count())->toBe(0);
+});
+
 function mobileNativeBookingFixture(Tenant $tenant): Event
 {
     $event = Event::withoutGlobalScopes()->create([

@@ -27,6 +27,8 @@ class Event extends Model
         'member_pricing_enabled',
         'member_price_per_person',
         'organization_bookings_free',
+        'children_free',
+        'child_max_age',
         'currency',
         'max_participants_per_booking',
         'max_participants_total',
@@ -60,6 +62,8 @@ class Event extends Model
         'member_pricing_enabled' => 'boolean',
         'member_price_per_person' => 'decimal:2',
         'organization_bookings_free' => 'boolean',
+        'children_free' => 'boolean',
+        'child_max_age' => 'integer',
         'max_participants_per_booking' => 'integer',
         'max_participants_total' => 'integer',
         'min_participants' => 'integer',
@@ -303,6 +307,12 @@ class Event extends Model
 
     public function priceForPublicBookingParticipant(array $participant, string $bookingMode): float
     {
+        $age = $participant['age_at_event'] ?? null;
+        if ($bookingMode === 'person' && $this->children_free && $this->child_max_age !== null
+            && $age !== null && $age !== '' && is_numeric($age)
+            && (float) $age >= 0 && (float) $age <= $this->child_max_age) {
+            return 0.0;
+        }
         if ($bookingMode === 'organization'
             && $this->organization_bookings_free
             && ($participant['organization_booking_type'] ?? null) === 'club') {

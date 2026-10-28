@@ -35,6 +35,7 @@
                 'last_name' => $participantRowsOld[$i]['last_name'] ?? '',
                 'email' => $participantRowsOld[$i]['email'] ?? '',
                 'phone' => $participantRowsOld[$i]['phone'] ?? '',
+                'age_at_event' => $participantRowsOld[$i]['age_at_event'] ?? '',
             ];
         }
     @endphp
@@ -171,6 +172,13 @@
               x-data="{
                   externalPricePerPerson: {{ json_encode($externalPrice) }},
                   memberPricePerPerson: {{ json_encode($memberPrice) }},
+                  childrenFree: @js((bool) ($event?->children_free ?? false)),
+                  childMaxAge: @js($event?->child_max_age),
+                  bookerAge: @js(old('booker_age_at_event', '')),
+                  childFree(age) {
+                      return this.childrenFree && age !== '' && age !== null && age !== undefined
+                          && Number.isInteger(Number(age)) && Number(age) >= 0 && Number(age) <= this.childMaxAge;
+                  },
                   hasMemberRate: {{ $hasMemberRate ? 'true' : 'false' }},
                   clubBookingsFree: {{ $clubBookingsFree ? 'true' : 'false' }},
                   organizationBookingType: {{ json_encode(old('organization_booking_type', '')) }},
@@ -211,7 +219,7 @@
                       }
 
                       while (this.participants.length < additionalTarget) {
-                          this.participants.push({ first_name: '', last_name: '', email: '', phone: '' });
+                          this.participants.push({ first_name: '', last_name: '', email: '', phone: '', age_at_event: '' });
                       }
 
                       while (this.participants.length > additionalTarget) {
@@ -242,8 +250,13 @@
                           return '0,00';
                       }
 
-                      const memberTotal = this.memberRateApplies() ? this.memberPricePerPerson : 0;
-                      return (memberTotal + (this.externalParticipantCount() * this.externalPricePerPerson)).toFixed(2).replace('.', ',');
+                      if (this.bookingMode === 'organization') {
+                          return Number(this.memberRateApplies() ? this.memberPricePerPerson : this.externalPricePerPerson).toFixed(2).replace('.', ',');
+                      }
+                      const bookerTotal = this.useBookerAsParticipant && !this.childFree(this.bookerAge)
+                          ? (this.memberRateApplies() ? this.memberPricePerPerson : this.externalPricePerPerson) : 0;
+                      const guestTotal = this.participants.reduce((sum, person) => sum + (this.childFree(person.age_at_event) ? 0 : this.externalPricePerPerson), 0);
+                      return (bookerTotal + guestTotal).toFixed(2).replace('.', ',');
                   },
                   voucherHint() {
                       return this.voucherCode && (this.externalPricePerPerson > 0 || this.memberPricePerPerson > 0) ? 'Gutschein wird nach dem Absenden geprüft und angerechnet.' : '';
@@ -519,6 +532,9 @@
                                     @else
                                         Kostenfrei
                                     @endif
+                                    @if($event->children_free)
+                                        <span class="block">Kinder bis einschließlich {{ $event->child_max_age }} Jahre kostenlos</span>
+                                    @endif
                                 </span>
                             </div>
                             <div class="flex items-center justify-between gap-4">
@@ -606,6 +622,12 @@
                     <span class="font-semibold text-slate-900">Teilnehmer 1:</span>
                     <span x-text="`${booker.first_name || 'Vorname'} ${booker.last_name || 'Nachname'}`"></span>
                     <span class="text-slate-400">aus Ansprechpartner übernommen</span>
+                    @if($event?->children_free)
+                        <label for="booker_age_at_event" class="mt-3 block font-semibold">Alter am Veranstaltungstag (nur für Kinder erforderlich)</label>
+                        <input id="booker_age_at_event" name="booker_age_at_event" type="number" min="0" max="120" step="1" x-model="bookerAge"
+                               :disabled="bookingMode !== 'person' || !useBookerAsParticipant" class="mt-1 w-full rounded-lg border-slate-300">
+                        <span class="mt-1 block">Bis einschließlich {{ $event->child_max_age }} Jahre kostenlos. Ohne Altersangabe gilt der reguläre Preis.</span>
+                    @endif
                 </div>
 
                 <div class="space-y-4" x-show="additionalParticipantCount() > 0" x-cloak>
@@ -651,6 +673,14 @@
                                            x-model="participant.phone"
                                            class="mt-2 w-full rounded-2xl border-slate-300 px-4 py-3 text-base shadow-sm focus:border-slate-900 focus:ring-slate-900/10">
                                 </div>
+                                @if($event?->children_free)
+                                    <div class="sm:col-span-2">
+                                        <label class="block text-sm font-medium text-gray-700" :for="`participant-age-${index}`">Alter am Veranstaltungstag (nur für Kinder erforderlich)</label>
+                                        <input :id="`participant-age-${index}`" :name="`participants[${index}][age_at_event]`" x-model="participant.age_at_event"
+                                               type="number" min="0" max="120" step="1" class="mt-2 w-full rounded-lg border-slate-300">
+                                        <p class="mt-1 text-sm text-slate-600">Bis einschließlich {{ $event->child_max_age }} Jahre kostenlos. Ohne Altersangabe gilt der Normalpreis.</p>
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     </template>

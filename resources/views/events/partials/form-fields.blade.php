@@ -372,18 +372,19 @@
                 </div>
 
                 <div>
-                    <label for="price_per_person" class="{{ $labelClass }}">Normalpreis / Nichtmitglieder</label>
+                    <label for="price_per_person" class="{{ $labelClass }}">Normalpreis pro Person</label>
                     <input type="number" step="0.01" min="0" name="price_per_person" id="price_per_person"
                            value="{{ old('price_per_person', number_format((float) ($event->price_per_person ?? 0), 2, '.', '')) }}"
                            class="{{ $inputClass }}">
-                    <p class="mt-1 text-xs text-slate-500">Dieser Preis gilt für externe Teilnehmer, Firmen, Organisationen und Einzelpersonen.</p>
+                    <p class="mt-1 text-xs text-slate-500">0,00 = kostenlos. Abweichungen für Mitglieder, Kinder und Vereinsanmeldungen gelten nur, wenn unten aktiviert.</p>
                 </div>
 
                 @php
-                    $memberPricingEnabled = (bool) old('member_pricing_enabled', $event->member_pricing_enabled ?? true);
+                    $memberPricingEnabled = (bool) old('member_pricing_enabled', $event->exists ? $event->member_pricing_enabled : false);
                 @endphp
                 <div x-data="{ enabled: {{ $memberPricingEnabled ? 'true' : 'false' }} }" class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <label class="flex items-start gap-3">
+                        <input type="hidden" name="member_pricing_enabled" value="0">
                         <input type="checkbox"
                                name="member_pricing_enabled"
                                value="1"
@@ -404,11 +405,26 @@
                     </div>
                 </div>
 
-                <label class="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
+                <div x-data="{ enabled: @js((bool) old('children_free', $event->children_free ?? false)) }" class="border-t border-slate-200 py-4">
+                    <input type="hidden" name="children_free" value="0">
+                    <label class="flex items-center gap-3 text-sm font-semibold text-slate-950">
+                        <input type="checkbox" name="children_free" value="1" x-model="enabled" class="h-5 w-5 rounded border-slate-300">
+                        Kinder kostenlos
+                    </label>
+                    <div x-show="enabled" x-cloak class="mt-3">
+                        <label for="child_max_age" class="{{ $labelClass }}">Bis einschließlich Alter am Veranstaltungstag</label>
+                        <input id="child_max_age" name="child_max_age" type="number" min="0" max="17" step="1" :required="enabled" :disabled="!enabled"
+                               value="{{ old('child_max_age', $event->child_max_age ?? 12) }}" class="{{ $inputClass }}">
+                        <p class="mt-1 text-xs text-slate-500">Jedes Kind belegt einen Platz. Die Befreiung gilt auch für Kinder mit Mitgliedschaft.</p>
+                    </div>
+                </div>
+
+                <input type="hidden" name="organization_bookings_free" value="0">
+                <label class="flex items-start gap-3 border-t border-emerald-200 py-4">
                     <input type="checkbox" name="organization_bookings_free" value="1" class="mt-1 h-5 w-5 rounded border-emerald-300 text-emerald-700" @checked(old('organization_bookings_free', $event->organization_bookings_free ?? false))>
                     <span>
-                        <span class="block text-sm font-semibold text-emerald-950">Vereine kostenfrei</span>
-                        <span class="mt-1 block text-sm text-emerald-700">Gilt nur für externe Vereine. Für Firmen, Unternehmen und sonstige Organisationen gilt weiterhin der Normalpreis.</span>
+                        <span class="block text-sm font-semibold text-emerald-950">Anmeldung als Verein kostenlos</span>
+                        <span class="mt-1 block text-sm text-emerald-700">Gilt für die Buchungsart „Verein“, nicht automatisch für einzelne Vereinsmitglieder. Firmen und sonstige Organisationen sind nicht befreit.</span>
                     </span>
                 </label>
 
