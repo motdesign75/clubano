@@ -69,6 +69,9 @@
         type: 'member',
         standBooking: @js($event->isStandBooking()),
         standLength: @js(old('stand_length_meters', 1)),
+        standOperatorAge: @js(old('stand_operator_age', '')),
+        childrenFree: @js((bool) $event->children_free),
+        childMaxAge: @js($event->child_max_age),
         listDisplay: 'person',
         guestMode: 'person',
         organizationBookingType: '',
@@ -79,6 +82,9 @@
         priceAmount: 0,
         paymentStatus: 'not_required',
         defaultPrice() {
+            if (this.standBooking && this.childrenFree && !(this.type === 'guest' && this.guestMode === 'organization')
+                && this.standOperatorAge !== '' && this.standOperatorAge !== null && Number.isInteger(Number(this.standOperatorAge))
+                && Number(this.standOperatorAge) >= 0 && Number(this.standOperatorAge) <= this.childMaxAge) return 0;
             if (this.type === 'guest'
                 && this.guestMode === 'organization'
                 && this.organizationBookingType === 'club'
@@ -264,6 +270,14 @@
                     <input id="manual_stand_length" name="stand_length_meters" type="number" min="0.5" max="1000" step="0.5" required
                            x-model="standLength" @input="syncPayment()" class="mt-2 w-full rounded-lg border-slate-300">
                     <p class="mt-1 text-sm text-slate-600">Je ausgewähltem Mitglied oder Kontakt wird ein Stand mit dieser Länge erfasst.</p>
+                    @if($event->children_free)
+                        <div x-show="!(type === 'guest' && guestMode === 'organization')">
+                            <label for="manual_stand_age" class="mt-3 block text-sm font-semibold">Alter des Standbetreibers am Veranstaltungstag (optional)</label>
+                            <input id="manual_stand_age" name="stand_operator_age" type="number" min="0" max="120" step="1"
+                                   x-model="standOperatorAge" @input="syncPayment()" :disabled="type === 'guest' && guestMode === 'organization'" class="mt-2 w-full rounded-lg border-slate-300">
+                            <p class="mt-1 text-sm text-slate-600">Bis einschließlich {{ $event->child_max_age }} Jahre ist der gesamte Stand kostenlos. Kinderstände bitte einzeln erfassen.</p>
+                        </div>
+                    @endif
                 </div>
             @endif
             <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_12rem_14rem_14rem] lg:items-end">

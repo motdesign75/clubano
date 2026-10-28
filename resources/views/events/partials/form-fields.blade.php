@@ -412,17 +412,17 @@
                     </div>
                 </div>
 
-                <div x-show="pricingMode === 'person'" x-data="{ enabled: @js((bool) old('children_free', $event->children_free ?? false)) }" class="border-t border-slate-200 py-4">
+                <div x-data="{ enabled: @js((bool) old('children_free', $event->children_free ?? false)) }" class="border-t border-slate-200 py-4">
                     <input type="hidden" name="children_free" value="0">
                     <label class="flex items-center gap-3 text-sm font-semibold text-slate-950">
-                        <input type="checkbox" name="children_free" value="1" x-model="enabled" :disabled="pricingMode !== 'person'" class="h-5 w-5 rounded border-slate-300">
+                        <input type="checkbox" name="children_free" value="1" x-model="enabled" class="h-5 w-5 rounded border-slate-300">
                         Kinder kostenlos
                     </label>
                     <div x-show="enabled" x-cloak class="mt-3">
                         <label for="child_max_age" class="{{ $labelClass }}">Bis einschließlich Alter am Veranstaltungstag</label>
-                        <input id="child_max_age" name="child_max_age" type="number" min="0" max="17" step="1" :required="enabled && pricingMode === 'person'" :disabled="!enabled || pricingMode !== 'person'"
+                        <input id="child_max_age" name="child_max_age" type="number" min="0" max="17" step="1" :required="enabled" :disabled="!enabled"
                                value="{{ old('child_max_age', $event->child_max_age ?? 14) }}" class="{{ $inputClass }}">
-                        <p class="mt-1 text-xs text-slate-500">Jedes Kind belegt einen Platz. Die Befreiung gilt auch für Kinder mit Mitgliedschaft.</p>
+                        <p class="mt-1 text-xs text-slate-500" x-text="pricingMode === 'meter' ? 'Für ein angemeldetes Kind als Standbetreiber ist der gesamte Stand kostenlos. Begleitende Kinder machen einen Erwachsenenstand nicht kostenlos.' : 'Jedes Kind belegt einen Platz. Die Befreiung gilt auch für Kinder mit Mitgliedschaft.'"></p>
                     </div>
                 </div>
 

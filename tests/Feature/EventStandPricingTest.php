@@ -25,11 +25,11 @@ function standBookingFixture(): array
     $payload = ['fields' => ['first_name' => 'Erika', 'last_name' => 'Test', 'email' => 'erika@example.test',
         'street' => 'Testweg 1', 'zip' => '12345', 'city' => 'Teststadt'],
         'participant_count' => 1, 'use_booker_as_participant' => 1, 'stand_length_meters' => 2.5,
-        'booker_age_at_event' => 10];
+        'booker_age_at_event' => 30];
     return [$tenant, $event, $form, $payload];
 }
 
-test('stand booking bills half meters and ignores child exemption', function (string $mode, bool $freeClub) {
+test('stand booking bills adult half meters and respects club exemption', function (string $mode, bool $freeClub) {
     [$tenant, $event, $form, $payload] = standBookingFixture();
     if ($mode !== 'person') {
         $payload['booking_mode'] = 'organization';
@@ -76,18 +76,38 @@ test('stand mode and rate can be saved through event create', function () {
     expect(Event::where('title', 'Neuer Markt')->firstOrFail()->isStandBooking())->toBeTrue();
 });
 
-test('manual stand booking calculates amount from length rather than posted amount', function () {
+test('manual stand booking calculates amount from length rather than posted amount', function (bool $child) {
     $this->withoutMiddleware(\App\Http\Middleware\EnsureTenantIsSubscribed::class);
     [$tenant, $event] = standBookingFixture();
     $user = User::factory()->create(['tenant_id' => $tenant->id, 'role' => User::ROLE_EVENT_MANAGER]);
     $this->actingAs($user)->post(route('events.manual-participants.store', $event), [
         'participant_type' => 'guest', 'guest_mode' => 'person', 'first_name' => 'Erika', 'last_name' => 'Test',
         'stand_length_meters' => 2.5, 'payment_required' => 1, 'price_amount' => 1, 'payment_status' => 'open', 'source' => 'manual',
+        'stand_operator_age' => $child ? 14 : 30,
     ])->assertSessionHasNoErrors()->assertRedirect();
     $booking = EventBooking::with('participants')->firstOrFail();
-    expect((float) $booking->total_amount)->toBe(25.0)
+    expect((float) $booking->total_amount)->toBe($child ? 0.0 : 25.0)
         ->and($booking->participants->first()->answers['stand_length_meters'])->toBe(2.5);
-});
+})->with([false, true]);
+
+test('whole child stand is free through inclusive cutoff only when enabled', function ($age, bool $enabled, string $mode, bool $free) {
+    [$tenant, $event, $form, $payload] = standBookingFixture();
+    $event->update(['children_free' => $enabled]);
+    $payload['booker_age_at_event'] = $age;
+    if ($mode === 'organization') {
+        $payload['booking_mode'] = 'organization';
+        $payload['organization_booking_type'] = 'business';
+        $payload['fields']['organization'] = 'Firma';
+    }
+    $this->post(route('forms.public.submit', $form->slug), $payload)->assertSessionHasNoErrors()->assertRedirect();
+    $booking = EventBooking::with('participants')->firstOrFail();
+    expect((float) $booking->total_amount)->toBe($free ? 0.0 : 25.0)
+        ->and($booking->invoice_id === null)->toBe($free)
+        ->and($booking->participants->first()->payment_required)->toBe(! $free)
+        ->and($booking->participants->first()->answers['stand_length_meters'])->toBe(2.5)
+        ->and($event->fresh()->remaining_spots)->toBe(9);
+})->with([[14, true, 'person', true], [0, true, 'person', true], [15, true, 'person', false],
+    [null, true, 'person', false], [14, false, 'person', false], [14, true, 'organization', false]]);
 
 test('verified member meter rate and voucher are applied to stand total', function () {
     [$tenant, $event, $form, $payload] = standBookingFixture();

@@ -1962,6 +1962,7 @@ class EventController extends Controller
         $validated = $request->validate([
             'participant_type' => ['required', Rule::in(['member', 'contact', 'guest'])],
             'stand_length_meters' => [Rule::requiredIf($event->isStandBooking()), 'nullable', 'numeric', 'min:0.5', 'max:1000', 'multiple_of:0.5'],
+            'stand_operator_age' => ['nullable', 'integer', 'min:0', 'max:120'],
             'member_id' => ['nullable', Rule::exists('members', 'id')->where('tenant_id', $tenantId)],
             'member_ids' => ['required_if:participant_type,member', 'nullable', 'array', 'min:1'],
             'member_ids.*' => ['integer', Rule::exists('members', 'id')->where('tenant_id', $tenantId)],
@@ -2022,6 +2023,11 @@ class EventController extends Controller
         }
 
         $participants = $this->manualParticipantPayloads($validated);
+        if ($event->isStandBooking() && isset($validated['stand_operator_age']) && $participants->count() !== 1) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'stand_operator_age' => 'Bitte Kinderstände einzeln mit dem Alter des jeweiligen Standbetreibers erfassen.',
+            ]);
+        }
         $defaultPriceAmount = $event->priceForParticipantType($validated['participant_type']);
         if (($validated['participant_type'] ?? null) === 'guest'
             && ($validated['guest_mode'] ?? 'person') === 'organization'
@@ -2029,12 +2035,20 @@ class EventController extends Controller
             && $event->organization_bookings_free) {
             $defaultPriceAmount = 0;
         }
+        if ($event->isStandBooking()) {
+            $defaultPriceAmount = $event->priceForPublicBookingParticipant([
+                'participant_type' => $validated['participant_type'],
+                'organization_booking_type' => $validated['organization_booking_type'] ?? null,
+                'age_at_event' => $validated['stand_operator_age'] ?? null,
+            ], ($validated['participant_type'] === 'guest' && ($validated['guest_mode'] ?? 'person') === 'organization') ? 'organization' : 'person');
+        }
         $paymentRequired = $request->has('payment_required')
             ? $request->boolean('payment_required')
             : (($validated['payment_status'] ?? null) !== 'not_required' && $defaultPriceAmount > 0);
         $priceAmount = $paymentRequired ? round((float) ($validated['price_amount'] ?? $defaultPriceAmount), 2) : 0;
         if ($event->isStandBooking()) {
             $priceAmount = $paymentRequired ? round($defaultPriceAmount * (float) $validated['stand_length_meters'], 2) : 0;
+            $paymentRequired = $priceAmount > 0;
         }
         $paymentStatus = $paymentRequired ? $validated['payment_status'] : 'not_required';
 
@@ -2075,6 +2089,7 @@ class EventController extends Controller
                 'source' => $validated['source'],
                 'note' => $validated['note'] ?? null,
                 'answers' => array_filter([
+                    'age_at_event' => $event->isStandBooking() ? ($validated['stand_operator_age'] ?? null) : null,
                     'stand_length_meters' => $event->isStandBooking() ? (float) $validated['stand_length_meters'] : null,
                     'stand_unit_price' => $event->isStandBooking() ? ($paymentRequired ? $defaultPriceAmount : 0) : null,
                     'organization_booking_type' => $validated['organization_booking_type'] ?? null,

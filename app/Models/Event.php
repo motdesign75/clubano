@@ -315,7 +315,7 @@ class Event extends Model
     public function priceForPublicBookingParticipant(array $participant, string $bookingMode): float
     {
         $age = $participant['age_at_event'] ?? null;
-        if (! $this->isStandBooking() && $bookingMode === 'person' && $this->children_free && $this->child_max_age !== null
+        if ($bookingMode === 'person' && $this->children_free && $this->child_max_age !== null
             && $age !== null && $age !== '' && is_numeric($age)
             && (float) $age >= 0 && (float) $age <= $this->child_max_age) {
             return 0.0;

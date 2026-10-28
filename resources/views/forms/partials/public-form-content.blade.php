@@ -174,7 +174,7 @@
                   memberPricePerPerson: {{ json_encode($memberPrice) }},
                   standBooking: @js((bool) $event?->isStandBooking()),
                   standLength: @js(old('stand_length_meters', 1)),
-                  childrenFree: @js((bool) ($event?->children_free && ! $event?->isStandBooking())),
+                  childrenFree: @js((bool) $event?->children_free),
                   childMaxAge: @js($event?->child_max_age),
                   bookerAge: @js(old('booker_age_at_event', '')),
                   childFree(age) {
@@ -253,6 +253,7 @@
                       }
 
                       if (this.standBooking) {
+                          if (this.bookingMode === 'person' && this.childFree(this.bookerAge)) return '0,00';
                           const unitCents = Math.round((this.memberRateApplies() ? this.memberPricePerPerson : this.externalPricePerPerson) * 100);
                           return (Math.round(unitCents * (Number(this.standLength) || 0)) / 100).toFixed(2).replace('.', ',');
                       }
@@ -502,7 +503,15 @@
                             <label for="stand_length_meters" class="block text-sm font-semibold text-slate-700">Standlänge in Metern *</label>
                             <input id="stand_length_meters" name="stand_length_meters" type="number" min="0.5" max="1000" step="0.5" required
                                    x-model="standLength" value="{{ old('stand_length_meters', 1) }}" class="mt-2 w-full rounded-lg border-slate-300">
-                            <p class="mt-2 text-sm text-slate-600">Ein Stand pro Anmeldung. Halbe Meter sind möglich. Die Kinderbefreiung gilt nicht für Standplätze.</p>
+                            <p class="mt-2 text-sm text-slate-600">Ein Stand pro Anmeldung. Halbe Meter sind möglich.</p>
+                            @if($event->children_free)
+                                <div x-show="bookingMode === 'person'" x-cloak>
+                                    <label for="stand_operator_age" class="mt-3 block text-sm font-semibold">Alter des angemeldeten Standbetreibers am Veranstaltungstag</label>
+                                    <input id="stand_operator_age" name="booker_age_at_event" type="number" min="0" max="120" step="1" x-model="bookerAge"
+                                           :disabled="bookingMode !== 'person'" class="mt-2 w-full rounded-lg border-slate-300">
+                                    <p class="mt-2 text-sm text-slate-600">Für Kinder bis einschließlich {{ $event->child_max_age }} Jahre ist der gesamte Stand kostenlos. Ohne Altersangabe gilt der reguläre Preis. Begleitende Kinder befreien einen Erwachsenenstand nicht.</p>
+                                </div>
+                            @endif
                             @error('stand_length_meters')<p class="mt-2 text-sm text-rose-700">{{ $message }}</p>@enderror
                         @endif
                         <div x-show="!standBooking">
